@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import { ProgressBar } from "@/components/onboarding/progress-bar";
@@ -20,6 +20,8 @@ const STEPS = [
   "Identidad de marca",
   "Revisar y guardar",
 ];
+
+const STORAGE_KEY = "hitrendy_onboarding_draft";
 
 interface OnboardingData {
   name: string;
@@ -57,16 +59,63 @@ const INITIAL: OnboardingData = {
   secondary_color: "#B79CFA",
 };
 
+function loadDraft(): { step: number; data: OnboardingData } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.step === "number" && parsed.data) {
+      return { step: parsed.step, data: { ...INITIAL, ...parsed.data } };
+    }
+  } catch {
+    // corrupted storage, ignore
+  }
+  return null;
+}
+
+function saveDraft(step: number, data: OnboardingData) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ step, data }));
+  } catch {
+    // storage full or unavailable
+  }
+}
+
+function clearDraft() {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [data, setData] = useState<OnboardingData>(INITIAL);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
 
-  function update(field: string, value: unknown) {
+  useEffect(() => {
+    const draft = loadDraft();
+    if (draft) {
+      setStep(draft.step);
+      setData(draft.data);
+    }
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (hydrated) saveDraft(step, data);
+  }, [step, data, hydrated]);
+
+  const update = useCallback((field: string, value: unknown) => {
     setData((prev) => ({ ...prev, [field]: value }));
-  }
+  }, []);
 
   function canProceed(): boolean {
     switch (step) {
@@ -89,6 +138,17 @@ export default function OnboardingPage() {
 
   function back() {
     if (step > 0) setStep((s) => s - 1);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter" && !e.shiftKey && canProceed() && step < STEPS.length - 1) {
+      e.preventDefault();
+      next();
+    }
+    if (e.key === "Escape" && step > 0) {
+      e.preventDefault();
+      back();
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -128,6 +188,7 @@ export default function OnboardingPage() {
         secondary_color: data.secondary_color,
       });
 
+      clearDraft();
       router.push("/");
     } catch (err) {
       if (err instanceof ApiError) {
@@ -140,6 +201,8 @@ export default function OnboardingPage() {
     }
   }
 
+  if (!hydrated) return null;
+
   return (
     <div
       style={{
@@ -148,6 +211,7 @@ export default function OnboardingPage() {
         padding: "48px 24px",
         minHeight: "100vh",
       }}
+      onKeyDown={handleKeyDown}
     >
       <div
         style={{
@@ -180,6 +244,9 @@ export default function OnboardingPage() {
           }}
         >
           Configura tu negocio
+        </span>
+        <span style={{ marginLeft: "auto", fontSize: "0.75rem", color: "var(--muted-foreground)" }}>
+          {hydrated && "Guardado automáticamente"}
         </span>
       </div>
 
@@ -256,10 +323,14 @@ export default function OnboardingPage() {
                 fontWeight: 600,
               }}
             >
-              Siguiente
+              Siguiente <kbd style={{ marginLeft: 8, opacity: 0.7 }}>Enter</kbd>
             </button>
           ) : null}
         </div>
+
+        <p style={{ fontSize: "0.75rem", color: "var(--muted-foreground)", marginTop: 16 }}>
+          Usa <kbd>Enter</kbd> para avanzar · <kbd>Esc</kbd> para retroceder
+        </p>
       </form>
     </div>
   );

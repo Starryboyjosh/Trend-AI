@@ -16,32 +16,39 @@ def _build_url() -> str:
 
 
 _engine: Any = None
-_async_session_factory: Any = None
+_session_factory: async_sessionmaker[AsyncSession] | None = None
 
 
-def _ensure_engine():
-    global _engine, _async_session_factory
+def ensure_engine():
+    global _engine, _session_factory
     if _engine is None:
         _engine = create_async_engine(
             _build_url(),
             echo=settings.app_env == "development",
         )
-        _async_session_factory = async_sessionmaker(
+        _session_factory = async_sessionmaker(
             _engine,
             class_=AsyncSession,
             expire_on_commit=False,
         )
 
 
+def get_session_factory() -> async_sessionmaker[AsyncSession]:
+    ensure_engine()
+    assert _session_factory is not None
+    return _session_factory
+
+
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    _ensure_engine()
-    async with _async_session_factory() as session:
+    ensure_engine()
+    async with _session_factory() as session:
         yield session
 
 
 async def init_db() -> None:
-    _ensure_engine()
+    ensure_engine()
     import app.business.models  # noqa: F401
+    import app.conversations.models  # noqa: F401
     import app.identity.models  # noqa: F401
     from app.db.base import Base
 

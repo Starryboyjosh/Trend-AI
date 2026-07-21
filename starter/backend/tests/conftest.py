@@ -8,6 +8,9 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+import app.business.models  # noqa: F401
+import app.conversations.models  # noqa: F401
+import app.identity.models  # noqa: F401
 from app.db.base import Base
 from app.dependencies import get_db
 from app.main import app

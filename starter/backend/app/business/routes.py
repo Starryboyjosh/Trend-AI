@@ -52,6 +52,19 @@ class UpsertBrandProfileRequest(BaseModel):
     secondary_color: str | None = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$")
 
 
+@router.get("")
+async def list_businesses_endpoint(
+    workspace_id: str = Depends(require_workspace),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    from sqlalchemy import select
+
+    from app.business.models import Business
+
+    result = await db.execute(select(Business).where(Business.workspace_id == workspace_id))
+    return [business_to_dict(b) for b in result.scalars().all()]
+
+
 @router.post("", status_code=201)
 async def create_business_endpoint(
     body: CreateBusinessRequest,

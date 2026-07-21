@@ -1,38 +1,33 @@
 "use client";
 
-import { useState } from "react";
-import { GeneratedArtifactCard } from "@/components/generated-artifact-card";
-
-const sample = {
-  artifact_type: "social_post" as const,
-  platform: "instagram" as const,
-  hook: "Tu próximo antojo ya tiene nombre ✨",
-  caption: "Presenta aquí una propuesta personalizada por HiTrendy.",
-  call_to_action: "Visítanos y conócela.",
-  hashtags: ["#HiTrendy", "#ContenidoParaNegocios"],
-  visual_direction:
-    "Producto en primer plano, preparación y ambiente del negocio.",
-  format_recommendation: "reel" as const,
-  assumptions: [],
-};
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { api } from "@/lib/api";
 
 export default function Home() {
-  const [sidebarExpanded, setSidebarExpanded] = useState(true);
+  const [hasBusiness, setHasBusiness] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api
+      .businesses.list()
+      .then((list) => setHasBusiness(list.length > 0))
+      .catch(() => setHasBusiness(false))
+      .finally(() => setLoading(false));
+  }, []);
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
-      {/* Sidebar - Dark theme */}
       <aside
         data-theme="dark-shell"
         style={{
-          width: sidebarExpanded ? 240 : 72,
+          width: 240,
           background: "var(--background)",
           color: "var(--foreground)",
           borderRight: "1px solid var(--border)",
           padding: "24px 16px",
           display: "flex",
           flexDirection: "column",
-          transition: "width 0.2s ease-out",
         }}
       >
         <div
@@ -43,7 +38,6 @@ export default function Home() {
             marginBottom: 40,
           }}
         >
-          {/* Logo representation */}
           <div
             style={{
               width: 32,
@@ -57,83 +51,58 @@ export default function Home() {
               color: "var(--primary-foreground)",
             }}
           >
-            👋
+            H
           </div>
-          {sidebarExpanded && (
-            <span
-              style={{
-                fontFamily: "var(--font-heading)",
-                fontWeight: 700,
-                fontSize: "1.2rem",
-              }}
-            >
-              HiTrendy
-            </span>
-          )}
+          <span
+            style={{
+              fontFamily: "var(--font-heading)",
+              fontWeight: 700,
+              fontSize: "1.2rem",
+            }}
+          >
+            HiTrendy
+          </span>
         </div>
 
-        <nav
-          style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1 }}
-        >
-          {[
-            { label: "Dashboard", icon: "📊" },
-            { label: "Crear Contenido", icon: "✍️", active: true },
-            { label: "Plantillas", icon: "🎨" },
-            { label: "Biblioteca", icon: "📁" },
-            { label: "Ajustes", icon: "⚙️" },
-          ].map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                padding: "10px 12px",
-                background: item.active
-                  ? "var(--surface-elevated)"
-                  : "transparent",
-                color: item.active
-                  ? "var(--primary)"
-                  : "var(--muted-foreground)",
-                border: 0,
-                borderRadius: "var(--radius-sm)",
-                cursor: "pointer",
-                textAlign: "left",
-                width: "100%",
-                fontWeight: item.active ? 600 : 400,
-              }}
-            >
-              <span>{item.icon}</span>
-              {sidebarExpanded && <span>{item.label}</span>}
-            </button>
-          ))}
+        <nav style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1 }}>
+          <Link
+            href="/assistant"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              padding: "10px 12px",
+              color: "var(--primary)",
+              background: "var(--surface-elevated)",
+              borderRadius: "var(--radius-sm)",
+              textDecoration: "none",
+              fontWeight: 600,
+            }}
+          >
+            Asistente
+          </Link>
+          <Link
+            href="/onboarding"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              padding: "10px 12px",
+              color: "var(--muted-foreground)",
+              borderRadius: "var(--radius-sm)",
+              textDecoration: "none",
+            }}
+          >
+            Configurar negocio
+          </Link>
         </nav>
-
-        <button
-          type="button"
-          onClick={() => setSidebarExpanded(!sidebarExpanded)}
-          style={{
-            background: "transparent",
-            border: "1px solid var(--border)",
-            color: "var(--foreground)",
-            padding: "8px",
-            borderRadius: "var(--radius-sm)",
-            cursor: "pointer",
-            marginTop: "auto",
-          }}
-        >
-          {sidebarExpanded ? "◀ Colapsar" : "▶"}
-        </button>
       </aside>
 
-      {/* Main Content Area - Light theme */}
       <main
         style={{
           flex: 1,
           padding: "32px",
           background: "var(--background)",
-          minHeight: "100vh",
         }}
       >
         <header
@@ -155,60 +124,65 @@ export default function Home() {
             >
               Asistente de Contenido
             </h1>
-            <p
-              style={{ color: "var(--muted-foreground)", margin: "4px 0 0 0" }}
-            >
+            <p style={{ color: "var(--muted-foreground)", margin: "4px 0 0 0" }}>
               Crea y optimiza publicaciones en segundos.
             </p>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span
-              style={{ fontSize: "0.9rem", color: "var(--muted-foreground)" }}
-            >
-              Mi Negocio
-            </span>
-            <div
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: "var(--radius-pill)",
-                background: "var(--primary)",
-                color: "var(--primary-foreground)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontWeight: "bold",
-              }}
-            >
-              U
-            </div>
-          </div>
         </header>
 
-        <div style={{ maxWidth: 760, margin: "0 auto" }}>
-          <div
-            style={{
-              background: "var(--surface)",
-              border: "1px solid var(--border)",
-              borderRadius: "var(--radius-lg)",
-              padding: "24px",
-              boxShadow: "var(--shadow-soft)",
-            }}
-          >
-            <h2
+        <div style={{ maxWidth: 640, margin: "0 auto" }}>
+          {loading ? (
+            <p style={{ color: "var(--muted-foreground)" }}>Cargando…</p>
+          ) : hasBusiness ? (
+            <Link
+              href="/assistant"
               style={{
-                fontFamily: "var(--font-heading)",
-                fontSize: "1.5rem",
-                marginTop: 0,
+                display: "block",
+                padding: "24px",
+                background: "var(--gradient-primary)",
+                color: "white",
+                borderRadius: "var(--radius-lg)",
+                textDecoration: "none",
+                fontWeight: 700,
+                fontSize: "1.2rem",
+                textAlign: "center",
               }}
             >
-              Última Generación
-            </h2>
-            <p style={{ color: "var(--muted-foreground)", marginBottom: 24 }}>
-              Esta es una propuesta personalizada basada en tu perfil de marca.
-            </p>
-            <GeneratedArtifactCard artifact={sample} />
-          </div>
+              Ir al asistente
+            </Link>
+          ) : (
+            <div
+              style={{
+                textAlign: "center",
+                padding: 48,
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius-lg)",
+              }}
+            >
+              <h2 style={{ fontFamily: "var(--font-heading)" }}>
+                Configura tu negocio
+              </h2>
+              <p style={{ color: "var(--muted-foreground)", marginBottom: 24 }}>
+                Para personalizar tus resultados necesitamos conocer algunos datos
+                de tu negocio.
+              </p>
+              <Link
+                href="/onboarding"
+                style={{
+                  display: "inline-block",
+                  padding: "14px 28px",
+                  background: "var(--gradient-primary)",
+                  color: "white",
+                  borderRadius: "var(--radius-md)",
+                  textDecoration: "none",
+                  fontWeight: 600,
+                }}
+              >
+                Configurar mi negocio
+              </Link>
+            </div>
+          )}
         </div>
       </main>
     </div>

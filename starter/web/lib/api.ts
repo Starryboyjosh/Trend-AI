@@ -45,12 +45,35 @@ async function request<T>(
 const BASE = "/api/v1";
 
 export const api = {
+  conversations: {
+    create(data: Record<string, unknown>) {
+      return request<Record<string, unknown>>(`${BASE}/conversations`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+    list(): Promise<Array<Record<string, unknown>>> {
+      return request(`${BASE}/conversations`);
+    },
+    get(id: string) {
+      return request<Record<string, unknown>>(`${BASE}/conversations/${id}`);
+    },
+    sendMessage(conversationId: string, text: string) {
+      return request<Record<string, unknown>>(
+        `${BASE}/conversations/${conversationId}/messages`,
+        { method: "POST", body: JSON.stringify({ text }) },
+      );
+    },
+  },
   businesses: {
     create(data: Record<string, unknown>) {
       return request<Record<string, unknown>>(`${BASE}/businesses`, {
         method: "POST",
         body: JSON.stringify(data),
       });
+    },
+    list(): Promise<Array<Record<string, unknown>>> {
+      return request(`${BASE}/businesses`);
     },
     get(id: string) {
       return request<Record<string, unknown>>(`${BASE}/businesses/${id}`);
