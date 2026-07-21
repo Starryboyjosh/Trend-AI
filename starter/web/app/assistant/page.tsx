@@ -12,6 +12,7 @@ interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   artifact?: GeneratedSocialPost;
+  artifactId?: string;
 }
 
 interface ConvData {
@@ -24,6 +25,7 @@ interface SendResult {
   message?: string;
   assistant_message?: { id: string; content: string };
   artifact?: GeneratedSocialPost;
+  artifact_id?: string;
 }
 
 export default function AssistantPage() {
@@ -96,6 +98,7 @@ export default function AssistantPage() {
             role: "assistant",
             content: result.assistant_message?.content || "",
             artifact: result.artifact,
+            artifactId: result.artifact_id,
           };
           setMessages((prev) => [...prev, assistantMsg]);
         } else if (result.type === "error") {
@@ -112,6 +115,61 @@ export default function AssistantPage() {
       }
     },
     [conversationId, loading]
+  );
+
+  const handleSave = useCallback(
+    async (artifactId: string | undefined) => {
+      if (!artifactId) return;
+      setError("");
+      try {
+        const project = await api.projects.create({ artifact_id: artifactId });
+        setError("Proyecto guardado ✓");
+      } catch (err) {
+        if (err instanceof ApiError) {
+          setError(err.message);
+        } else {
+          setError("Error al guardar el proyecto.");
+        }
+      }
+    },
+    [],
+  );
+
+  const handleVariation = useCallback(
+    async (artifactId: string | undefined, kind: string) => {
+      if (!artifactId || !conversationId || loading) return;
+      setError("");
+      setLoading(true);
+      try {
+        const result = (await api.artifacts.createVariation(
+          conversationId,
+          artifactId,
+          kind
+        )) as unknown as SendResult;
+
+        if (result.type === "artifact" && result.artifact) {
+          const assistantMsg: ChatMessage = {
+            id: `var_${Date.now()}`,
+            role: "assistant",
+            content: result.artifact.caption || "",
+            artifact: result.artifact as GeneratedSocialPost,
+            artifactId: artifactId,
+          };
+          setMessages((prev) => [...prev, assistantMsg]);
+        } else if (result.type === "error") {
+          setError(result.message || "Error al generar variación.");
+        }
+      } catch (err) {
+        if (err instanceof ApiError) {
+          setError(err.message);
+        } else {
+          setError("Error al generar la variación.");
+        }
+      } finally {
+        setLoading(false);
+      }
+    },
+    [conversationId, loading],
   );
 
   if (initializing) {
@@ -166,7 +224,7 @@ export default function AssistantPage() {
         )}
       </header>
 
-      <MessageList messages={messages} loading={loading} />
+      <MessageList messages={messages} loading={loading} onSave={handleSave} onVariation={handleVariation} />
       <Composer onSend={handleSend} disabled={loading || !conversationId} />
     </div>
   );

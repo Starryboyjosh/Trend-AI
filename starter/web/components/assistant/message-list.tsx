@@ -9,14 +9,17 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   artifact?: GeneratedSocialPost;
+  artifactId?: string;
 }
 
 interface Props {
   messages: Message[];
   loading: boolean;
+  onSave?: (artifactId: string | undefined) => void;
+  onVariation?: (artifactId: string | undefined, kind: string) => void;
 }
 
-export function MessageList({ messages, loading }: Props) {
+export function MessageList({ messages, loading, onSave, onVariation }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -70,7 +73,11 @@ export function MessageList({ messages, loading }: Props) {
             }}
           >
             {msg.artifact ? (
-              <GeneratedArtifactCard artifact={msg.artifact} />
+              <GeneratedArtifactCard
+                artifact={msg.artifact}
+                onSave={() => onSave?.(msg.artifactId)}
+                onVariation={(kind) => onVariation?.(msg.artifactId, kind)}
+              />
             ) : (
               <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>
                 {msg.content}

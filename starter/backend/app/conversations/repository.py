@@ -179,3 +179,41 @@ class SqlArtifactRepository:
         artifact_record.active_version_id = version.id
         await self._db.flush()
         return artifact
+
+    async def add_artifact_version(
+        self,
+        *,
+        artifact_id: str,
+        content: GeneratedSocialPost,
+        user_edited: bool = False,
+        parent_version_id: str | None = None,
+    ) -> GeneratedSocialPost:
+        result = await self._db.execute(
+            select(ArtifactVersion)
+            .where(ArtifactVersion.artifact_id == artifact_id)
+            .order_by(ArtifactVersion.version_number.desc())
+            .limit(1)
+        )
+        latest = result.scalar_one_or_none()
+        next_version = (latest.version_number + 1) if latest else 1
+
+        content_data = content.model_dump()
+        version = ArtifactVersion(
+            artifact_id=artifact_id,
+            version_number=next_version,
+            content_json=json.dumps(content_data),
+            user_edited=user_edited,
+            parent_version_id=parent_version_id,
+        )
+        self._db.add(version)
+        await self._db.flush()
+
+        art_result = await self._db.execute(
+            select(GeneratedArtifact).where(GeneratedArtifact.id == artifact_id)
+        )
+        artifact_record = art_result.scalar_one_or_none()
+        if artifact_record:
+            artifact_record.active_version_id = version.id
+            await self._db.flush()
+
+        return content

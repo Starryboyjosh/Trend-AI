@@ -65,6 +65,76 @@ export const api = {
       );
     },
   },
+  artifacts: {
+    createVariation(conversationId: string, artifactId: string, kind: string) {
+      return request<Record<string, unknown>>(
+        `${BASE}/conversations/${conversationId}/artifacts/${artifactId}/variations`,
+        { method: "POST", body: JSON.stringify({ kind }) },
+      );
+    },
+  },
+  projects: {
+    create(data: Record<string, unknown>) {
+      return request<Record<string, unknown>>(`${BASE}/projects`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+    list(params?: Record<string, string>): Promise<Array<Record<string, unknown>>> {
+      const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+      return request(`${BASE}/projects${qs}`);
+    },
+    get(id: string) {
+      return request<Record<string, unknown>>(`${BASE}/projects/${id}`);
+    },
+    update(id: string, data: Record<string, unknown>) {
+      return request<Record<string, unknown>>(`${BASE}/projects/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      });
+    },
+    updateArtifactVersion(
+      projectId: string,
+      data: Record<string, unknown>,
+    ) {
+      return request<Record<string, unknown>>(
+        `${BASE}/projects/${projectId}/artifact-version`,
+        { method: "PUT", body: JSON.stringify(data) },
+      );
+    },
+  },
+  assets: {
+    list(): Promise<Array<Record<string, unknown>>> {
+      return request(`${BASE}/assets`);
+    },
+    get(id: string) {
+      return request<Record<string, unknown>>(`${BASE}/assets/${id}`);
+    },
+    async upload(file: File): Promise<Record<string, unknown>> {
+      const init = await request<{ upload_id: string; upload_url: string }>(
+        `${BASE}/assets/uploads`,
+        { method: "POST" },
+      );
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(init.upload_url, { method: "POST", body: form });
+      return res.json();
+    },
+    analyze(assetId: string) {
+      return request<Record<string, unknown>>(`${BASE}/assets/${assetId}/analyses`, {
+        method: "POST",
+      });
+    },
+  },
+  templates: {
+    list(params?: Record<string, string>): Promise<Array<Record<string, unknown>>> {
+      const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+      return request(`${BASE}/templates${qs}`);
+    },
+    get(id: string) {
+      return request<Record<string, unknown>>(`${BASE}/templates/${id}`);
+    },
+  },
   businesses: {
     create(data: Record<string, unknown>) {
       return request<Record<string, unknown>>(`${BASE}/businesses`, {

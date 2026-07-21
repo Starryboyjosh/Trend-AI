@@ -9,6 +9,7 @@ Tone = Literal["friendly", "professional", "youthful", "elegant", "fun", "direct
 Objective = Literal[
     "reach", "engagement", "sales", "store_visits", "launch", "brand_awareness", "community"
 ]
+VariationKind = Literal["shorter", "more_youthful", "more_professional", "more_friendly"]
 
 
 class BusinessGenerationContext(BaseModel):

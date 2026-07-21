@@ -11,9 +11,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 import app.business.models  # noqa: F401
 import app.conversations.models  # noqa: F401
 import app.identity.models  # noqa: F401
+import app.projects.models  # noqa: F401
+import app.assets.models  # noqa: F401
+import app.templates.models  # noqa: F401
 from app.db.base import Base
 from app.dependencies import get_db
 from app.main import app
+from app.templates.repository import seed_templates
 
 TEST_DB_URL = "sqlite+aiosqlite:///./test_hitrendy.db"
 
@@ -47,3 +51,10 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
+async def seeded_client(client: AsyncClient) -> AsyncClient:
+    async for session in app.dependency_overrides[get_db]():
+        await seed_templates(session)
+    return client

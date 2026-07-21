@@ -50,6 +50,8 @@ async def init_db() -> None:
     import app.business.models  # noqa: F401
     import app.conversations.models  # noqa: F401
     import app.identity.models  # noqa: F401
+    import app.assets.models  # noqa: F401
+    import app.templates.models  # noqa: F401
     from app.db.base import Base
 
     async with _engine.begin() as conn:
