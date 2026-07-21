@@ -30,10 +30,7 @@ export function StepReview({ business, brand, submitting }: Props) {
             label="Plataformas"
             value={(business.preferred_platforms as string[])?.join(", ")}
           />
-          <Row
-            label="Objetivo"
-            value={business.primary_objective as string}
-          />
+          <Row label="Objetivo" value={business.primary_objective as string} />
         </Card>
         <Card label="Marca">
           <Row
@@ -75,7 +72,13 @@ export function StepReview({ business, brand, submitting }: Props) {
   );
 }
 
-function Card({ label, children }: { label: string; children: React.ReactNode }) {
+function Card({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <div
       style={{

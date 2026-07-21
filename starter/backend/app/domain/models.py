@@ -2,9 +2,20 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 Platform = Literal["instagram", "facebook", "tiktok", "whatsapp", "youtube", "x", "linkedin"]
+Category = Literal[
+    "fashion",
+    "art",
+    "lifestyle",
+    "health",
+    "gastronomy",
+    "services",
+    "retail",
+    "technology",
+    "other",
+]
 Tone = Literal["friendly", "professional", "youthful", "elegant", "fun", "direct", "inspiring"]
 Objective = Literal[
     "reach", "engagement", "sales", "store_visits", "launch", "brand_awareness", "community"
@@ -13,6 +24,7 @@ VariationKind = Literal["shorter", "more_youthful", "more_professional", "more_f
 
 
 class BusinessGenerationContext(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     business_id: str
     name: str
     category: str
@@ -30,6 +42,7 @@ class BusinessGenerationContext(BaseModel):
 
 
 class GenerateSocialPostCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     workspace_id: str
     business_id: str
     conversation_id: str
@@ -40,6 +53,7 @@ class GenerateSocialPostCommand(BaseModel):
 
 
 class GeneratedSocialPost(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     artifact_type: Literal["social_post"] = "social_post"
     platform: Platform
     hook: str = Field(min_length=1, max_length=180)
@@ -51,3 +65,15 @@ class GeneratedSocialPost(BaseModel):
         "static_post", "carousel", "story", "reel", "short_video", "text_post"
     ]
     assumptions: list[str] = Field(default_factory=list, max_length=10)
+
+    @field_validator("hashtags")
+    @classmethod
+    def validate_hashtags(cls, hashtags: list[str]) -> list[str]:
+        if len({hashtag.casefold() for hashtag in hashtags}) != len(hashtags):
+            raise ValueError("Hashtags must be unique")
+        if any(
+            not hashtag.startswith("#") or any(char.isspace() for char in hashtag)
+            for hashtag in hashtags
+        ):
+            raise ValueError("Hashtags must begin with # and contain no whitespace")
+        return hashtags

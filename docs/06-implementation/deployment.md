@@ -46,3 +46,6 @@ status: proposed
 - Never build keys into images.
 - Rotate provider keys.
 - Separate staging and production credentials.
+# Schema migrations
+
+The API never creates tables at application startup. Before starting an API process, run `alembic upgrade head` from `starter/backend`; the container command performs this step before starting Uvicorn. Deployments must run migrations as a single controlled operation before scaling API replicas.

@@ -90,3 +90,7 @@ Do not send the entire user history by default.
 - Schema repair: one.
 - Quality revision: one.
 - Never silently loop indefinitely.
+
+## Current implementation boundary
+
+Social-post generation builds a typed `SocialPostModelRequest` from authorized business context and the current user request. It validates the provider response with `GeneratedSocialPost`, performs at most one schema repair and one quality repair, then persists the provider/model/prompt metadata with the artifact. The current deterministic evaluator checks platform, CTA, and forbidden brand terms; the full rubric suite remains the next quality increment.

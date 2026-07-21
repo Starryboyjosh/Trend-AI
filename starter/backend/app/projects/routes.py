@@ -7,9 +7,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.business.models import Business
 from app.conversations.models import ArtifactVersion, Conversation, GeneratedArtifact
 from app.conversations.repository import SqlArtifactRepository
-from app.core.errors import NotFoundError
+from app.core.errors import NotFoundError, ValidationError_
 from app.dependencies import get_db, require_workspace
 from app.domain.models import GeneratedSocialPost
 from app.projects.models import Project
@@ -22,6 +23,7 @@ class CreateProjectRequest(BaseModel):
     artifact_id: str | None = Field(None, min_length=1)
     template_id: str | None = Field(None, min_length=1)
     name: str | None = Field(None, max_length=240)
+    business_id: str | None = Field(None, min_length=1)
 
 
 class UpdateProjectRequest(BaseModel):
@@ -61,9 +63,18 @@ async def create_project_endpoint(
     content: dict | None = None
     artifact_id: str | None = None
     platform: str = "instagram"
-    business_id: str = workspace_id
+    business_id: str | None = body.business_id
 
     if body.template_id:
+        if business_id is None:
+            raise ValidationError_("Selecciona el negocio para el proyecto.")
+        business_result = await db.execute(
+            select(Business.id).where(
+                Business.id == business_id, Business.workspace_id == workspace_id
+            )
+        )
+        if business_result.scalar_one_or_none() is None:
+            raise NotFoundError("Negocio")
         template_data = await get_template(db, body.template_id)
         platform = template_data["platforms"][0] if template_data["platforms"] else "instagram"
         title = body.name or template_data["title"]
@@ -82,17 +93,18 @@ async def create_project_endpoint(
         }
     elif body.artifact_id:
         artifact_result = await db.execute(
-            select(GeneratedArtifact).where(GeneratedArtifact.id == body.artifact_id)
+            select(GeneratedArtifact, Conversation)
+            .join(Conversation, Conversation.id == GeneratedArtifact.conversation_id)
+            .where(
+                GeneratedArtifact.id == body.artifact_id,
+                Conversation.workspace_id == workspace_id,
+            )
         )
-        artifact = artifact_result.scalar_one_or_none()
-        if artifact is None:
+        row = artifact_result.one_or_none()
+        if row is None:
             raise NotFoundError("Artículo")
-
-        conv_result = await db.execute(
-            select(Conversation).where(Conversation.id == artifact.conversation_id)
-        )
-        conv = conv_result.scalar_one_or_none()
-        business_id = conv.business_id if conv else workspace_id
+        artifact, conv = row
+        business_id = conv.business_id
         platform = artifact.platform
 
         version_result = await db.execute(
@@ -246,11 +258,17 @@ async def update_artifact_version_endpoint(
         raise NotFoundError("Artículo")
 
     art_result = await db.execute(
-        select(GeneratedArtifact).where(GeneratedArtifact.id == project.artifact_id)
+        select(GeneratedArtifact, Conversation)
+        .join(Conversation, Conversation.id == GeneratedArtifact.conversation_id)
+        .where(
+            GeneratedArtifact.id == project.artifact_id,
+            Conversation.workspace_id == workspace_id,
+        )
     )
-    artifact_record = art_result.scalar_one_or_none()
-    if artifact_record is None:
+    row = art_result.one_or_none()
+    if row is None:
         raise NotFoundError("Artículo")
+    artifact_record, _ = row
 
     version_result = await db.execute(
         select(ArtifactVersion)

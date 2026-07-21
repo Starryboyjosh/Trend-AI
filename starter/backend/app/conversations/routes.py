@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -17,14 +15,19 @@ from app.conversations.repository import (
     get_messages,
     list_conversations,
 )
-from app.core.errors import NotFoundError
+from app.core.errors import AppError, NotFoundError
 from app.dependencies import get_db, require_workspace
 from app.domain.models import (
     GeneratedSocialPost,
     GenerateSocialPostCommand,
+    Objective,
+    Platform,
+    Tone,
     VariationKind,
 )
-from app.providers.content import DemoContentModelProvider
+from app.generation.contracts import SocialPostModelRequest
+from app.generation.prompt_registry import get_social_copy_prompt
+from app.providers.factory import get_content_provider
 from app.services.generate_social_post import GenerateSocialPostService
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
@@ -37,9 +40,11 @@ class CreateConversationRequest(BaseModel):
 
 class SendMessageRequest(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
-    platform: str | None = None
-    tone: str | None = None
-    objective: str | None = None
+    ui_intent: str | None = None
+    platform: Platform | None = None
+    tone: Tone | None = None
+    objective: Objective | None = None
+    attachment_ids: list[str] = Field(default_factory=list, max_length=5)
 
 
 @router.post("", status_code=201)
@@ -131,16 +136,13 @@ async def send_message_endpoint(
 
     biz_repo = SqlBusinessContextRepository(db)
     art_repo = SqlArtifactRepository(db)
-    provider = DemoContentModelProvider()
+    provider = get_content_provider()
     service = GenerateSocialPostService(biz_repo, art_repo, provider)
 
     try:
         artifact: GeneratedSocialPost = await service.execute(command)
-    except ValueError as e:
-        return {
-            "type": "error",
-            "message": str(e),
-        }
+    except AppError:
+        raise
 
     from sqlalchemy import desc
 
@@ -211,8 +213,6 @@ async def create_variation_endpoint(
         .limit(1)
     )
     current_version = version_result.scalar_one_or_none()
-    current_content = json.loads(current_version.content_json) if current_version else {}
-
     variation_text_map = {
         "shorter": "Hazlo más corto",
         "more_youthful": "Hazlo más juvenil",
@@ -242,8 +242,12 @@ async def create_variation_endpoint(
         workspace_id=workspace_id, business_id=conv.business_id
     )
 
-    provider = DemoContentModelProvider()
-    raw = await provider.generate_social_post(context=context, command=command)
+    provider = get_content_provider()
+    _, prompt_version = get_social_copy_prompt()
+    request = SocialPostModelRequest.from_command(
+        context=context, command=command, prompt_version=prompt_version
+    )
+    raw = await provider.generate_social_post(request=request)
 
     try:
         artifact = GeneratedSocialPost.model_validate(raw)

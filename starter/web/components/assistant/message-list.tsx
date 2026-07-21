@@ -43,7 +43,9 @@ export function MessageList({ messages, loading, onSave, onVariation }: Props) {
         <h2 style={{ fontFamily: "var(--font-heading)", margin: "0 0 8px" }}>
           ¿Qué quieres crear hoy?
         </h2>
-        <p>Escribe una publicación, un guion o pide feedback sobre un diseño.</p>
+        <p>
+          Escribe una publicación, un guion o pide feedback sobre un diseño.
+        </p>
       </div>
     );
   }
@@ -79,9 +81,7 @@ export function MessageList({ messages, loading, onSave, onVariation }: Props) {
                 onVariation={(kind) => onVariation?.(msg.artifactId, kind)}
               />
             ) : (
-              <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>
-                {msg.content}
-              </p>
+              <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{msg.content}</p>
             )}
           </div>
         </div>

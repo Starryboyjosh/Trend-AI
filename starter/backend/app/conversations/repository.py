@@ -26,6 +26,11 @@ async def create_conversation(
     title: str,
     created_by: str | None = None,
 ) -> Conversation:
+    business_result = await db.execute(
+        select(Business.id).where(Business.id == business_id, Business.workspace_id == workspace_id)
+    )
+    if business_result.scalar_one_or_none() is None:
+        raise NotFoundError("Negocio")
     conv = Conversation(
         workspace_id=workspace_id,
         business_id=business_id,
@@ -152,15 +157,20 @@ class SqlArtifactRepository:
         workspace_id: str,
         conversation_id: str,
         profile_version: int,
+        objective: str,
+        provider_name: str,
+        model_name: str,
+        prompt_version: str,
         artifact: GeneratedSocialPost,
     ) -> GeneratedSocialPost:
         artifact_record = GeneratedArtifact(
             conversation_id=conversation_id,
             artifact_type=artifact.artifact_type,
             platform=artifact.platform,
-            objective="engagement",
-            model_provider="demo",
-            model_name="demo-v1",
+            objective=objective,
+            model_provider=provider_name,
+            model_name=model_name,
+            prompt_version=prompt_version,
             business_profile_version=profile_version,
         )
         self._db.add(artifact_record)

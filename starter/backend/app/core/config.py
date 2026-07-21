@@ -15,7 +15,12 @@ class Settings:
     object_storage_bucket: str = environ.get("OBJECT_STORAGE_BUCKET", "hitrendy")
     ai_provider: str = environ.get("AI_PROVIDER", "demo")
     ai_model: str = environ.get("AI_MODEL", "demo-v1")
+    ai_base_url: str = environ.get("AI_BASE_URL", "")
+    ai_api_key: str = environ.get("AI_API_KEY", "")
+    ai_timeout_seconds: float = float(environ.get("AI_TIMEOUT_SECONDS", "30"))
     jwt_secret: str = environ.get("JWT_SECRET", "replace-in-local-env")
+    session_cookie_name: str = environ.get("SESSION_COOKIE_NAME", "hitrendy_session")
+    session_ttl_hours: int = int(environ.get("SESSION_TTL_HOURS", "168"))
     allowed_origins: str = environ.get("ALLOWED_ORIGINS", "http://localhost:3000")
     max_upload_mb: int = int(environ.get("MAX_UPLOAD_MB", "10"))
 

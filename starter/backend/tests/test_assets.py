@@ -10,7 +10,7 @@ WORKSPACE_ID = "ws_test_001"
 
 @pytest.mark.asyncio
 async def test_upload_and_list_asset(client: AsyncClient) -> None:
-    file_content = io.BytesIO(b"fake_image_content")
+    file_content = io.BytesIO(b"\x89PNG\r\n\x1a\nvalid-image")
     files = {"file": ("test.png", file_content, "image/png")}
 
     init_resp = await client.post(
@@ -57,13 +57,13 @@ async def test_upload_rejects_invalid_mime(client: AsyncClient) -> None:
         files=files,
         headers={"X-Workspace-Id": WORKSPACE_ID},
     )
-    assert complete_resp.status_code == 200
-    assert complete_resp.json()["status"] == "error"
+    assert complete_resp.status_code == 422
+    assert complete_resp.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
 @pytest.mark.asyncio
 async def test_get_asset(client: AsyncClient) -> None:
-    file_content = io.BytesIO(b"fake_image_content")
+    file_content = io.BytesIO(b"\x89PNG\r\n\x1a\nvalid-image")
     files = {"file": ("photo.png", file_content, "image/png")}
 
     init_resp = await client.post(
@@ -89,7 +89,7 @@ async def test_get_asset(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_analyze_asset(client: AsyncClient) -> None:
-    file_content = io.BytesIO(b"fake_image_content")
+    file_content = io.BytesIO(b"\x89PNG\r\n\x1a\nvalid-image")
     files = {"file": ("design.png", file_content, "image/png")}
 
     init_resp = await client.post(

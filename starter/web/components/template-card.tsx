@@ -56,7 +56,14 @@ export function TemplateCard({ template, onUse, using }: Props) {
       >
         {template.title}
       </div>
-      <div style={{ padding: "14px 16px", flex: 1, display: "flex", flexDirection: "column" }}>
+      <div
+        style={{
+          padding: "14px 16px",
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
         <h3
           style={{
             margin: "0 0 8px",
@@ -79,7 +86,9 @@ export function TemplateCard({ template, onUse, using }: Props) {
             {template.description}
           </p>
         )}
-        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8 }}>
+        <div
+          style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8 }}
+        >
           {template.platforms.map((p) => (
             <span
               key={p}
@@ -96,7 +105,14 @@ export function TemplateCard({ template, onUse, using }: Props) {
             </span>
           ))}
         </div>
-        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: "auto" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 4,
+            flexWrap: "wrap",
+            marginBottom: "auto",
+          }}
+        >
           {template.formats.map((f) => (
             <span
               key={f}

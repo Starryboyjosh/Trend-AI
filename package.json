@@ -11,7 +11,7 @@
     "web:typecheck": "npm run typecheck -w starter/web",
     "web:lint": "npm run lint -w starter/web",
     "web:test": "npm run test -w starter/web",
-    "backend:dev": "PYTHONPATH=starter/backend .venv/bin/uvicorn app.main:app --reload --port 8000",
+    "backend:dev": "cd starter/backend && PYTHONPATH=. ../../.venv/bin/alembic upgrade head && PYTHONPATH=. ../../.venv/bin/uvicorn app.main:app --reload --port 8000",
     "backend:test": "PYTHONPATH=starter/backend .venv/bin/pytest starter/backend/tests",
     "dev": "npx --yes concurrently \"npm run web:dev\" \"npm run backend:dev\""
   }

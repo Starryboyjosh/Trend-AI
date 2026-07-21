@@ -19,25 +19,21 @@ describe("ProgressBar", () => {
 
 describe("StepBusiness", () => {
   test("renders form fields", async () => {
-    const { StepBusiness } = await import(
-      "@/components/onboarding/step-business"
-    );
+    const { StepBusiness } =
+      await import("@/components/onboarding/step-business");
     const data = { name: "", category: "" as const, description: "" };
     const onChange = () => {};
 
     render(<StepBusiness data={data} onChange={onChange} />);
-    expect(
-      screen.getByLabelText("Nombre del negocio *")
-    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Nombre del negocio *")).toBeInTheDocument();
     expect(screen.getByLabelText("Categoría *")).toBeInTheDocument();
   });
 });
 
 describe("StepChannels", () => {
   test("renders platform checkboxes", async () => {
-    const { StepChannels } = await import(
-      "@/components/onboarding/step-channels"
-    );
+    const { StepChannels } =
+      await import("@/components/onboarding/step-channels");
     const data = { preferred_platforms: [], primary_objective: "" as const };
     const onChange = () => {};
 

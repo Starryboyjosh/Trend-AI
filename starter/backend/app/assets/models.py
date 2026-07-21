@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, String, func
+from sqlalchemy import DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -17,7 +17,9 @@ class Asset(Base):
     __tablename__ = "assets"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_uuid)
-    workspace_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     business_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     original_name: Mapped[str] = mapped_column(String(240), nullable=False)
     storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -34,7 +36,9 @@ class AssetAnalysis(Base):
     __tablename__ = "asset_analyses"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_uuid)
-    asset_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    asset_id: Mapped[str] = mapped_column(
+        ForeignKey("assets.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     provider: Mapped[str] = mapped_column(String(64), nullable=False, default="demo")
     summary: Mapped[str] = mapped_column(String(500), nullable=False)
     strengths_json: Mapped[str] = mapped_column(String(2000), nullable=False)
@@ -43,4 +47,18 @@ class AssetAnalysis(Base):
     accessibility_notes_json: Mapped[str] = mapped_column(
         String(1000), nullable=False, default="[]"
     )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class UploadSession(Base):
+    __tablename__ = "upload_sessions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_uuid)
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

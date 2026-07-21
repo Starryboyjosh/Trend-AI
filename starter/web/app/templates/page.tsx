@@ -35,12 +35,21 @@ export default function TemplatesPage() {
   const [platform, setPlatform] = useState("");
   const [category, setCategory] = useState("");
   const [creating, setCreating] = useState<string | null>(null);
+  const [businessId, setBusinessId] = useState<string | null>(null);
 
   useEffect(() => {
-    loadTemplates();
-  }, [platform, category]);
+    const loadBusiness = async () => {
+      try {
+        const businesses = await api.businesses.list();
+        setBusinessId((businesses[0]?.id as string | undefined) ?? null);
+      } catch {
+        setBusinessId(null);
+      }
+    };
+    void loadBusiness();
+  }, []);
 
-  async function loadTemplates() {
+  const loadTemplates = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
@@ -59,7 +68,11 @@ export default function TemplatesPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [category, platform, search]);
+
+  useEffect(() => {
+    void loadTemplates();
+  }, [loadTemplates]);
 
   function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") {
@@ -72,8 +85,13 @@ export default function TemplatesPage() {
       setCreating(templateId);
       setError("");
       try {
+        if (!businessId) {
+          router.push("/onboarding");
+          return;
+        }
         const project = await api.projects.create({
           template_id: templateId,
+          business_id: businessId,
         });
         router.push(`/projects/${project.id as string}`);
       } catch (err) {
@@ -85,7 +103,7 @@ export default function TemplatesPage() {
         setCreating(null);
       }
     },
-    [router],
+    [businessId, router]
   );
 
   return (
@@ -210,7 +228,9 @@ export default function TemplatesPage() {
       )}
 
       {loading ? (
-        <p style={{ color: "var(--muted-foreground)" }}>Cargando plantillas...</p>
+        <p style={{ color: "var(--muted-foreground)" }}>
+          Cargando plantillas...
+        </p>
       ) : templates.length === 0 ? (
         <div
           style={{

@@ -44,7 +44,9 @@ export function StepChannels({ data, onChange }: Props) {
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <fieldset>
           <legend>Redes sociales que usas *</legend>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+          <div
+            style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}
+          >
             {PLATFORMS.map((p) => (
               <label
                 key={p.value}

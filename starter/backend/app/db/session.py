@@ -43,16 +43,3 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     ensure_engine()
     async with _session_factory() as session:
         yield session
-
-
-async def init_db() -> None:
-    ensure_engine()
-    import app.business.models  # noqa: F401
-    import app.conversations.models  # noqa: F401
-    import app.identity.models  # noqa: F401
-    import app.assets.models  # noqa: F401
-    import app.templates.models  # noqa: F401
-    from app.db.base import Base
-
-    async with _engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)

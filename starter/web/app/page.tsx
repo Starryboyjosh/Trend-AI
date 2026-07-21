@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { api } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import { api, ApiError } from "@/lib/api";
 
 interface Project {
   id: string;
@@ -17,16 +18,32 @@ interface Project {
 }
 
 export default function Home() {
+  const router = useRouter();
   const [hasBusiness, setHasBusiness] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([
-      api.businesses.list().then((list) => setHasBusiness(list.length > 0)),
-      api.projects.list().then((list) => setProjects(list as unknown as Project[])),
-    ]).finally(() => setLoading(false));
-  }, []);
+    async function loadPrivateHome() {
+      try {
+        await api.auth.me();
+        const [businesses, projectList] = await Promise.all([
+          api.businesses.list(),
+          api.projects.list(),
+        ]);
+        setHasBusiness(businesses.length > 0);
+        setProjects(projectList as unknown as Project[]);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          router.replace("/login");
+          return;
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+    void loadPrivateHome();
+  }, [router]);
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
@@ -76,7 +93,9 @@ export default function Home() {
           </span>
         </div>
 
-        <nav style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1 }}>
+        <nav
+          style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1 }}
+        >
           <Link
             href="/assistant"
             style={{
@@ -164,7 +183,9 @@ export default function Home() {
             >
               Asistente de Contenido
             </h1>
-            <p style={{ color: "var(--muted-foreground)", margin: "4px 0 0 0" }}>
+            <p
+              style={{ color: "var(--muted-foreground)", margin: "4px 0 0 0" }}
+            >
               Crea y optimiza publicaciones en segundos.
             </p>
           </div>
@@ -189,9 +210,14 @@ export default function Home() {
                   <h2 style={{ fontFamily: "var(--font-heading)" }}>
                     Configura tu negocio
                   </h2>
-                  <p style={{ color: "var(--muted-foreground)", marginBottom: 24 }}>
-                    Para personalizar tus resultados necesitamos conocer algunos datos
-                    de tu negocio.
+                  <p
+                    style={{
+                      color: "var(--muted-foreground)",
+                      marginBottom: 24,
+                    }}
+                  >
+                    Para personalizar tus resultados necesitamos conocer algunos
+                    datos de tu negocio.
                   </p>
                   <Link
                     href="/onboarding"
@@ -260,7 +286,13 @@ export default function Home() {
                   >
                     Proyectos recientes
                   </h2>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 12,
+                    }}
+                  >
                     {projects.slice(0, 5).map((p) => (
                       <div
                         key={p.id}
@@ -288,7 +320,13 @@ export default function Home() {
                             {p.platform}
                           </span>
                         </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 12,
+                          }}
+                        >
                           <Link
                             href={`/projects/${p.id}`}
                             style={{
@@ -307,10 +345,13 @@ export default function Home() {
                             }}
                           >
                             {p.created_at
-                              ? new Date(p.created_at).toLocaleDateString("es-MX", {
-                                  day: "numeric",
-                                  month: "short",
-                                })
+                              ? new Date(p.created_at).toLocaleDateString(
+                                  "es-MX",
+                                  {
+                                    day: "numeric",
+                                    month: "short",
+                                  }
+                                )
                               : ""}
                           </span>
                         </div>

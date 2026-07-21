@@ -32,6 +32,14 @@ Invalidate current session.
 
 Return user and workspace summary.
 
+### `POST /auth/register`
+
+Creates a user, an owner workspace membership, and an HttpOnly session cookie.
+
+### Session scope
+
+All private endpoints require the session cookie. `X-Workspace-Id` is optional and can only select a workspace to which the current session already belongs; it is never accepted as proof of identity.
+
 ## Business profile
 
 ### `POST /businesses`

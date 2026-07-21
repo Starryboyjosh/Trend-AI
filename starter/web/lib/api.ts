@@ -3,29 +3,29 @@ export class ApiError extends Error {
     public status: number,
     public code: string,
     message: string,
-    public retryable: boolean,
+    public retryable: boolean
   ) {
     super(message);
     this.name = "ApiError";
   }
 }
 
-const WORKSPACE_ID = "ws_demo_001";
-
-async function request<T>(
-  path: string,
-  options: RequestInit = {},
-): Promise<T> {
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    "X-Workspace-Id": WORKSPACE_ID,
     ...(options.headers as Record<string, string>),
   };
 
-  const res = await fetch(path, { ...options, headers });
+  const res = await fetch(path, {
+    ...options,
+    headers,
+    credentials: "include",
+  });
 
   if (!res.ok) {
-    let body: { error?: { code?: string; message?: string; retryable?: boolean } } = {};
+    let body: {
+      error?: { code?: string; message?: string; retryable?: boolean };
+    } = {};
     try {
       body = await res.json();
     } catch {
@@ -35,10 +35,28 @@ async function request<T>(
       res.status,
       body.error?.code || "UNKNOWN",
       body.error?.message || "Error de conexión",
-      body.error?.retryable ?? false,
+      body.error?.retryable ?? false
     );
   }
 
+  return res.json();
+}
+
+async function requestForm<T>(path: string, body: FormData): Promise<T> {
+  const res = await fetch(path, {
+    method: "POST",
+    body,
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({}));
+    throw new ApiError(
+      res.status,
+      payload.error?.code || "UNKNOWN",
+      payload.error?.message || "Error de conexión",
+      payload.error?.retryable ?? false
+    );
+  }
   return res.json();
 }
 
@@ -61,7 +79,7 @@ export const api = {
     sendMessage(conversationId: string, text: string) {
       return request<Record<string, unknown>>(
         `${BASE}/conversations/${conversationId}/messages`,
-        { method: "POST", body: JSON.stringify({ text }) },
+        { method: "POST", body: JSON.stringify({ text }) }
       );
     },
   },
@@ -69,7 +87,7 @@ export const api = {
     createVariation(conversationId: string, artifactId: string, kind: string) {
       return request<Record<string, unknown>>(
         `${BASE}/conversations/${conversationId}/artifacts/${artifactId}/variations`,
-        { method: "POST", body: JSON.stringify({ kind }) },
+        { method: "POST", body: JSON.stringify({ kind }) }
       );
     },
   },
@@ -80,7 +98,9 @@ export const api = {
         body: JSON.stringify(data),
       });
     },
-    list(params?: Record<string, string>): Promise<Array<Record<string, unknown>>> {
+    list(
+      params?: Record<string, string>
+    ): Promise<Array<Record<string, unknown>>> {
       const qs = params ? "?" + new URLSearchParams(params).toString() : "";
       return request(`${BASE}/projects${qs}`);
     },
@@ -93,13 +113,10 @@ export const api = {
         body: JSON.stringify(data),
       });
     },
-    updateArtifactVersion(
-      projectId: string,
-      data: Record<string, unknown>,
-    ) {
+    updateArtifactVersion(projectId: string, data: Record<string, unknown>) {
       return request<Record<string, unknown>>(
         `${BASE}/projects/${projectId}/artifact-version`,
-        { method: "PUT", body: JSON.stringify(data) },
+        { method: "PUT", body: JSON.stringify(data) }
       );
     },
   },
@@ -113,21 +130,25 @@ export const api = {
     async upload(file: File): Promise<Record<string, unknown>> {
       const init = await request<{ upload_id: string; upload_url: string }>(
         `${BASE}/assets/uploads`,
-        { method: "POST" },
+        { method: "POST" }
       );
       const form = new FormData();
       form.append("file", file);
-      const res = await fetch(init.upload_url, { method: "POST", body: form });
-      return res.json();
+      return requestForm(init.upload_url, form);
     },
     analyze(assetId: string) {
-      return request<Record<string, unknown>>(`${BASE}/assets/${assetId}/analyses`, {
-        method: "POST",
-      });
+      return request<Record<string, unknown>>(
+        `${BASE}/assets/${assetId}/analyses`,
+        {
+          method: "POST",
+        }
+      );
     },
   },
   templates: {
-    list(params?: Record<string, string>): Promise<Array<Record<string, unknown>>> {
+    list(
+      params?: Record<string, string>
+    ): Promise<Array<Record<string, unknown>>> {
       const qs = params ? "?" + new URLSearchParams(params).toString() : "";
       return request(`${BASE}/templates${qs}`);
     },
@@ -158,14 +179,42 @@ export const api = {
       upsert(businessId: string, data: Record<string, unknown>) {
         return request<Record<string, unknown>>(
           `${BASE}/businesses/${businessId}/brand-profile`,
-          { method: "PUT", body: JSON.stringify(data) },
+          { method: "PUT", body: JSON.stringify(data) }
         );
       },
       get(businessId: string) {
         return request<Record<string, unknown>>(
-          `${BASE}/businesses/${businessId}/brand-profile`,
+          `${BASE}/businesses/${businessId}/brand-profile`
         );
       },
+    },
+  },
+  auth: {
+    register(data: {
+      email: string;
+      name: string;
+      password: string;
+      workspace_name: string;
+    }) {
+      return request(`${BASE}/auth/register`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+    login(data: { email: string; password: string }) {
+      return request(`${BASE}/auth/login`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+    logout() {
+      return request<void>(`${BASE}/auth/logout`, { method: "POST" });
+    },
+    me() {
+      return request<{
+        user: { id: string; name: string; email: string };
+        workspaces: { id: string; role: string }[];
+      }>(`${BASE}/auth/me`);
     },
   },
 };

@@ -11,20 +11,16 @@ related: [NFR-003]
 
 ```python
 class ContentModelProvider(Protocol):
+    provider_name: str
+    model_name: str
+
     async def generate_social_post(
-        self, request: SocialPostModelRequest
+        self, *, request: SocialPostModelRequest
     ) -> dict: ...
 
-    async def generate_short_video_script(
-        self, request: VideoScriptModelRequest
-    ) -> dict: ...
-
-    async def rewrite_artifact(
-        self, request: RewriteModelRequest
-    ) -> dict: ...
-
-    async def analyze_visual(
-        self, request: VisualAnalysisModelRequest
+    async def repair_social_post(
+        self, *, request: SocialPostModelRequest,
+        invalid_output: dict, errors: list[str]
     ) -> dict: ...
 ```
 
@@ -32,10 +28,12 @@ The provider returns untrusted dictionaries. The application validates them.
 
 ## Provider implementations
 
-- `DemoContentProvider`: deterministic and offline.
-- `OpenAICompatibleProvider`: works with a configured compatible endpoint.
-- `OllamaProvider`: local model connection.
+- `DemoContentProvider`: deterministic and offline for development/tests.
+- `OpenAICompatibleProvider`: implemented through `AI_BASE_URL`, `AI_API_KEY`, and `AI_MODEL`.
+- `OllamaProvider`: planned local-model adapter.
 - Additional cloud providers may be added without changing domain services.
+
+Providers receive a bounded `SocialPostModelRequest`, never a database session, user session, tool registry, or raw conversation history. They return untrusted dictionaries; the application validates, evaluates, repairs once when needed, and persists only the final artifact.
 
 ## Object storage provider
 

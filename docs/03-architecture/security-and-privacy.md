@@ -31,6 +31,7 @@ related: [NFR-002, NFR-003]
 
 - Enforce workspace ownership in repository queries.
 - Never trust workspace or user IDs from the browser without session validation.
+- Derive the current user from an HttpOnly server session; a workspace selector may only choose a verified membership.
 - Add negative tests for every read/write endpoint.
 
 ### Files

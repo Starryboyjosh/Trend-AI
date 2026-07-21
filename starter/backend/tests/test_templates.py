@@ -84,9 +84,24 @@ async def test_get_template_not_found(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_create_project_from_template(seeded_client: AsyncClient) -> None:
+    business_response = await seeded_client.post(
+        "/api/v1/businesses",
+        json={
+            "name": "Café de prueba",
+            "category": "gastronomy",
+            "country": "Honduras",
+            "city": "Tegucigalpa",
+            "primary_product": "Café",
+            "target_audience": "Clientes locales",
+            "preferred_platforms": ["instagram"],
+            "primary_objective": "sales",
+        },
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    business_id = business_response.json()["id"]
     resp = await seeded_client.post(
         "/api/v1/projects",
-        json={"template_id": "tpl_reel_01"},
+        json={"template_id": "tpl_reel_01", "business_id": business_id},
         headers={"X-Workspace-Id": WORKSPACE_ID},
     )
     assert resp.status_code == 201

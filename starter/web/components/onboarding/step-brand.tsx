@@ -41,7 +41,9 @@ export function StepBrand({ data, onChange }: Props) {
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <fieldset>
           <legend>Tonos de voz (máx. 3) *</legend>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+          <div
+            style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}
+          >
             {TONES.map((t) => (
               <label
                 key={t.value}

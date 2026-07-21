@@ -6,21 +6,20 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.assets.routes import router as asset_router
 from app.business.routes import router as business_router
 from app.conversations.routes import router as conversation_router
 from app.core.config import settings
 from app.core.errors import AppError, app_error_handler
-from app.db.session import get_session_factory, init_db
+from app.db.session import get_session_factory
+from app.identity.routes import router as identity_router
 from app.projects.routes import router as project_router
-from app.assets.routes import router as asset_router
 from app.templates.routes import router as template_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    await init_db()
     if settings.is_demo:
-        await _seed_demo_workspace()
         await _seed_templates()
     yield
 
@@ -31,19 +30,6 @@ async def _seed_templates() -> None:
     factory = get_session_factory()
     async with factory() as session:
         await seed_templates(session)
-
-
-async def _seed_demo_workspace() -> None:
-    from sqlalchemy import select
-
-    from app.identity.models import Workspace
-
-    factory = get_session_factory()
-    async with factory() as session:
-        result = await session.execute(select(Workspace).where(Workspace.id == "ws_demo_001"))
-        if result.scalar_one_or_none() is None:
-            session.add(Workspace(id="ws_demo_001", name="Demo"))
-            await session.commit()
 
 
 app = FastAPI(
@@ -63,6 +49,7 @@ app.add_middleware(
 app.add_exception_handler(AppError, app_error_handler)
 
 app.include_router(business_router, prefix=settings.api_prefix)
+app.include_router(identity_router, prefix=settings.api_prefix)
 app.include_router(conversation_router, prefix=settings.api_prefix)
 app.include_router(project_router, prefix=settings.api_prefix)
 app.include_router(asset_router, prefix=settings.api_prefix)

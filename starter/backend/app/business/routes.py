@@ -14,14 +14,14 @@ from app.business.repository import (
     upsert_brand_profile,
 )
 from app.dependencies import get_db, require_workspace
-from app.domain.models import Objective, Platform, Tone
+from app.domain.models import Category, Objective, Platform, Tone
 
 router = APIRouter(prefix="/businesses", tags=["business"])
 
 
 class CreateBusinessRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
-    category: str = Field(min_length=1, max_length=40)
+    category: Category
     country: str = Field(min_length=2, max_length=80)
     city: str = Field(min_length=1, max_length=100)
     description: str | None = Field(None, max_length=1000)
@@ -33,7 +33,7 @@ class CreateBusinessRequest(BaseModel):
 
 class UpdateBusinessRequest(BaseModel):
     name: str | None = Field(None, max_length=120)
-    category: str | None = Field(None, max_length=40)
+    category: Category | None = None
     country: str | None = Field(None, max_length=80)
     city: str | None = Field(None, max_length=100)
     description: str | None = Field(None, max_length=1000)

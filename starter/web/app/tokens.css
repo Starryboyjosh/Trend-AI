@@ -35,7 +35,12 @@
   --input: var(--ht-white);
   --focus: var(--ht-lavender-400);
 
-  --gradient-hero: linear-gradient(145deg, #180f4b 0%, #24105a 48%, #6c24a8 100%);
+  --gradient-hero: linear-gradient(
+    145deg,
+    #180f4b 0%,
+    #24105a 48%,
+    #6c24a8 100%
+  );
   --gradient-primary: linear-gradient(90deg, #a75af4 0%, #7b2be2 100%);
 
   --radius-sm: 0.625rem;
@@ -43,8 +48,10 @@
   --radius-lg: 1rem;
   --radius-pill: 999px;
 
-  --shadow-soft: 0 12px 30px rgb(24 15 75 / 0.10), 0 2px 8px rgb(24 15 75 / 0.08);
-  --shadow-dark-card: inset 0 0 0 1px rgb(183 156 250 / 0.16), 0 16px 48px rgb(9 5 36 / 0.34);
+  --shadow-soft:
+    0 12px 30px rgb(24 15 75 / 0.1), 0 2px 8px rgb(24 15 75 / 0.08);
+  --shadow-dark-card:
+    inset 0 0 0 1px rgb(183 156 250 / 0.16), 0 16px 48px rgb(9 5 36 / 0.34);
 
   --font-heading: "Poppins", "Inter", system-ui, sans-serif;
   --font-body: "Inter", system-ui, sans-serif;
@@ -65,12 +72,23 @@
   --muted: #3d3964;
   --muted-foreground: #dcd6e4;
   --border: rgb(183 156 250 / 0.24);
-  --input: rgb(255 255 255 / 0.10);
+  --input: rgb(255 255 255 / 0.1);
   --focus: var(--ht-lavender-400);
 }
 
-* { box-sizing: border-box; }
-:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+* {
+  box-sizing: border-box;
+}
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }

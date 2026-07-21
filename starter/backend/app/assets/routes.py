@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, UploadFile
@@ -9,10 +10,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.assets.models import Asset, AssetAnalysis
+from app.assets.models import Asset, AssetAnalysis, UploadSession
 from app.assets.schemas import AssetAnalysisResult, Improvement
 from app.core.config import settings
-from app.core.errors import NotFoundError
+from app.core.errors import NotFoundError, ValidationError_
 from app.dependencies import get_db, require_workspace
 
 router = APIRouter(prefix="/assets", tags=["assets"])
@@ -27,6 +28,32 @@ ALLOWED_MIME = {
     "image/gif",
 }
 
+SIGNATURES: dict[str, tuple[bytes, ...]] = {
+    "image/jpeg": (b"\xff\xd8\xff",),
+    "image/png": (b"\x89PNG\r\n\x1a\n",),
+    "image/webp": (b"RIFF",),
+}
+
+
+def _validate_upload(content: bytes, mime_type: str | None) -> str:
+    if mime_type not in ALLOWED_MIME:
+        raise ValidationError_("Este tipo de archivo no es compatible. Usa PNG, JPG o WebP.")
+    if not content:
+        raise ValidationError_("No pudimos procesar este archivo.")
+    if len(content) > settings.max_upload_mb * 1024 * 1024:
+        raise ValidationError_(
+            f"El archivo supera el tamaño permitido de {settings.max_upload_mb} MB."
+        )
+    if mime_type == "image/gif":
+        raise ValidationError_("Este tipo de archivo no es compatible. Usa PNG, JPG o WebP.")
+    if mime_type == "image/webp":
+        valid = content.startswith(b"RIFF") and content[8:12] == b"WEBP"
+    else:
+        valid = any(content.startswith(signature) for signature in SIGNATURES[mime_type])
+    if not valid:
+        raise ValidationError_("No pudimos procesar este archivo.")
+    return {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}[mime_type]
+
 
 class InitUploadResponse(BaseModel):
     upload_id: str
@@ -40,6 +67,14 @@ async def init_upload(
     db: AsyncSession = Depends(get_db),
 ) -> InitUploadResponse:
     upload_id = uuid.uuid4().hex
+    db.add(
+        UploadSession(
+            id=upload_id,
+            workspace_id=workspace_id,
+            expires_at=datetime.now(UTC) + timedelta(minutes=15),
+        )
+    )
+    await db.commit()
     return InitUploadResponse(
         upload_id=upload_id,
         upload_url=f"/api/v1/assets/uploads/{upload_id}/complete",
@@ -54,11 +89,18 @@ async def complete_upload(
     workspace_id: str = Depends(require_workspace),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    if file.content_type not in ALLOWED_MIME:
-        return {"status": "error", "message": "Formato no soportado. Usa JPEG, PNG, WebP o GIF."}
-
     content = await file.read()
-    ext = Path(file.filename or "image.png").suffix or ".png"
+    ext = _validate_upload(content, file.content_type)
+    session_result = await db.execute(
+        select(UploadSession).where(
+            UploadSession.id == upload_id,
+            UploadSession.workspace_id == workspace_id,
+            UploadSession.completed_at.is_(None),
+        )
+    )
+    upload_session = session_result.scalar_one_or_none()
+    if upload_session is None or upload_session.expires_at.replace(tzinfo=UTC) < datetime.now(UTC):
+        raise NotFoundError("Sesión de carga")
     storage_name = f"{upload_id}{ext}"
     storage_path = UPLOAD_DIR / storage_name
 
@@ -74,6 +116,7 @@ async def complete_upload(
         asset_type="image",
     )
     db.add(asset)
+    upload_session.completed_at = datetime.now(UTC)
     await db.flush()
     await db.refresh(asset)
     await db.commit()

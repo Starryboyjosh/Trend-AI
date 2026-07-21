@@ -37,10 +37,10 @@ class NotFoundError(AppError):
 
 
 class ForbiddenError(AppError):
-    def __init__(self) -> None:
+    def __init__(self, message: str = "No tienes acceso a este recurso.") -> None:
         super().__init__(
             code="FORBIDDEN",
-            message="No tienes acceso a este recurso.",
+            message=message,
             status_code=403,
         )
 

@@ -107,7 +107,7 @@ async def test_variation_rejected_wrong_workspace(
         json={"kind": "shorter"},
         headers={"X-Workspace-Id": "ws_other"},
     )
-    assert resp.status_code == 404
+    assert resp.status_code == 403
 
 
 @pytest.mark.asyncio

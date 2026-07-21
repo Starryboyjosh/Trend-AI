@@ -22,7 +22,10 @@ export default function LibraryPage() {
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
   const [analyzing, setAnalyzing] = useState<string | null>(null);
-  const [analysisResult, setAnalysisResult] = useState<Record<string, unknown> | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -166,7 +169,13 @@ export default function LibraryPage() {
         >
           {uploading ? "Subiendo..." : "Subir imagen"}
         </label>
-        <p style={{ color: "var(--muted-foreground)", fontSize: "0.85rem", marginTop: 8 }}>
+        <p
+          style={{
+            color: "var(--muted-foreground)",
+            fontSize: "0.85rem",
+            marginTop: 8,
+          }}
+        >
           JPEG, PNG, WebP o GIF
         </p>
       </div>
@@ -258,7 +267,12 @@ export default function LibraryPage() {
                 id: string;
                 summary: string;
                 strengths: string[];
-                improvements: { priority: "high" | "medium" | "low"; area: string; reason: string; action: string }[];
+                improvements: {
+                  priority: "high" | "medium" | "low";
+                  area: string;
+                  reason: string;
+                  action: string;
+                }[];
                 revised_copy: string | null;
                 accessibility_notes: string[];
               }

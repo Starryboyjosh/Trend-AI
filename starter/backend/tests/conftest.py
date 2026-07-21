@@ -1,25 +1,27 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from datetime import UTC, datetime, timedelta
+from hashlib import sha256
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, delete
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+import app.assets.models  # noqa: F401
 import app.business.models  # noqa: F401
 import app.conversations.models  # noqa: F401
-import app.identity.models  # noqa: F401
 import app.projects.models  # noqa: F401
-import app.assets.models  # noqa: F401
 import app.templates.models  # noqa: F401
 from app.db.base import Base
 from app.dependencies import get_db
+from app.identity.models import AuthSession, User, Workspace, WorkspaceMember
 from app.main import app
 from app.templates.repository import seed_templates
 
-TEST_DB_URL = "sqlite+aiosqlite:///./test_hitrendy.db"
+TEST_DB_URL = "sqlite+aiosqlite:///./test_hitrendy_secure.db"
 
 _async_engine = create_async_engine(TEST_DB_URL, echo=False)
 _TestingSessionFactory = async_sessionmaker(
@@ -28,7 +30,7 @@ _TestingSessionFactory = async_sessionmaker(
     expire_on_commit=False,
 )
 
-_sync_engine = create_engine("sqlite:///./test_hitrendy.db")
+_sync_engine = create_engine("sqlite:///./test_hitrendy_secure.db")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -49,6 +51,29 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     app.dependency_overrides[get_db] = override_get_db
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        token = "test-session-token"
+        async with _TestingSessionFactory() as session:
+            for model in (AuthSession, WorkspaceMember, User, Workspace):
+                await session.execute(delete(model))
+            user = User(
+                id="usr_test_001",
+                email="test@example.com",
+                name="Test User",
+                password_hash="scrypt$00$00",
+            )
+            workspace = Workspace(id="ws_test_001", name="Test workspace")
+            membership = WorkspaceMember(
+                id="wsm_test_001", workspace_id=workspace.id, user_id=user.id, role="owner"
+            )
+            auth_session = AuthSession(
+                id="ses_test_001",
+                token_hash=sha256(token.encode("utf-8")).hexdigest(),
+                user_id=user.id,
+                expires_at=datetime.now(UTC) + timedelta(hours=1),
+            )
+            session.add_all([user, workspace, membership, auth_session])
+            await session.commit()
+        ac.cookies.set("hitrendy_session", token)
         yield ac
     app.dependency_overrides.clear()
 

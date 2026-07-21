@@ -46,3 +46,61 @@ textarea {
   letter-spacing: 0.08em;
   color: var(--muted-foreground);
 }
+.auth-card {
+  width: min(100%, 30rem);
+  padding: 2rem;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-dark-card);
+}
+.auth-card h1 {
+  margin: 0.25rem 0;
+  font-family: var(--font-heading);
+}
+.auth-description {
+  color: var(--muted-foreground);
+}
+.auth-form {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+.auth-form label {
+  display: grid;
+  gap: 0.4rem;
+  font-weight: 600;
+}
+.auth-form input {
+  min-height: 2.75rem;
+  padding: 0.65rem 0.75rem;
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--input);
+}
+.auth-form button {
+  min-height: 2.75rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-weight: 700;
+  cursor: pointer;
+}
+.auth-form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+.auth-error {
+  color: var(--ht-danger);
+  margin: 0;
+}
+.auth-switch {
+  margin-top: 1rem;
+  padding: 0;
+  border: 0;
+  color: var(--primary);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}

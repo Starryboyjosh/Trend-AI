@@ -31,15 +31,12 @@ export default function ProjectEditorPage() {
     format_recommendation: "static_post",
   });
 
-  useEffect(() => {
-    if (!params.id) return;
-    loadProject();
-  }, [params.id]);
-
-  async function loadProject() {
+  const loadProject = useCallback(async () => {
     setError("");
     try {
-      const data = (await api.projects.get(params.id)) as unknown as ProjectData;
+      const data = (await api.projects.get(
+        params.id
+      )) as unknown as ProjectData;
       setProject(data);
       const snap = data.artifact_snapshot;
       if (snap) {
@@ -59,14 +56,16 @@ export default function ProjectEditorPage() {
         setError("Error al cargar el proyecto.");
       }
     }
-  }
+  }, [params.id]);
 
-  const handleChange = useCallback(
-    (field: string, value: string) => {
-      setForm((prev) => ({ ...prev, [field]: value }));
-    },
-    [],
-  );
+  useEffect(() => {
+    if (!params.id) return;
+    void loadProject();
+  }, [loadProject, params.id]);
+
+  const handleChange = useCallback((field: string, value: string) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  }, []);
 
   async function handleSave() {
     if (!project) return;

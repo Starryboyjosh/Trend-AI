@@ -74,7 +74,7 @@ async def test_get_business_cross_workspace_rejected(client: AsyncClient) -> Non
         f"/api/v1/businesses/{biz_id}",
         headers={"X-Workspace-Id": OTHER_WORKSPACE},
     )
-    assert resp.status_code == 404
+    assert resp.status_code == 403
 
 
 @pytest.mark.asyncio

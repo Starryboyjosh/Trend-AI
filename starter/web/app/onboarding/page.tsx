@@ -122,7 +122,12 @@ export default function OnboardingPage() {
       case 0:
         return !!data.name && !!data.category;
       case 1:
-        return !!data.country && !!data.city && !!data.primary_product && !!data.target_audience;
+        return (
+          !!data.country &&
+          !!data.city &&
+          !!data.primary_product &&
+          !!data.target_audience
+        );
       case 2:
         return data.preferred_platforms.length > 0 && !!data.primary_objective;
       case 3:
@@ -141,7 +146,12 @@ export default function OnboardingPage() {
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter" && !e.shiftKey && canProceed() && step < STEPS.length - 1) {
+    if (
+      e.key === "Enter" &&
+      !e.shiftKey &&
+      canProceed() &&
+      step < STEPS.length - 1
+    ) {
       e.preventDefault();
       next();
     }
@@ -245,7 +255,13 @@ export default function OnboardingPage() {
         >
           Configura tu negocio
         </span>
-        <span style={{ marginLeft: "auto", fontSize: "0.75rem", color: "var(--muted-foreground)" }}>
+        <span
+          style={{
+            marginLeft: "auto",
+            fontSize: "0.75rem",
+            color: "var(--muted-foreground)",
+          }}
+        >
           {hydrated && "Guardado automáticamente"}
         </span>
       </div>
@@ -328,7 +344,13 @@ export default function OnboardingPage() {
           ) : null}
         </div>
 
-        <p style={{ fontSize: "0.75rem", color: "var(--muted-foreground)", marginTop: 16 }}>
+        <p
+          style={{
+            fontSize: "0.75rem",
+            color: "var(--muted-foreground)",
+            marginTop: 16,
+          }}
+        >
           Usa <kbd>Enter</kbd> para avanzar · <kbd>Esc</kbd> para retroceder
         </p>
       </form>

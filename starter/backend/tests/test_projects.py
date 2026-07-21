@@ -163,4 +163,4 @@ async def test_project_isolation_by_workspace(client: AsyncClient, artifact_id: 
         f"/api/v1/projects/{project_id}",
         headers={"X-Workspace-Id": "ws_other"},
     )
-    assert resp.status_code == 404
+    assert resp.status_code == 403

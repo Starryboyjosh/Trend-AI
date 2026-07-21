@@ -1,32 +1,49 @@
 from __future__ import annotations
 
+import json
 from typing import Protocol
 
-from app.domain.models import BusinessGenerationContext, GenerateSocialPostCommand
+import httpx
+
+from app.generation.contracts import SocialPostModelRequest
+from app.generation.prompt_registry import get_social_copy_prompt
 
 
 class ContentModelProvider(Protocol):
+    provider_name: str
+    model_name: str
+
     async def generate_social_post(
         self,
         *,
-        context: BusinessGenerationContext,
-        command: GenerateSocialPostCommand,
+        request: SocialPostModelRequest,
     ) -> dict:
         """Return an untrusted provider payload to be validated by the application."""
         ...
 
+    async def repair_social_post(
+        self,
+        *,
+        request: SocialPostModelRequest,
+        invalid_output: dict,
+        errors: list[str],
+    ) -> dict: ...
+
 
 class DemoContentModelProvider:
+    provider_name = "demo"
+    model_name = "demo-v1"
+
     async def generate_social_post(
         self,
         *,
-        context: BusinessGenerationContext,
-        command: GenerateSocialPostCommand,
+        request: SocialPostModelRequest,
     ) -> dict:
-        platform = command.platform or context.preferred_platforms[0]
-        tone = command.tone or context.brand_tones[0]
-        objective = command.objective or context.primary_objective
-        text_lower = command.text.lower()
+        context = request.business
+        platform = request.platform
+        tone = request.tone
+        objective = request.objective
+        text_lower = request.user_request.lower()
         cta = {
             "reach": "Compártelo con alguien que disfrutaría conocerlo.",
             "engagement": "Cuéntanos qué te parece.",
@@ -79,7 +96,7 @@ class DemoContentModelProvider:
             or "more_friendly" in text_lower
         ):
             tone = "friendly"
-            hook = f"¡Tenemos algo especial para ti! 🎉"
+            hook = "¡Tenemos algo especial para ti! 🎉"
             caption = (
                 f"¡Hola! En {context.name} tenemos {context.primary_product} que te encantará. "
                 f"Está pensado para {context.target_audience.lower()} como tú. "
@@ -98,3 +115,70 @@ class DemoContentModelProvider:
             else "static_post",
             "assumptions": [f"Se utilizó el tono {tone} del perfil o la solicitud."],
         }
+
+    async def repair_social_post(
+        self,
+        *,
+        request: SocialPostModelRequest,
+        invalid_output: dict,
+        errors: list[str],
+    ) -> dict:
+        return await self.generate_social_post(request=request)
+
+
+class OpenAICompatibleContentModelProvider:
+    provider_name = "openai-compatible"
+
+    def __init__(
+        self, *, base_url: str, api_key: str, model_name: str, timeout_seconds: float = 30
+    ) -> None:
+        self._base_url = base_url.rstrip("/")
+        self._api_key = api_key
+        self.model_name = model_name
+        self._timeout_seconds = timeout_seconds
+
+    async def generate_social_post(self, *, request: SocialPostModelRequest) -> dict:
+        system_prompt, _ = get_social_copy_prompt()
+        return await self._complete(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": json.dumps(request.model_dump(), ensure_ascii=False)},
+            ]
+        )
+
+    async def repair_social_post(
+        self,
+        *,
+        request: SocialPostModelRequest,
+        invalid_output: dict,
+        errors: list[str],
+    ) -> dict:
+        system_prompt, _ = get_social_copy_prompt()
+        repair = {
+            "request": request.model_dump(),
+            "invalid_output": invalid_output,
+            "validation_errors": errors,
+            "instruction": "Corrige sólo lo necesario y devuelve únicamente el JSON del schema.",
+        }
+        return await self._complete(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": json.dumps(repair, ensure_ascii=False)},
+            ]
+        )
+
+    async def _complete(self, *, messages: list[dict[str, str]]) -> dict:
+        headers = {"Authorization": f"Bearer {self._api_key}"}
+        payload = {
+            "model": self.model_name,
+            "messages": messages,
+            "response_format": {"type": "json_object"},
+            "temperature": 0.4,
+        }
+        async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
+            response = await client.post(
+                f"{self._base_url}/chat/completions", headers=headers, json=payload
+            )
+            response.raise_for_status()
+        content = response.json()["choices"][0]["message"]["content"]
+        return json.loads(content)

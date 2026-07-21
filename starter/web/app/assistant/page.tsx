@@ -117,23 +117,20 @@ export default function AssistantPage() {
     [conversationId, loading]
   );
 
-  const handleSave = useCallback(
-    async (artifactId: string | undefined) => {
-      if (!artifactId) return;
-      setError("");
-      try {
-        const project = await api.projects.create({ artifact_id: artifactId });
-        setError("Proyecto guardado ✓");
-      } catch (err) {
-        if (err instanceof ApiError) {
-          setError(err.message);
-        } else {
-          setError("Error al guardar el proyecto.");
-        }
+  const handleSave = useCallback(async (artifactId: string | undefined) => {
+    if (!artifactId) return;
+    setError("");
+    try {
+      const project = await api.projects.create({ artifact_id: artifactId });
+      setError("Proyecto guardado ✓");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError("Error al guardar el proyecto.");
       }
-    },
-    [],
-  );
+    }
+  }, []);
 
   const handleVariation = useCallback(
     async (artifactId: string | undefined, kind: string) => {
@@ -169,7 +166,7 @@ export default function AssistantPage() {
         setLoading(false);
       }
     },
-    [conversationId, loading],
+    [conversationId, loading]
   );
 
   if (initializing) {
@@ -224,7 +221,12 @@ export default function AssistantPage() {
         )}
       </header>
 
-      <MessageList messages={messages} loading={loading} onSave={handleSave} onVariation={handleVariation} />
+      <MessageList
+        messages={messages}
+        loading={loading}
+        onSave={handleSave}
+        onVariation={handleVariation}
+      />
       <Composer onSend={handleSend} disabled={loading || !conversationId} />
     </div>
   );
