@@ -1,0 +1,48 @@
+@import "./tokens.css";
+
+html,
+body {
+  min-height: 100%;
+}
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-body);
+}
+button,
+input,
+textarea {
+  font: inherit;
+}
+.artifact-card {
+  background: var(--card);
+  color: var(--card-foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+}
+.artifact-card section {
+  margin-block: 1rem;
+  padding: 1rem;
+  background: var(--muted);
+  border-radius: var(--radius-md);
+}
+.artifact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.artifact-actions button {
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 0.7rem 1rem;
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.eyebrow {
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--muted-foreground);
+}

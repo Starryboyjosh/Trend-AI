@@ -1,0 +1,18 @@
+{
+  "name": "hitrendy-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "starter/web"
+  ],
+  "scripts": {
+    "web:dev": "npm run dev -w starter/web",
+    "web:build": "npm run build -w starter/web",
+    "web:typecheck": "npm run typecheck -w starter/web",
+    "web:lint": "npm run lint -w starter/web",
+    "web:test": "npm run test -w starter/web",
+    "backend:dev": "PYTHONPATH=starter/backend .venv/bin/uvicorn app.main:app --reload --port 8000",
+    "backend:test": "PYTHONPATH=starter/backend .venv/bin/pytest starter/backend/tests",
+    "dev": "npx --yes concurrently \"npm run web:dev\" \"npm run backend:dev\""
+  }
+}

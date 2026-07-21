@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hitrendy.local/schemas/template.schema.json",
+  "title": "Template",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "title", "platforms", "formats", "category", "thumbnail_url", "editable_slots"],
+  "properties": {
+    "id": {"type": "string"},
+    "title": {"type": "string", "minLength": 1, "maxLength": 120},
+    "platforms": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "formats": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "category": {"type": "string"},
+    "thumbnail_url": {"type": "string"},
+    "editable_slots": {"type": "array", "items": {"type": "string"}}
+  }
+}

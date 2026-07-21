@@ -1,0 +1,85 @@
+---
+id: DOC-INDEX
+kind: navigation
+status: accepted
+---
+
+# Documentation index
+
+This index is the human and agent entry point.
+
+## Product
+
+- [Vision and scope](00-product/vision-and-scope.md)
+- [User flows](00-product/user-flows.md)
+- [MVP demo narrative](00-product/mvp-demo-narrative.md)
+- [Roadmap](00-product/roadmap.md)
+
+## Brand
+
+- [Brand system](01-brand/brand-system.md)
+- [Design tokens](01-brand/design-tokens.md)
+- [Voice and content style](01-brand/content-voice.md)
+- [Accessibility](01-brand/accessibility.md)
+
+## UX
+
+- [Figma audit](02-ux/figma-audit.md)
+- [Information architecture](02-ux/information-architecture.md)
+- [Screen specifications](02-ux/screen-specs.md)
+- [Component contracts](02-ux/component-contracts.md)
+- [States and interface copy](02-ux/states-and-copy.md)
+
+## Architecture
+
+- [System context](03-architecture/system-context.md)
+- [Backend architecture](03-architecture/backend.md)
+- [Frontend architecture](03-architecture/frontend.md)
+- [Data model](03-architecture/data-model.md)
+- [Security and privacy](03-architecture/security-and-privacy.md)
+- [ADRs](03-architecture/adr/)
+
+## AI
+
+- [AI product behavior](04-ai/ai-product-behavior.md)
+- [Orchestration](04-ai/orchestration.md)
+- [Skills catalog](04-ai/skills-catalog.md)
+- [Prompt contracts](04-ai/prompt-contracts.md)
+- [Evaluation](04-ai/evaluation.md)
+
+## API
+
+- [HTTP API](05-api/http-api.md)
+- [Realtime events](05-api/realtime-events.md)
+- [Provider interfaces](05-api/provider-interfaces.md)
+
+## Implementation
+
+- [Agentic playbook](06-implementation/agentic-playbook.md)
+- [Backlog](06-implementation/backlog.md)
+- [Test strategy](06-implementation/test-strategy.md)
+- [Deployment](06-implementation/deployment.md)
+- [Graphify preparation](06-implementation/graphify-ready.md)
+
+## Demo and sources
+
+- [Demo script](07-demo/demo-script.md)
+- [Acceptance criteria](07-demo/acceptance.md)
+- [Official references](08-references/official-sources.md)
+
+## Dependency map
+
+```mermaid
+graph TD
+  PRODUCT[Product requirements] --> UX[UX specifications]
+  PRODUCT --> AI[AI behavior]
+  BRAND[Brand system] --> UX
+  UX --> FRONTEND[Frontend]
+  AI --> BACKEND[Backend application services]
+  API[Contracts] --> FRONTEND
+  API --> BACKEND
+  BACKEND --> DATA[Data model]
+  BACKEND --> PROVIDERS[Provider adapters]
+  TESTS[Test strategy] --> FRONTEND
+  TESTS --> BACKEND
+```
