@@ -233,6 +233,8 @@ async def test_get_conversation_with_messages(client: AsyncClient, business_id: 
     assert len(data["messages"]) == 2
     assert data["messages"][0]["role"] == "user"
     assert data["messages"][1]["role"] == "assistant"
+    assert data["messages"][1]["artifact_id"]
+    assert data["messages"][1]["artifact"]["artifact_type"] == "social_post"
 
 
 @pytest.mark.asyncio

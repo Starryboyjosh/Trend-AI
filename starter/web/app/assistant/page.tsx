@@ -25,6 +25,8 @@ interface ConvData {
     role: string;
     content: string;
     metadata?: { analysis?: VisualAnalysis } | null;
+    artifact?: GeneratedArtifact;
+    artifact_id?: string | null;
   }>;
 }
 
@@ -82,6 +84,8 @@ function AssistantContent() {
         role: m.role as "user" | "assistant",
         content: m.content,
         analysis: m.metadata?.analysis,
+        artifact: m.artifact,
+        artifactId: m.artifact_id || undefined,
       }));
       setMessages(msgs);
     } catch (err) {

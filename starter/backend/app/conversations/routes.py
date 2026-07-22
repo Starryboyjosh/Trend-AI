@@ -182,6 +182,28 @@ async def get_conversation_endpoint(
 ) -> dict:
     conv = await get_conversation(db, workspace_id, conversation_id)
     msgs = await get_messages(db, conversation_id)
+    message_metadata = {
+        message.id: json.loads(message.metadata_json) if message.metadata_json else None
+        for message in msgs
+    }
+    artifact_ids = [
+        metadata["artifact_id"]
+        for metadata in message_metadata.values()
+        if metadata and isinstance(metadata.get("artifact_id"), str)
+    ]
+    artifacts_by_id: dict[str, dict] = {}
+    if artifact_ids:
+        artifact_result = await db.execute(
+            select(GeneratedArtifact.id, ArtifactVersion.content_json)
+            .join(ArtifactVersion, ArtifactVersion.id == GeneratedArtifact.active_version_id)
+            .where(
+                GeneratedArtifact.id.in_(artifact_ids),
+                GeneratedArtifact.conversation_id == conversation_id,
+            )
+        )
+        artifacts_by_id = {
+            row.id: json.loads(row.content_json) for row in artifact_result if row.content_json
+        }
     return {
         "id": conv.id,
         "title": conv.title,
@@ -193,7 +215,13 @@ async def get_conversation_endpoint(
                 "role": m.role,
                 "content": m.content,
                 "intent": m.intent,
-                "metadata": json.loads(m.metadata_json) if m.metadata_json else None,
+                "metadata": message_metadata[m.id],
+                "artifact_id": message_metadata[m.id].get("artifact_id")
+                if message_metadata[m.id]
+                else None,
+                "artifact": artifacts_by_id.get(message_metadata[m.id].get("artifact_id"))
+                if message_metadata[m.id]
+                else None,
                 "created_at": m.created_at.isoformat() if m.created_at else None,
             }
             for m in msgs
@@ -313,7 +341,10 @@ async def send_message_endpoint(
         "assistant",
         artifact.caption,
         intent=assistant_intent,
-        metadata_json={"artifact_type": artifact.artifact_type},
+        metadata_json={
+            "artifact_type": artifact.artifact_type,
+            "artifact_id": saved_artifact.id if saved_artifact else None,
+        },
     )
 
     await db.commit()
