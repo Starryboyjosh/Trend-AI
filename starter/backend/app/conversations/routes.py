@@ -23,10 +23,12 @@ from app.conversations.repository import (
     get_messages,
     list_conversations,
 )
-from app.core.errors import AppError, NotFoundError, ValidationError_
+from app.core.errors import NotFoundError, ValidationError_
 from app.dependencies import get_db, require_workspace
 from app.domain.models import (
+    GeneratedShortVideoScript,
     GeneratedSocialPost,
+    GenerateShortVideoScriptCommand,
     GenerateSocialPostCommand,
     Objective,
     Platform,
@@ -34,9 +36,11 @@ from app.domain.models import (
     VariationKind,
 )
 from app.providers.factory import get_content_provider
+from app.services.generate_short_video_script import GenerateShortVideoScriptService
 from app.services.generate_social_post import GenerateSocialPostService
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
+SupportedGenerationIntent = Literal["create_social_post", "create_short_video_script"]
 
 
 class CreateConversationRequest(BaseModel):
@@ -46,7 +50,7 @@ class CreateConversationRequest(BaseModel):
 
 class SendMessageRequest(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
-    ui_intent: str | None = None
+    ui_intent: str | None = Field(None, max_length=80)
     platform: Platform | None = None
     tone: Tone | None = None
     objective: Objective | None = None
@@ -113,7 +117,7 @@ async def list_conversations_endpoint(
     convs = await list_conversations(db, workspace_id, business_id, status, search)
     latest_message = (
         select(Message.content)
-        .where(Message.conversation_id == Conversation.id)
+        .where(Message.conversation_id == Conversation.id, Message.role == "user")
         .order_by(Message.created_at.desc())
         .limit(1)
         .scalar_subquery()
@@ -202,30 +206,52 @@ async def send_message_endpoint(
     conv = await get_conversation(db, workspace_id, conversation_id)
     if conv.status != "active":
         raise ValidationError_("Restaura la conversación antes de enviar un mensaje.")
+    if body.attachment_ids:
+        raise ValidationError_(
+            "Adjuntar imágenes al chat todavía no está disponible. Usa la Biblioteca para revisarlas."
+        )
 
-    user_msg = await add_message(
-        db, conversation_id, "user", body.text, intent="create_social_post"
-    )
+    intent: SupportedGenerationIntent
+    if body.ui_intent in (None, "create_social_post"):
+        intent = "create_social_post"
+    elif body.ui_intent == "create_short_video_script":
+        intent = "create_short_video_script"
+    else:
+        raise ValidationError_("Esta acción todavía no está disponible en el asistente.")
 
-    command = GenerateSocialPostCommand(
-        workspace_id=workspace_id,
-        business_id=conv.business_id,
-        conversation_id=conversation_id,
-        text=body.text,
-        platform=body.platform,
-        tone=body.tone,
-        objective=body.objective,
-    )
+    user_msg = await add_message(db, conversation_id, "user", body.text, intent=intent)
 
     biz_repo = SqlBusinessContextRepository(db)
     art_repo = SqlArtifactRepository(db)
     provider = get_content_provider()
-    service = GenerateSocialPostService(biz_repo, art_repo, provider)
-
-    try:
-        artifact: GeneratedSocialPost = await service.execute(command)
-    except AppError:
-        raise
+    artifact: GeneratedSocialPost | GeneratedShortVideoScript
+    assistant_intent: str
+    if intent == "create_short_video_script":
+        command = GenerateShortVideoScriptCommand(
+            workspace_id=workspace_id,
+            business_id=conv.business_id,
+            conversation_id=conversation_id,
+            text=body.text,
+            platform=body.platform,
+            tone=body.tone,
+            objective=body.objective,
+        )
+        artifact = await GenerateShortVideoScriptService(biz_repo, art_repo, provider).execute(
+            command
+        )
+        assistant_intent = "generated_short_video_script"
+    else:
+        command = GenerateSocialPostCommand(
+            workspace_id=workspace_id,
+            business_id=conv.business_id,
+            conversation_id=conversation_id,
+            text=body.text,
+            platform=body.platform,
+            tone=body.tone,
+            objective=body.objective,
+        )
+        artifact = await GenerateSocialPostService(biz_repo, art_repo, provider).execute(command)
+        assistant_intent = "generated_social_post"
 
     from sqlalchemy import desc
 
@@ -242,8 +268,8 @@ async def send_message_endpoint(
         conversation_id,
         "assistant",
         artifact.caption,
-        intent="generated_social_post",
-        metadata_json={"artifact_type": "social_post"},
+        intent=assistant_intent,
+        metadata_json={"artifact_type": artifact.artifact_type},
     )
 
     await db.commit()

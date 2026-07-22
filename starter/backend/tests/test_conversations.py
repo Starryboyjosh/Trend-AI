@@ -116,6 +116,61 @@ async def test_send_message_generates_artifact(client: AsyncClient, business_id:
 
 
 @pytest.mark.asyncio
+async def test_send_message_generates_short_video_script(
+    client: AsyncClient, business_id: str
+) -> None:
+    conv_resp = await client.post(
+        "/api/v1/conversations",
+        json={"business_id": business_id, "title": "Guion para video"},
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    conv_id = conv_resp.json()["id"]
+
+    response = await client.post(
+        f"/api/v1/conversations/{conv_id}/messages",
+        json={
+            "text": "Crea un guion de video para presentar el café frío",
+            "ui_intent": "create_short_video_script",
+            "platform": "tiktok",
+        },
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+
+    assert response.status_code == 200
+    artifact = response.json()["artifact"]
+    assert artifact["artifact_type"] == "short_video_script"
+    assert artifact["platform"] == "tiktok"
+    assert len(artifact["scenes"]) >= 2
+    assert artifact["scenes"][0]["order"] == 1
+
+
+@pytest.mark.asyncio
+async def test_send_message_rejects_unimplemented_intent_and_attachments(
+    client: AsyncClient, business_id: str
+) -> None:
+    conv_resp = await client.post(
+        "/api/v1/conversations",
+        json={"business_id": business_id, "title": "Límites del asistente"},
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    conv_id = conv_resp.json()["id"]
+
+    unsupported = await client.post(
+        f"/api/v1/conversations/{conv_id}/messages",
+        json={"text": "Dame una campaña", "ui_intent": "create_campaign_idea"},
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    assert unsupported.status_code == 422
+
+    attachments = await client.post(
+        f"/api/v1/conversations/{conv_id}/messages",
+        json={"text": "Analiza esto", "attachment_ids": ["asset_001"]},
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    assert attachments.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_get_conversation_with_messages(client: AsyncClient, business_id: str) -> None:
     conv_resp = await client.post(
         "/api/v1/conversations",

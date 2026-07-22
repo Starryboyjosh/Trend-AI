@@ -91,12 +91,16 @@ Returns thread metadata and paginated messages.
   "text": "Quiero promocionar una bebida fría esta semana",
   "ui_intent": "create_social_post",
   "platform": "instagram",
-  "tone": "juvenil",
+  "tone": "youthful",
   "attachment_ids": []
 }
 ```
 
-Response may be a clarification or a completed artifact.
+`ui_intent` admite `create_social_post` (valor por defecto) y
+`create_short_video_script`. El segundo devuelve un borrador estructurado con
+hook, duración, escenas, texto en pantalla, locución, CTA y caption. Otras
+acciones y adjuntos en el chat se rechazan explícitamente hasta que exista el
+flujo autorizado correspondiente; no se reinterpretan como publicaciones.
 
 ## Generation
 

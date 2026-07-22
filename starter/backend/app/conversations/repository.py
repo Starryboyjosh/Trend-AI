@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import overload
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,8 +16,11 @@ from app.conversations.models import (
 from app.core.errors import NotFoundError
 from app.domain.models import (
     BusinessGenerationContext,
+    GeneratedShortVideoScript,
     GeneratedSocialPost,
 )
+
+GeneratedArtifactContent = GeneratedSocialPost | GeneratedShortVideoScript
 
 
 async def create_conversation(
@@ -169,6 +173,51 @@ class SqlArtifactRepository:
         prompt_version: str,
         artifact: GeneratedSocialPost,
     ) -> GeneratedSocialPost:
+        await self._save_artifact(
+            conversation_id=conversation_id,
+            profile_version=profile_version,
+            objective=objective,
+            provider_name=provider_name,
+            model_name=model_name,
+            prompt_version=prompt_version,
+            artifact=artifact,
+        )
+        return artifact
+
+    async def save_short_video_script(
+        self,
+        *,
+        workspace_id: str,
+        conversation_id: str,
+        profile_version: int,
+        objective: str,
+        provider_name: str,
+        model_name: str,
+        prompt_version: str,
+        artifact: GeneratedShortVideoScript,
+    ) -> GeneratedShortVideoScript:
+        await self._save_artifact(
+            conversation_id=conversation_id,
+            profile_version=profile_version,
+            objective=objective,
+            provider_name=provider_name,
+            model_name=model_name,
+            prompt_version=prompt_version,
+            artifact=artifact,
+        )
+        return artifact
+
+    async def _save_artifact(
+        self,
+        *,
+        conversation_id: str,
+        profile_version: int,
+        objective: str,
+        provider_name: str,
+        model_name: str,
+        prompt_version: str,
+        artifact: GeneratedArtifactContent,
+    ) -> GeneratedArtifactContent:
         artifact_record = GeneratedArtifact(
             conversation_id=conversation_id,
             artifact_type=artifact.artifact_type,
@@ -196,6 +245,7 @@ class SqlArtifactRepository:
         await self._db.flush()
         return artifact
 
+    @overload
     async def add_artifact_version(
         self,
         *,
@@ -203,7 +253,26 @@ class SqlArtifactRepository:
         content: GeneratedSocialPost,
         user_edited: bool = False,
         parent_version_id: str | None = None,
-    ) -> GeneratedSocialPost:
+    ) -> GeneratedSocialPost: ...
+
+    @overload
+    async def add_artifact_version(
+        self,
+        *,
+        artifact_id: str,
+        content: GeneratedShortVideoScript,
+        user_edited: bool = False,
+        parent_version_id: str | None = None,
+    ) -> GeneratedShortVideoScript: ...
+
+    async def add_artifact_version(
+        self,
+        *,
+        artifact_id: str,
+        content: GeneratedArtifactContent,
+        user_edited: bool = False,
+        parent_version_id: str | None = None,
+    ) -> GeneratedArtifactContent:
         result = await self._db.execute(
             select(ArtifactVersion)
             .where(ArtifactVersion.artifact_id == artifact_id)

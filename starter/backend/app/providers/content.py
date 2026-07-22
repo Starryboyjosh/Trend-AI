@@ -5,8 +5,8 @@ from typing import Protocol
 
 import httpx
 
-from app.generation.contracts import SocialPostModelRequest
-from app.generation.prompt_registry import get_social_copy_prompt
+from app.generation.contracts import ShortVideoScriptModelRequest, SocialPostModelRequest
+from app.generation.prompt_registry import get_short_video_script_prompt, get_social_copy_prompt
 
 
 class ContentModelProvider(Protocol):
@@ -29,10 +29,34 @@ class ContentModelProvider(Protocol):
         errors: list[str],
     ) -> dict: ...
 
+    async def generate_short_video_script(self, *, request: ShortVideoScriptModelRequest) -> dict:
+        """Return an untrusted provider payload to be validated by the application."""
+        ...
+
+    async def repair_short_video_script(
+        self,
+        *,
+        request: ShortVideoScriptModelRequest,
+        invalid_output: dict,
+        errors: list[str],
+    ) -> dict: ...
+
 
 class DemoContentModelProvider:
     provider_name = "demo"
     model_name = "demo-v1"
+
+    @staticmethod
+    def _call_to_action(objective: str) -> str:
+        return {
+            "reach": "Compártelo con alguien que disfrutaría conocerlo.",
+            "engagement": "Cuéntanos qué te parece.",
+            "sales": "Escríbenos para conocer la disponibilidad.",
+            "store_visits": "Visítanos y conócelo en el local.",
+            "launch": "Descúbrelo desde su lanzamiento.",
+            "brand_awareness": "Síguenos para conocer más de nuestra propuesta.",
+            "community": "Únete a la conversación y comparte tu experiencia.",
+        }[objective]
 
     async def generate_social_post(
         self,
@@ -44,15 +68,7 @@ class DemoContentModelProvider:
         tone = request.tone
         objective = request.objective
         text_lower = request.user_request.lower()
-        cta = {
-            "reach": "Compártelo con alguien que disfrutaría conocerlo.",
-            "engagement": "Cuéntanos qué te parece.",
-            "sales": "Escríbenos para conocer la disponibilidad.",
-            "store_visits": "Visítanos y conócelo en el local.",
-            "launch": "Descúbrelo desde su lanzamiento.",
-            "brand_awareness": "Síguenos para conocer más de nuestra propuesta.",
-            "community": "Únete a la conversación y comparte tu experiencia.",
-        }[objective]
+        cta = self._call_to_action(objective)
         hook = f"Una nueva idea de {context.name} para ti ✨"
         caption = (
             f"En {context.name} queremos presentarte {context.primary_product}. "
@@ -125,6 +141,59 @@ class DemoContentModelProvider:
     ) -> dict:
         return await self.generate_social_post(request=request)
 
+    async def generate_short_video_script(self, *, request: ShortVideoScriptModelRequest) -> dict:
+        context = request.business
+        cta = self._call_to_action(request.objective)
+        product = context.primary_product
+        return {
+            "artifact_type": "short_video_script",
+            "platform": request.platform,
+            "hook": f"Así se vive {product} en {context.name}",
+            "duration_seconds": 24,
+            "scenes": [
+                {
+                    "order": 1,
+                    "duration_seconds": 4,
+                    "visual": f"Plano vertical cercano de {product} con luz natural.",
+                    "on_screen_text": f"{product} en {context.name}",
+                    "voiceover": f"¿Buscas una pausa diferente? Conoce {product}.",
+                },
+                {
+                    "order": 2,
+                    "duration_seconds": 10,
+                    "visual": "Muestra el detalle más atractivo mientras una persona lo disfruta.",
+                    "on_screen_text": "Hecho para disfrutar el momento",
+                    "voiceover": (
+                        f"En {context.name} lo pensamos para {context.target_audience.lower()}."
+                    ),
+                },
+                {
+                    "order": 3,
+                    "duration_seconds": 10,
+                    "visual": "Cierra con el producto y una toma simple del negocio o su empaque.",
+                    "on_screen_text": "Conócelo hoy",
+                    "voiceover": cta,
+                },
+            ],
+            "call_to_action": cta,
+            "caption": (
+                f"Conoce {product} de {context.name}. "
+                f"Una propuesta para {context.target_audience.lower()}. {cta}"
+            ),
+            "assumptions": [
+                f"Se utilizó el tono {request.tone} y el objetivo {request.objective} del perfil."
+            ],
+        }
+
+    async def repair_short_video_script(
+        self,
+        *,
+        request: ShortVideoScriptModelRequest,
+        invalid_output: dict,
+        errors: list[str],
+    ) -> dict:
+        return await self.generate_short_video_script(request=request)
+
 
 class OpenAICompatibleContentModelProvider:
     provider_name = "openai-compatible"
@@ -154,6 +223,36 @@ class OpenAICompatibleContentModelProvider:
         errors: list[str],
     ) -> dict:
         system_prompt, _ = get_social_copy_prompt()
+        repair = {
+            "request": request.model_dump(),
+            "invalid_output": invalid_output,
+            "validation_errors": errors,
+            "instruction": "Corrige sólo lo necesario y devuelve únicamente el JSON del schema.",
+        }
+        return await self._complete(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": json.dumps(repair, ensure_ascii=False)},
+            ]
+        )
+
+    async def generate_short_video_script(self, *, request: ShortVideoScriptModelRequest) -> dict:
+        system_prompt, _ = get_short_video_script_prompt()
+        return await self._complete(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": json.dumps(request.model_dump(), ensure_ascii=False)},
+            ]
+        )
+
+    async def repair_short_video_script(
+        self,
+        *,
+        request: ShortVideoScriptModelRequest,
+        invalid_output: dict,
+        errors: list[str],
+    ) -> dict:
+        system_prompt, _ = get_short_video_script_prompt()
         repair = {
             "request": request.model_dump(),
             "invalid_output": invalid_output,

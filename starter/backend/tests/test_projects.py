@@ -82,6 +82,40 @@ async def test_create_project(client: AsyncClient, artifact_id: str) -> None:
 
 
 @pytest.mark.asyncio
+async def test_video_script_project_can_be_edited_and_versioned(
+    client: AsyncClient, conversation_id: str
+) -> None:
+    generated = await client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        json={
+            "text": "Crea un guion de video sobre el café de especialidad",
+            "ui_intent": "create_short_video_script",
+        },
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    artifact_id = generated.json()["artifact_id"]
+    created = await client.post(
+        "/api/v1/projects",
+        json={"artifact_id": artifact_id},
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    assert created.status_code == 201
+    project_id = created.json()["id"]
+    script = created.json()["artifact_snapshot"]
+    assert script["artifact_type"] == "short_video_script"
+
+    script["hook"] = "Un café que transforma tu pausa"
+    saved = await client.put(
+        f"/api/v1/projects/{project_id}/artifact-version",
+        json=script,
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    assert saved.status_code == 200
+    assert saved.json()["version_number"] == 2
+    assert saved.json()["version"]["hook"] == "Un café que transforma tu pausa"
+
+
+@pytest.mark.asyncio
 async def test_list_projects(client: AsyncClient, artifact_id: str) -> None:
     await client.post(
         "/api/v1/projects",

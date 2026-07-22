@@ -52,6 +52,17 @@ class GenerateSocialPostCommand(BaseModel):
     objective: Objective | None = None
 
 
+class GenerateShortVideoScriptCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    workspace_id: str
+    business_id: str
+    conversation_id: str
+    text: str = Field(min_length=1, max_length=4000)
+    platform: Platform | None = None
+    tone: Tone | None = None
+    objective: Objective | None = None
+
+
 class GeneratedSocialPost(BaseModel):
     model_config = ConfigDict(extra="forbid")
     artifact_type: Literal["social_post"] = "social_post"
@@ -77,3 +88,32 @@ class GeneratedSocialPost(BaseModel):
         ):
             raise ValueError("Hashtags must begin with # and contain no whitespace")
         return hashtags
+
+
+class VideoScene(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    order: int = Field(ge=1, le=8)
+    duration_seconds: int = Field(ge=1, le=30)
+    visual: str = Field(min_length=1, max_length=500)
+    on_screen_text: str = Field(min_length=1, max_length=240)
+    voiceover: str = Field(min_length=1, max_length=500)
+
+
+class GeneratedShortVideoScript(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    artifact_type: Literal["short_video_script"] = "short_video_script"
+    platform: Platform
+    hook: str = Field(min_length=1, max_length=180)
+    duration_seconds: int = Field(ge=5, le=90)
+    scenes: list[VideoScene] = Field(min_length=2, max_length=8)
+    call_to_action: str = Field(min_length=1, max_length=240)
+    caption: str = Field(min_length=1, max_length=2200)
+    assumptions: list[str] = Field(default_factory=list, max_length=10)
+
+    @field_validator("scenes")
+    @classmethod
+    def validate_scene_order(cls, scenes: list[VideoScene]) -> list[VideoScene]:
+        expected = list(range(1, len(scenes) + 1))
+        if [scene.order for scene in scenes] != expected:
+            raise ValueError("Scenes must be ordered consecutively starting at 1")
+        return scenes

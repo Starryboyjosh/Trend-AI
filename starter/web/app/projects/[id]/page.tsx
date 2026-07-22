@@ -3,15 +3,47 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
-import type { GeneratedSocialPost } from "@/types/artifact";
+import type {
+  GeneratedArtifact,
+  GeneratedShortVideoScript,
+} from "@/types/artifact";
 
 interface ProjectData {
   id: string;
   name: string;
   platform: string;
   status: string;
-  artifact_snapshot?: GeneratedSocialPost | null;
+  artifact_snapshot?: GeneratedArtifact | null;
   created_at: string | null;
+}
+
+interface VideoForm {
+  hook: string;
+  duration_seconds: string;
+  scenes: Array<{
+    order: number;
+    duration_seconds: string;
+    visual: string;
+    on_screen_text: string;
+    voiceover: string;
+  }>;
+  call_to_action: string;
+  caption: string;
+  assumptions: string[];
+}
+
+function videoFormFromArtifact(artifact: GeneratedShortVideoScript): VideoForm {
+  return {
+    hook: artifact.hook,
+    duration_seconds: String(artifact.duration_seconds),
+    scenes: artifact.scenes.map((scene) => ({
+      ...scene,
+      duration_seconds: String(scene.duration_seconds),
+    })),
+    call_to_action: artifact.call_to_action,
+    caption: artifact.caption,
+    assumptions: artifact.assumptions,
+  };
 }
 
 export default function ProjectEditorPage() {
@@ -41,6 +73,14 @@ export default function ProjectEditorPage() {
     visual_direction: "",
     format_recommendation: "static_post",
   });
+  const [videoForm, setVideoForm] = useState<VideoForm>({
+    hook: "",
+    duration_seconds: "",
+    scenes: [],
+    call_to_action: "",
+    caption: "",
+    assumptions: [],
+  });
 
   const loadProject = useCallback(async () => {
     setError("");
@@ -58,7 +98,9 @@ export default function ProjectEditorPage() {
         }>
       );
       const snap = data.artifact_snapshot;
-      if (snap) {
+      if (snap?.artifact_type === "short_video_script") {
+        setVideoForm(videoFormFromArtifact(snap));
+      } else if (snap?.artifact_type === "social_post") {
         setForm({
           hook: snap.hook,
           caption: snap.caption,
@@ -86,24 +128,56 @@ export default function ProjectEditorPage() {
     setForm((prev) => ({ ...prev, [field]: value }));
   }, []);
 
+  const handleVideoSceneChange = useCallback(
+    (
+      index: number,
+      field: "duration_seconds" | "visual" | "on_screen_text" | "voiceover",
+      value: string
+    ) => {
+      setVideoForm((current) => ({
+        ...current,
+        scenes: current.scenes.map((scene, sceneIndex) =>
+          sceneIndex === index ? { ...scene, [field]: value } : scene
+        ),
+      }));
+    },
+    []
+  );
+
   async function handleSave() {
     if (!project) return;
     setSaving(true);
     setError("");
     setSuccess("");
     try {
-      const hashtags = form.hashtags
-        .split(",")
-        .map((h) => h.trim())
-        .filter(Boolean);
-      await api.projects.updateArtifactVersion(project.id, {
-        hook: form.hook,
-        caption: form.caption,
-        call_to_action: form.call_to_action,
-        hashtags,
-        visual_direction: form.visual_direction,
-        format_recommendation: form.format_recommendation,
-      });
+      if (project.artifact_snapshot?.artifact_type === "short_video_script") {
+        await api.projects.updateArtifactVersion(project.id, {
+          artifact_type: "short_video_script",
+          hook: videoForm.hook,
+          duration_seconds: Number(videoForm.duration_seconds),
+          scenes: videoForm.scenes.map((scene) => ({
+            ...scene,
+            duration_seconds: Number(scene.duration_seconds),
+          })),
+          call_to_action: videoForm.call_to_action,
+          caption: videoForm.caption,
+          assumptions: videoForm.assumptions,
+        });
+      } else {
+        const hashtags = form.hashtags
+          .split(",")
+          .map((h) => h.trim())
+          .filter(Boolean);
+        await api.projects.updateArtifactVersion(project.id, {
+          artifact_type: "social_post",
+          hook: form.hook,
+          caption: form.caption,
+          call_to_action: form.call_to_action,
+          hashtags,
+          visual_direction: form.visual_direction,
+          format_recommendation: form.format_recommendation,
+        });
+      }
       setSuccess("Cambios guardados ✓");
       setEditing(false);
       await loadProject();
@@ -296,44 +370,119 @@ export default function ProjectEditorPage() {
         }}
       >
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-          <Field
-            label="Gancho"
-            value={form.hook}
-            onChange={(v) => handleChange("hook", v)}
-            editing={editing}
-          />
-          <Field
-            label="Texto principal"
-            value={form.caption}
-            onChange={(v) => handleChange("caption", v)}
-            editing={editing}
-            multiline
-          />
-          <Field
-            label="Llamado a la acción"
-            value={form.call_to_action}
-            onChange={(v) => handleChange("call_to_action", v)}
-            editing={editing}
-          />
-          <Field
-            label="Hashtags"
-            value={form.hashtags}
-            onChange={(v) => handleChange("hashtags", v)}
-            editing={editing}
-          />
-          <Field
-            label="Dirección visual"
-            value={form.visual_direction}
-            onChange={(v) => handleChange("visual_direction", v)}
-            editing={editing}
-            multiline
-          />
-          <Field
-            label="Formato"
-            value={form.format_recommendation}
-            onChange={(v) => handleChange("format_recommendation", v)}
-            editing={editing}
-          />
+          {project.artifact_snapshot?.artifact_type === "short_video_script" ? (
+            <>
+              <Field
+                label="Gancho"
+                value={videoForm.hook}
+                onChange={(v) => setVideoForm((current) => ({ ...current, hook: v }))}
+                editing={editing}
+              />
+              <Field
+                label="Duración total (segundos)"
+                value={videoForm.duration_seconds}
+                onChange={(v) =>
+                  setVideoForm((current) => ({ ...current, duration_seconds: v }))
+                }
+                editing={editing}
+              />
+              <section aria-labelledby="video-scenes-title">
+                <h2 id="video-scenes-title" style={{ fontSize: "1rem", margin: "0 0 12px" }}>
+                  Escenas
+                </h2>
+                {videoForm.scenes.map((scene, index) => (
+                  <div
+                    key={scene.order}
+                    style={{ borderTop: "1px solid var(--border)", paddingTop: 16, marginTop: 16 }}
+                  >
+                    <strong>Escena {scene.order}</strong>
+                    <Field
+                      label="Duración (segundos)"
+                      value={scene.duration_seconds}
+                      onChange={(v) => handleVideoSceneChange(index, "duration_seconds", v)}
+                      editing={editing}
+                    />
+                    <Field
+                      label="Visual"
+                      value={scene.visual}
+                      onChange={(v) => handleVideoSceneChange(index, "visual", v)}
+                      editing={editing}
+                      multiline
+                    />
+                    <Field
+                      label="Texto en pantalla"
+                      value={scene.on_screen_text}
+                      onChange={(v) => handleVideoSceneChange(index, "on_screen_text", v)}
+                      editing={editing}
+                    />
+                    <Field
+                      label="Locución"
+                      value={scene.voiceover}
+                      onChange={(v) => handleVideoSceneChange(index, "voiceover", v)}
+                      editing={editing}
+                      multiline
+                    />
+                  </div>
+                ))}
+              </section>
+              <Field
+                label="Llamado a la acción"
+                value={videoForm.call_to_action}
+                onChange={(v) =>
+                  setVideoForm((current) => ({ ...current, call_to_action: v }))
+                }
+                editing={editing}
+              />
+              <Field
+                label="Caption sugerido"
+                value={videoForm.caption}
+                onChange={(v) => setVideoForm((current) => ({ ...current, caption: v }))}
+                editing={editing}
+                multiline
+              />
+            </>
+          ) : (
+            <>
+              <Field
+                label="Gancho"
+                value={form.hook}
+                onChange={(v) => handleChange("hook", v)}
+                editing={editing}
+              />
+              <Field
+                label="Texto principal"
+                value={form.caption}
+                onChange={(v) => handleChange("caption", v)}
+                editing={editing}
+                multiline
+              />
+              <Field
+                label="Llamado a la acción"
+                value={form.call_to_action}
+                onChange={(v) => handleChange("call_to_action", v)}
+                editing={editing}
+              />
+              <Field
+                label="Hashtags"
+                value={form.hashtags}
+                onChange={(v) => handleChange("hashtags", v)}
+                editing={editing}
+              />
+              <Field
+                label="Dirección visual"
+                value={form.visual_direction}
+                onChange={(v) => handleChange("visual_direction", v)}
+                editing={editing}
+                multiline
+              />
+              <Field
+                label="Formato"
+                value={form.format_recommendation}
+                onChange={(v) => handleChange("format_recommendation", v)}
+                editing={editing}
+              />
+            </>
+          )}
         </div>
 
         <div
@@ -351,7 +500,9 @@ export default function ProjectEditorPage() {
                 onClick={() => {
                   setEditing(false);
                   const snap = project.artifact_snapshot;
-                  if (snap) {
+                  if (snap?.artifact_type === "short_video_script") {
+                    setVideoForm(videoFormFromArtifact(snap));
+                  } else if (snap?.artifact_type === "social_post") {
                     setForm({
                       hook: snap.hook,
                       caption: snap.caption,

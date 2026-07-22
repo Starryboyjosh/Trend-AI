@@ -26,18 +26,22 @@ Before generation, resolve:
 - user constraints,
 - attachments or selected template.
 
-## Supported intents
+## Intents and availability
 
-| Intent | Output |
+Only the intents marked **Disponible** are accepted by the current HTTP
+contract. The remaining rows define planned product behavior and must not be
+silently routed to another generation flow.
+
+| Intent | Output | Estado |
 |---|---|
-| `create_social_post` | Structured post package |
-| `rewrite_content` | Revised content plus change summary |
-| `create_short_video_script` | Hook, scenes, voiceover, CTA |
-| `create_campaign_idea` | Small campaign concept and assets |
-| `analyze_visual` | Structured design feedback |
-| `recommend_templates` | Template filters and rationale |
-| `brand_setup_help` | Suggested brand voice and identity inputs |
-| `general_marketing_help` | Concise guidance with stated assumptions |
+| `create_social_post` | Structured post package | Disponible |
+| `rewrite_content` | Revised content plus change summary | Planeado |
+| `create_short_video_script` | Hook, scenes, voiceover, CTA | Disponible |
+| `create_campaign_idea` | Small campaign concept and assets | Planeado |
+| `analyze_visual` | Structured design feedback | Planeado |
+| `recommend_templates` | Template filters and rationale | Planeado |
+| `brand_setup_help` | Suggested brand voice and identity inputs | Planeado |
+| `general_marketing_help` | Concise guidance with stated assumptions | Planeado |
 
 ## Clarification policy
 

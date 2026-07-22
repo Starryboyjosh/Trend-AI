@@ -14,7 +14,7 @@ from app.conversations.models import ArtifactVersion, Conversation, GeneratedArt
 from app.conversations.repository import SqlArtifactRepository
 from app.core.errors import AppError, NotFoundError, ValidationError_
 from app.dependencies import get_db, require_workspace
-from app.domain.models import GeneratedSocialPost
+from app.domain.models import GeneratedShortVideoScript, GeneratedSocialPost, VideoScene
 from app.projects.models import Project
 from app.templates.repository import get_template
 
@@ -286,7 +286,8 @@ async def export_project_endpoint(
     return {"format": "hitrendy-project/v1", "project": exported}
 
 
-class UpdateArtifactVersionRequest(BaseModel):
+class UpdateSocialPostVersionRequest(BaseModel):
+    artifact_type: Literal["social_post"] = "social_post"
     hook: str = Field(min_length=1, max_length=180)
     caption: str = Field(min_length=1, max_length=2200)
     call_to_action: str = Field(max_length=240)
@@ -295,10 +296,20 @@ class UpdateArtifactVersionRequest(BaseModel):
     format_recommendation: str
 
 
+class UpdateShortVideoScriptVersionRequest(BaseModel):
+    artifact_type: Literal["short_video_script"] = "short_video_script"
+    hook: str = Field(min_length=1, max_length=180)
+    duration_seconds: int = Field(ge=5, le=90)
+    scenes: list[VideoScene] = Field(min_length=2, max_length=8)
+    call_to_action: str = Field(min_length=1, max_length=240)
+    caption: str = Field(min_length=1, max_length=2200)
+    assumptions: list[str] = Field(default_factory=list, max_length=10)
+
+
 @router.put("/{project_id}/artifact-version")
 async def update_artifact_version_endpoint(
     project_id: str,
-    body: UpdateArtifactVersionRequest,
+    body: UpdateSocialPostVersionRequest | UpdateShortVideoScriptVersionRequest,
     workspace_id: str = Depends(require_workspace),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -323,6 +334,8 @@ async def update_artifact_version_endpoint(
     if row is None:
         raise NotFoundError("Artículo")
     artifact_record, _ = row
+    if artifact_record.artifact_type != body.artifact_type:
+        raise ValidationError_("El contenido no corresponde al tipo de este proyecto.")
 
     version_result = await db.execute(
         select(ArtifactVersion)
@@ -332,27 +345,38 @@ async def update_artifact_version_endpoint(
     )
     current_version = version_result.scalar_one_or_none()
 
-    post = GeneratedSocialPost(
-        platform=artifact_record.platform,
-        hook=body.hook,
-        caption=body.caption,
-        call_to_action=body.call_to_action,
-        hashtags=body.hashtags,
-        visual_direction=body.visual_direction,
-        format_recommendation=body.format_recommendation,
-    )
+    if isinstance(body, UpdateSocialPostVersionRequest):
+        content = GeneratedSocialPost(
+            platform=artifact_record.platform,
+            hook=body.hook,
+            caption=body.caption,
+            call_to_action=body.call_to_action,
+            hashtags=body.hashtags,
+            visual_direction=body.visual_direction,
+            format_recommendation=body.format_recommendation,
+        )
+    else:
+        content = GeneratedShortVideoScript(
+            platform=artifact_record.platform,
+            hook=body.hook,
+            duration_seconds=body.duration_seconds,
+            scenes=body.scenes,
+            call_to_action=body.call_to_action,
+            caption=body.caption,
+            assumptions=body.assumptions,
+        )
 
     repo = SqlArtifactRepository(db)
     await repo.add_artifact_version(
         artifact_id=project.artifact_id,
-        content=post,
+        content=content,
         user_edited=True,
         parent_version_id=current_version.id if current_version else None,
     )
     await db.commit()
 
     return {
-        "version": post.model_dump(),
+        "version": content.model_dump(),
         "version_number": (current_version.version_number + 1) if current_version else 1,
     }
 
@@ -411,8 +435,10 @@ async def restore_project_version_endpoint(
             Conversation.workspace_id == workspace_id,
         )
     )
-    if artifact_result.one_or_none() is None:
+    artifact_row = artifact_result.one_or_none()
+    if artifact_row is None:
         raise NotFoundError("Artículo")
+    artifact_record, _ = artifact_row
 
     target_result = await db.execute(
         select(ArtifactVersion)
@@ -438,7 +464,19 @@ async def restore_project_version_endpoint(
     if latest_version and latest_version.id == target_version.id:
         raise ValidationError_("Esta versión ya es la versión actual.")
     try:
-        restored_post = GeneratedSocialPost.model_validate_json(target_version.content_json)
+        if artifact_record.artifact_type == "social_post":
+            restored_content = GeneratedSocialPost.model_validate_json(target_version.content_json)
+        elif artifact_record.artifact_type == "short_video_script":
+            restored_content = GeneratedShortVideoScript.model_validate_json(
+                target_version.content_json
+            )
+        else:
+            raise AppError(
+                "VERSION_UNAVAILABLE",
+                "Este tipo de contenido todavía no se puede restaurar.",
+                status_code=409,
+                retryable=False,
+            )
     except PydanticValidationError as exc:
         raise AppError(
             "VERSION_UNAVAILABLE",
@@ -450,14 +488,14 @@ async def restore_project_version_endpoint(
     repo = SqlArtifactRepository(db)
     await repo.add_artifact_version(
         artifact_id=project.artifact_id,
-        content=restored_post,
+        content=restored_content,
         user_edited=True,
         parent_version_id=latest_version.id if latest_version else None,
     )
     await db.commit()
 
     return {
-        "version": restored_post.model_dump(),
+        "version": restored_content.model_dump(),
         "version_number": (latest_version.version_number + 1) if latest_version else 1,
         "restored_from_version": target_version.version_number,
     }

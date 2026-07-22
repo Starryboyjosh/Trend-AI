@@ -6,13 +6,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Composer } from "@/components/assistant/composer";
 import { MessageList } from "@/components/assistant/message-list";
 import { api, ApiError } from "@/lib/api";
-import type { GeneratedSocialPost } from "@/types/artifact";
+import type { GeneratedArtifact, GeneratedSocialPost } from "@/types/artifact";
 
 interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
-  artifact?: GeneratedSocialPost;
+  artifact?: GeneratedArtifact;
   artifactId?: string;
 }
 
@@ -25,7 +25,7 @@ interface SendResult {
   type: string;
   message?: string;
   assistant_message?: { id: string; content: string };
-  artifact?: GeneratedSocialPost;
+  artifact?: GeneratedArtifact;
   artifact_id?: string;
 }
 
@@ -89,7 +89,10 @@ function AssistantContent() {
   }
 
   const handleSend = useCallback(
-    async (text: string) => {
+    async (
+      text: string,
+      uiIntent: "create_social_post" | "create_short_video_script" = "create_social_post"
+    ) => {
       if (!conversationId || loading) return;
 
       const tempId = `temp_${Date.now()}`;
@@ -101,7 +104,8 @@ function AssistantContent() {
       try {
         const result = (await api.conversations.sendMessage(
           conversationId,
-          text
+          text,
+          uiIntent
         )) as unknown as SendResult;
 
         if (result.type === "artifact") {
@@ -257,6 +261,26 @@ function AssistantContent() {
         >
           Conversaciones
         </Link>
+        <button
+          type="button"
+          onClick={() =>
+            handleSend(
+              "Crea un guion breve para video vertical sobre mi producto principal.",
+              "create_short_video_script"
+            )
+          }
+          disabled={loading || !conversationId}
+          style={{
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius-md)",
+            background: "var(--surface)",
+            color: "var(--foreground)",
+            padding: "7px 10px",
+            cursor: loading || !conversationId ? "not-allowed" : "pointer",
+          }}
+        >
+          Crear guion
+        </button>
         {error && (
           <span style={{ fontSize: "0.8rem", color: "var(--ht-danger)" }}>
             {error}

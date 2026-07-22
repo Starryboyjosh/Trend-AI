@@ -2,13 +2,14 @@
 
 import { useEffect, useRef } from "react";
 import { GeneratedArtifactCard } from "@/components/generated-artifact-card";
-import type { GeneratedSocialPost } from "@/types/artifact";
+import { GeneratedVideoScriptCard } from "@/components/generated-video-script-card";
+import type { GeneratedArtifact } from "@/types/artifact";
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
-  artifact?: GeneratedSocialPost;
+  artifact?: GeneratedArtifact;
   artifactId?: string;
 }
 
@@ -84,11 +85,17 @@ export function MessageList({
                   : "var(--foreground)",
             }}
           >
-            {msg.artifact ? (
+            {msg.artifact?.artifact_type === "social_post" ? (
               <GeneratedArtifactCard
                 artifact={msg.artifact}
                 onSave={() => onSave?.(msg.artifactId)}
                 onVariation={(kind) => onVariation?.(msg.artifactId, kind)}
+                onFeedback={(rating) => onFeedback?.(msg.artifactId, rating)}
+              />
+            ) : msg.artifact?.artifact_type === "short_video_script" ? (
+              <GeneratedVideoScriptCard
+                artifact={msg.artifact}
+                onSave={() => onSave?.(msg.artifactId)}
                 onFeedback={(rating) => onFeedback?.(msg.artifactId, rating)}
               />
             ) : (
