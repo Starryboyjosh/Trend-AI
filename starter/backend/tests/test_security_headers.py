@@ -17,6 +17,21 @@ async def test_security_headers_and_request_id(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_request_log_contains_safe_correlation_fields(
+    client: AsyncClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level("INFO", logger="hitrendy.http")
+    response = await client.get("/health/live")
+
+    record = next(item for item in caplog.records if item.name == "hitrendy.http")
+    assert response.headers["x-request-id"] == record.request_id
+    assert record.method == "GET"
+    assert record.path == "/health/live"
+    assert record.status_code == 200
+    assert record.duration_ms >= 0
+
+
+@pytest.mark.asyncio
 async def test_readiness_checks_database(client: AsyncClient) -> None:
     response = await client.get("/health/ready")
 

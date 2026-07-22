@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from time import monotonic
@@ -19,6 +20,8 @@ from app.db.session import get_session_factory
 from app.identity.routes import router as identity_router
 from app.projects.routes import router as project_router
 from app.templates.routes import router as template_router
+
+logger = logging.getLogger("hitrendy.http")
 
 
 @asynccontextmanager
@@ -55,8 +58,22 @@ app.add_exception_handler(AppError, app_error_handler)
 _rate_windows: dict[tuple[str, str], list[float]] = {}
 
 
+def _record_request(request: Request, request_id: str, status_code: int, started: float) -> None:
+    logger.info(
+        "http_request",
+        extra={
+            "request_id": request_id,
+            "method": request.method,
+            "path": request.url.path,
+            "status_code": status_code,
+            "duration_ms": round((monotonic() - started) * 1000, 2),
+        },
+    )
+
+
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
+    started = monotonic()
     request_id = request.headers.get("X-Request-Id") or uuid4().hex
     content_length = request.headers.get("content-length")
     sensitive_paths = {"/api/v1/auth/login", "/api/v1/auth/register"}
@@ -69,7 +86,7 @@ async def security_headers(request: Request, call_next):
             if now - item < settings.rate_limit_window_seconds
         ]
         if len(window) >= settings.rate_limit_requests:
-            return JSONResponse(
+            limited_response = JSONResponse(
                 status_code=429,
                 content={
                     "error": {
@@ -83,13 +100,15 @@ async def security_headers(request: Request, call_next):
                     "Retry-After": str(settings.rate_limit_window_seconds),
                 },
             )
+            _record_request(request, request_id, limited_response.status_code, started)
+            return limited_response
         window.append(now)
         _rate_windows[key] = window
     if content_length:
         try:
             requested_bytes = int(content_length)
         except ValueError:
-            return JSONResponse(
+            invalid_length_response = JSONResponse(
                 status_code=400,
                 content={
                     "error": {
@@ -100,8 +119,10 @@ async def security_headers(request: Request, call_next):
                 },
                 headers={"X-Request-Id": request_id},
             )
+            _record_request(request, request_id, invalid_length_response.status_code, started)
+            return invalid_length_response
         if requested_bytes > settings.max_request_body_bytes:
-            return JSONResponse(
+            oversized_response = JSONResponse(
                 status_code=413,
                 content={
                     "error": {
@@ -112,12 +133,28 @@ async def security_headers(request: Request, call_next):
                 },
                 headers={"X-Request-Id": request_id},
             )
-    response = await call_next(request)
+            _record_request(request, request_id, oversized_response.status_code, started)
+            return oversized_response
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.error(
+            "http_request_failed",
+            extra={
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": 500,
+                "duration_ms": round((monotonic() - started) * 1000, 2),
+            },
+        )
+        raise
     response.headers["X-Request-Id"] = request_id
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), geolocation=(), microphone=()"
+    _record_request(request, request_id, response.status_code, started)
     return response
 
 

@@ -11,7 +11,9 @@ status: proposed
 - E1-T1 Initialize monorepo and quality scripts.
 - E1-T2 Implement environment configuration validation.
 - E1-T3 Add database and migration workflow.
-- E1-T4 Add request IDs and structured logging.
+- E1-T4 Add request IDs and structured logging. **Implemented:** responses and
+  safe request metadata are correlated without logging bodies, query strings,
+  authorization headers, or uploaded files.
 - E1-T5 Implement branded application shell.
 
 ## Epic E2 — Account and onboarding
