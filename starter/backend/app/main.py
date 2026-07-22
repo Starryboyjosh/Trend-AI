@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from time import monotonic
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
@@ -50,11 +51,39 @@ app.add_middleware(
 
 app.add_exception_handler(AppError, app_error_handler)
 
+_rate_windows: dict[tuple[str, str], list[float]] = {}
+
 
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
     request_id = request.headers.get("X-Request-Id") or uuid4().hex
     content_length = request.headers.get("content-length")
+    sensitive_paths = {"/api/v1/auth/login", "/api/v1/auth/register"}
+    if request.url.path in sensitive_paths or request.url.path.endswith("/messages"):
+        key = (request.client.host if request.client else "unknown", request.url.path)
+        now = monotonic()
+        window = [
+            item
+            for item in _rate_windows.get(key, [])
+            if now - item < settings.rate_limit_window_seconds
+        ]
+        if len(window) >= settings.rate_limit_requests:
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "error": {
+                        "code": "RATE_LIMITED",
+                        "message": "Demasiadas solicitudes. Inténtalo nuevamente en un momento.",
+                        "retryable": True,
+                    }
+                },
+                headers={
+                    "X-Request-Id": request_id,
+                    "Retry-After": str(settings.rate_limit_window_seconds),
+                },
+            )
+        window.append(now)
+        _rate_windows[key] = window
     if content_length and int(content_length) > settings.max_request_body_bytes:
         return JSONResponse(
             status_code=413,

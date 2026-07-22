@@ -73,6 +73,7 @@ related: [NFR-002, NFR-003]
 - Every response carries an opaque request ID for support and safe correlation.
 - Server responses send anti-sniffing, anti-framing, referrer and permissions-policy headers.
 - Requests exceeding the configured body limit are rejected before route handling.
+- Login, registration and generation have a configurable local rate limit; deployments with multiple API instances must use Redis for the shared limiter.
 
 ## Security acceptance tests
 
