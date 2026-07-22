@@ -293,6 +293,23 @@ export default function TemplatesPage() {
                 >
                   {template.rationale}
                 </p>
+                <button
+                  type="button"
+                  onClick={() => handleUseTemplate(template.id)}
+                  disabled={creating !== null}
+                  style={{
+                    marginTop: 10,
+                    padding: "7px 10px",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius-sm)",
+                    background: "var(--surface)",
+                    color: "var(--foreground)",
+                    cursor: creating !== null ? "not-allowed" : "pointer",
+                    opacity: creating !== null ? 0.65 : 1,
+                  }}
+                >
+                  {creating === template.id ? "Creando…" : "Usar esta plantilla"}
+                </button>
               </div>
             ))}
           </div>
