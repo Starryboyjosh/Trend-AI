@@ -53,7 +53,8 @@ status: proposed
 - E6-T2 Asset listing.
 - E6-T3 Image preview.
 - E6-T4 Visual review schema and demo provider.
-- E6-T5 Vision-provider adapter.
+- E6-T5 Vision-provider adapter. **Implemented:** demo and explicit
+  OpenAI-compatible adapters preserve the validated `AssetAnalysis` contract.
 
 ## Epic E7 — AI quality
 

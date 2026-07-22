@@ -10,15 +10,18 @@ from io import BytesIO
 from fastapi import APIRouter, Depends, Response, UploadFile
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, Field
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.models import Asset, AssetAnalysis, UploadSession
-from app.assets.schemas import AssetAnalysisResult, Improvement
+from app.assets.schemas import AssetAnalysisResult
 from app.core.config import settings
-from app.core.errors import NotFoundError, ValidationError_
+from app.core.errors import AppError, NotFoundError, ValidationError_
 from app.dependencies import get_db, require_workspace
+from app.providers.factory import get_vision_provider
 from app.providers.storage import get_object_storage_provider
+from app.providers.vision import VisionReviewRequest
 
 router = APIRouter(prefix="/assets", tags=["assets"])
 
@@ -240,10 +243,31 @@ async def analyze_asset_endpoint(
     if asset is None:
         raise NotFoundError("Activo")
 
-    analysis = _demo_analyze(asset)
+    provider = get_vision_provider()
+    image_bytes = None
+    if provider.requires_image_content:
+        image_bytes = await get_object_storage_provider().read(key=asset.storage_path)
+    try:
+        analysis = AssetAnalysisResult.model_validate(
+            await provider.analyze(
+                request=VisionReviewRequest(
+                    mime_type=asset.mime_type,
+                    width=asset.width,
+                    height=asset.height,
+                    image_bytes=image_bytes,
+                )
+            )
+        )
+    except PydanticValidationError as exc:
+        raise AppError(
+            "ANALYSIS_INVALID_RESPONSE",
+            "No pudimos validar el resultado del análisis visual. Inténtalo nuevamente.",
+            status_code=502,
+            retryable=True,
+        ) from exc
     analysis_record = AssetAnalysis(
         asset_id=asset_id,
-        provider="demo",
+        provider=provider.provider_name,
         summary=analysis.summary,
         strengths_json=json.dumps(analysis.strengths),
         improvements_json=json.dumps([i.model_dump() for i in analysis.improvements]),
@@ -262,47 +286,8 @@ async def analyze_asset_endpoint(
         "improvements": [i.model_dump() for i in analysis.improvements],
         "revised_copy": analysis.revised_copy,
         "accessibility_notes": analysis.accessibility_notes,
+        "review_mode": "technical" if provider.provider_name == "demo" else "visual",
         "created_at": analysis_record.created_at.isoformat()
         if analysis_record.created_at
         else None,
     }
-
-
-def _demo_analyze(asset: Asset) -> AssetAnalysisResult:
-    improvements = [
-        Improvement(
-            priority="medium" if asset.file_size_bytes > 500_000 else "low",
-            area="readability",
-            reason="La revisión local no puede medir contraste ni legibilidad del diseño.",
-            action="Verifica manualmente el contraste entre texto y fondo en una pantalla móvil.",
-        ),
-        Improvement(
-            priority="high",
-            area="cta",
-            reason="La revisión local no interpreta el texto de la imagen.",
-            action="Confirma que el diseño incluya un llamado a la acción visible y específico.",
-        ),
-        Improvement(
-            priority="low",
-            area="brand",
-            reason="La revisión local no compara la paleta del diseño con la marca.",
-            action="Comprueba que la paleta respete los colores aprobados de tu marca.",
-        ),
-    ]
-    return AssetAnalysisResult(
-        summary=(
-            f"Revisión técnica local de {asset.original_name}: formato {asset.mime_type}, "
-            f"{asset.width} × {asset.height} píxeles y {asset.file_size_bytes} bytes. "
-            "Las sugerencias visuales requieren revisión humana o un proveedor de visión configurado."
-        ),
-        strengths=[
-            "El archivo superó la validación de formato.",
-            "Las dimensiones de la imagen fueron registradas.",
-        ],
-        improvements=improvements,
-        revised_copy=None,
-        accessibility_notes=[
-            "Usa texto alternativo descriptivo.",
-            "Evita solo color para transmitir información.",
-        ],
-    )

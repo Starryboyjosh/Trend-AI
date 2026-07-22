@@ -34,6 +34,9 @@
   --border: var(--ht-neutral-300);
   --input: var(--ht-white);
   --focus: var(--ht-lavender-400);
+  --success: var(--ht-success);
+  --warning: var(--ht-warning);
+  --danger: var(--ht-danger);
 
   --gradient-hero: linear-gradient(
     145deg,
@@ -74,6 +77,9 @@
   --border: rgb(183 156 250 / 0.24);
   --input: rgb(255 255 255 / 0.1);
   --focus: var(--ht-lavender-400);
+  --success: var(--ht-success);
+  --warning: var(--ht-warning);
+  --danger: var(--ht-danger);
 }
 
 * {

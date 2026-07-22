@@ -50,6 +50,30 @@ development only; production uses the `s3` adapter configured through the
 object-storage environment variables. A future direct-upload implementation
 may add signed upload targets without exposing permanent read URLs.
 
+## Visual review provider
+
+```python
+class VisionReviewProvider(Protocol):
+    provider_name: str
+    requires_image_content: bool
+
+    async def analyze(self, *, request: VisionReviewRequest) -> dict: ...
+```
+
+`DemoVisionReviewProvider` is the default offline implementation. It receives
+only verified image metadata and makes no claim to have interpreted pixels.
+`OpenAICompatibleVisionReviewProvider` is enabled only with
+`VISION_PROVIDER=openai-compatible` and its own `VISION_BASE_URL`,
+`VISION_API_KEY`, and `VISION_MODEL` settings. This deliberate separation from
+the text provider prevents an image from leaving HiTrendy merely because text
+generation uses an external model.
+
+Before invoking a provider, the application authorizes the asset inside its
+workspace and reads its private object content. The adapter sends bounded image
+bytes plus technical metadata; it never receives a permanent URL, storage key,
+workspace ID, user session, or database access. Its untrusted JSON response is
+validated against `AssetAnalysis` before persistence or display.
+
 ## Template catalog provider
 
 MVP uses internal database records and local/static previews. A future remote catalog must map into the same internal `Template` contract.

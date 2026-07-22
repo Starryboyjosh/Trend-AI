@@ -21,9 +21,9 @@ interface Props {
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
-  high: "#b91c1c",
-  medium: "#9a6100",
-  low: "#625b70",
+  high: "var(--danger)",
+  medium: "var(--warning)",
+  low: "var(--muted-foreground)",
 };
 
 const PRIORITY_LABELS: Record<string, string> = {
@@ -97,7 +97,7 @@ export function VisualReviewCard({ analysis }: Props) {
                     fontWeight: 700,
                     padding: "2px 8px",
                     borderRadius: "var(--radius-pill)",
-                    background: PRIORITY_COLORS[imp.priority] + "20",
+                    background: `color-mix(in srgb, ${PRIORITY_COLORS[imp.priority]} 14%, var(--surface))`,
                     color: PRIORITY_COLORS[imp.priority],
                   }}
                 >

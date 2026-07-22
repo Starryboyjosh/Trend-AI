@@ -18,6 +18,21 @@ interface AssetItem {
   created_at: string | null;
 }
 
+interface AnalysisResult {
+  id: string;
+  summary: string;
+  strengths: string[];
+  improvements: {
+    priority: "high" | "medium" | "low";
+    area: string;
+    reason: string;
+    action: string;
+  }[];
+  revised_copy: string | null;
+  accessibility_notes: string[];
+  review_mode: "technical" | "visual";
+}
+
 export default function LibraryPage() {
   const router = useRouter();
   const [assets, setAssets] = useState<AssetItem[]>([]);
@@ -25,10 +40,9 @@ export default function LibraryPage() {
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
   const [analyzing, setAnalyzing] = useState<string | null>(null);
-  const [analysisResult, setAnalysisResult] = useState<Record<
-    string,
-    unknown
-  > | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(
+    null
+  );
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -82,7 +96,7 @@ export default function LibraryPage() {
     setAnalysisResult(null);
     try {
       const result = await api.assets.analyze(assetId);
-      setAnalysisResult(result);
+      setAnalysisResult(result as unknown as AnalysisResult);
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
@@ -180,6 +194,17 @@ export default function LibraryPage() {
           }}
         >
           JPEG, PNG o WebP. Máximo 10 MB.
+        </p>
+        <p
+          style={{
+            color: "var(--muted-foreground)",
+            fontSize: "0.8rem",
+            margin: 0,
+          }}
+        >
+          Una revisión visual puede enviar esta imagen al proveedor de IA que
+          configure tu organización. El modo local no la envía fuera de
+          HiTrendy.
         </p>
       </div>
 
@@ -302,27 +327,11 @@ export default function LibraryPage() {
       {analysisResult && (
         <div style={{ marginTop: 32 }}>
           <p style={{ color: "var(--muted-foreground)", fontSize: "0.85rem" }}>
-            Esta revisión local confirma metadatos técnicos. Para
-            recomendaciones visuales sobre composición, contraste o texto se
-            requiere un proveedor de visión configurado.
+            {analysisResult.review_mode === "technical"
+              ? "Esta revisión local confirma metadatos técnicos. Para recomendaciones sobre composición, contraste o texto se requiere un proveedor de visión configurado."
+              : "Esta revisión se generó con el proveedor de visión configurado y se validó antes de mostrarse."}
           </p>
-          <VisualReviewCard
-            analysis={
-              analysisResult as unknown as {
-                id: string;
-                summary: string;
-                strengths: string[];
-                improvements: {
-                  priority: "high" | "medium" | "low";
-                  area: string;
-                  reason: string;
-                  action: string;
-                }[];
-                revised_copy: string | null;
-                accessibility_notes: string[];
-              }
-            }
-          />
+          <VisualReviewCard analysis={analysisResult} />
         </div>
       )}
     </div>
