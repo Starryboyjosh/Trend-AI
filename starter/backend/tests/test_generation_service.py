@@ -81,6 +81,26 @@ class RepairingProvider:
         return _artifact()
 
 
+class QualityRepairingProvider:
+    provider_name = "test-provider"
+    model_name = "test-model"
+
+    def __init__(self) -> None:
+        self.repair_calls = 0
+
+    async def generate_social_post(self, *, request: object) -> dict:
+        artifact = _artifact()
+        artifact["caption"] = "Café frío por $99 con resultados garantizados."
+        return artifact
+
+    async def repair_social_post(
+        self, *, request: object, invalid_output: dict, errors: list[str]
+    ) -> dict:
+        self.repair_calls += 1
+        assert any("precio o descuento" in error or "garantía" in error for error in errors)
+        return _artifact()
+
+
 @pytest.mark.asyncio
 async def test_generation_repairs_invalid_output_and_persists_auditable_metadata() -> None:
     repository = ArtifactRepository()
@@ -129,3 +149,22 @@ async def test_variation_uses_the_same_contract_repair_flow() -> None:
     assert repository.saved is not None
     assert repository.saved["artifact_id"] == "artifact_001"
     assert repository.saved["parent_version_id"] == "version_001"
+
+
+@pytest.mark.asyncio
+async def test_generation_repairs_unconfirmed_commercial_claims() -> None:
+    repository = ArtifactRepository()
+    provider = QualityRepairingProvider()
+    service = GenerateSocialPostService(ContextRepository(), repository, provider)
+
+    artifact = await service.execute(
+        GenerateSocialPostCommand(
+            workspace_id="ws_001",
+            business_id="biz_001",
+            conversation_id="conv_001",
+            text="Promociona el café frío",
+        )
+    )
+
+    assert artifact.caption == _artifact()["caption"]
+    assert provider.repair_calls == 1

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from app.domain.models import GeneratedSocialPost
@@ -27,4 +28,12 @@ class SocialPostEvaluator:
         rendered = " ".join([artifact.hook, artifact.caption, artifact.call_to_action]).casefold()
         if any(word in rendered for word in forbidden):
             issues.append("El contenido incluye un término prohibido por la marca.")
+        if re.search(r"(?:\$|l\.?|hnl|usd)\s*\d|\d+\s*%", rendered, flags=re.IGNORECASE):
+            issues.append("El contenido incluye un precio o descuento no confirmado.")
+        if re.search(
+            r"\b(garantizado|garantizada|resultados garantizados|100% efectivo)\b",
+            rendered,
+            flags=re.IGNORECASE,
+        ):
+            issues.append("El contenido incluye una garantía no sustentada.")
         return GenerationEvaluation(accepted=not issues, issues=tuple(issues))

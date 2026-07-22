@@ -81,10 +81,11 @@ mantienen documentados como planeados y se rechazan de forma explícita.
 
 ## Epic E7 — AI quality
 
-- E7-T1 Prompt registry.
-- E7-T2 Contract validation.
-- E7-T3 Deterministic evaluator.
-- E7-T4 Repair flow.
+- E7-T1 Prompt registry. **Implementado.**
+- E7-T2 Contract validation. **Implementado.**
+- E7-T3 Deterministic evaluator. **Implementado:** comprueba plataforma, CTA,
+  palabras prohibidas, precios/descuentos y garantías no sustentadas.
+- E7-T4 Repair flow. **Implementado.**
 - E7-T5 Scenario regression suite.
 - E7-T6 User feedback events.
 
