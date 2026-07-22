@@ -20,6 +20,9 @@ export default function ProjectEditorPage() {
   const [project, setProject] = useState<ProjectData | null>(null);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [restoringVersionId, setRestoringVersionId] = useState<string | null>(
+    null
+  );
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [versions, setVersions] = useState<
@@ -136,6 +139,28 @@ export default function ProjectEditorPage() {
           ? err.message
           : "No pudimos exportar el proyecto."
       );
+    }
+  }
+
+  async function handleRestore(versionId: string, versionNumber: number) {
+    if (!project) return;
+    setRestoringVersionId(versionId);
+    setError("");
+    setSuccess("");
+    try {
+      const restored = await api.projects.restoreVersion(project.id, versionId);
+      setSuccess(
+        `Restauramos la versión ${versionNumber} como una nueva versión ${restored.version_number}.`
+      );
+      await loadProject();
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "No pudimos restaurar esta versión."
+      );
+    } finally {
+      setRestoringVersionId(null);
     }
   }
 
@@ -394,10 +419,51 @@ export default function ProjectEditorPage() {
         </h2>
         {versions.length ? (
           <ol style={{ color: "var(--muted-foreground)", paddingLeft: 20 }}>
-            {versions.map((version) => (
-              <li key={version.id}>
-                Versión {version.version_number}
-                {version.user_edited ? " · editada" : " · generada"}
+            {versions.map((version, index) => (
+              <li
+                key={version.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  marginBottom: 8,
+                }}
+              >
+                <span>
+                  Versión {version.version_number}
+                  {version.user_edited ? " · editada" : " · generada"}
+                  {index === 0 ? " · actual" : ""}
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleRestore(version.id, version.version_number)
+                  }
+                  disabled={
+                    index === 0 || editing || restoringVersionId !== null
+                  }
+                  aria-label={`Restaurar versión ${version.version_number}`}
+                  style={{
+                    padding: "4px 8px",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius-sm)",
+                    background: "var(--surface)",
+                    color: "var(--foreground)",
+                    cursor:
+                      index === 0 || editing || restoringVersionId !== null
+                        ? "not-allowed"
+                        : "pointer",
+                    opacity:
+                      index === 0 || editing || restoringVersionId !== null
+                        ? 0.6
+                        : 1,
+                  }}
+                >
+                  {restoringVersionId === version.id
+                    ? "Restaurando..."
+                    : "Restaurar"}
+                </button>
               </li>
             ))}
           </ol>

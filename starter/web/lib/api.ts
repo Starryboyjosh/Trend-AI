@@ -147,6 +147,12 @@ export const api = {
         `${BASE}/projects/${id}/versions`
       );
     },
+    restoreVersion(projectId: string, versionId: string) {
+      return request<Record<string, unknown>>(
+        `${BASE}/projects/${projectId}/versions/${versionId}/restore`,
+        { method: "POST" }
+      );
+    },
     updateArtifactVersion(projectId: string, data: Record<string, unknown>) {
       return request<Record<string, unknown>>(
         `${BASE}/projects/${projectId}/artifact-version`,

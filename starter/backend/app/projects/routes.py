@@ -5,13 +5,14 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.business.models import Business
 from app.conversations.models import ArtifactVersion, Conversation, GeneratedArtifact
 from app.conversations.repository import SqlArtifactRepository
-from app.core.errors import NotFoundError, ValidationError_
+from app.core.errors import AppError, NotFoundError, ValidationError_
 from app.dependencies import get_db, require_workspace
 from app.domain.models import GeneratedSocialPost
 from app.projects.models import Project
@@ -384,3 +385,79 @@ async def list_project_versions_endpoint(
         }
         for version in result.scalars().all()
     ]
+
+
+@router.post("/{project_id}/versions/{version_id}/restore")
+async def restore_project_version_endpoint(
+    project_id: str,
+    version_id: str,
+    workspace_id: str = Depends(require_workspace),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    project_result = await db.execute(
+        select(Project).where(Project.id == project_id, Project.workspace_id == workspace_id)
+    )
+    project = project_result.scalar_one_or_none()
+    if project is None:
+        raise NotFoundError("Proyecto")
+    if not project.artifact_id:
+        raise NotFoundError("Artículo")
+
+    artifact_result = await db.execute(
+        select(GeneratedArtifact, Conversation)
+        .join(Conversation, Conversation.id == GeneratedArtifact.conversation_id)
+        .where(
+            GeneratedArtifact.id == project.artifact_id,
+            Conversation.workspace_id == workspace_id,
+        )
+    )
+    if artifact_result.one_or_none() is None:
+        raise NotFoundError("Artículo")
+
+    target_result = await db.execute(
+        select(ArtifactVersion)
+        .join(GeneratedArtifact, GeneratedArtifact.id == ArtifactVersion.artifact_id)
+        .join(Conversation, Conversation.id == GeneratedArtifact.conversation_id)
+        .where(
+            ArtifactVersion.id == version_id,
+            ArtifactVersion.artifact_id == project.artifact_id,
+            Conversation.workspace_id == workspace_id,
+        )
+    )
+    target_version = target_result.scalar_one_or_none()
+    if target_version is None:
+        raise NotFoundError("Versión")
+
+    latest_result = await db.execute(
+        select(ArtifactVersion)
+        .where(ArtifactVersion.artifact_id == project.artifact_id)
+        .order_by(ArtifactVersion.version_number.desc())
+        .limit(1)
+    )
+    latest_version = latest_result.scalar_one_or_none()
+    if latest_version and latest_version.id == target_version.id:
+        raise ValidationError_("Esta versión ya es la versión actual.")
+    try:
+        restored_post = GeneratedSocialPost.model_validate_json(target_version.content_json)
+    except PydanticValidationError as exc:
+        raise AppError(
+            "VERSION_UNAVAILABLE",
+            "No pudimos recuperar esta versión del proyecto.",
+            status_code=409,
+            retryable=False,
+        ) from exc
+
+    repo = SqlArtifactRepository(db)
+    await repo.add_artifact_version(
+        artifact_id=project.artifact_id,
+        content=restored_post,
+        user_edited=True,
+        parent_version_id=latest_version.id if latest_version else None,
+    )
+    await db.commit()
+
+    return {
+        "version": restored_post.model_dump(),
+        "version_number": (latest_version.version_number + 1) if latest_version else 1,
+        "restored_from_version": target_version.version_number,
+    }

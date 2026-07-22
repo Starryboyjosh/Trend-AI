@@ -90,7 +90,8 @@ related: [FLOW-ONBOARD-001, FLOW-GEN-001, FLOW-ASSET-001, FLOW-SAVE-001]
 1. User chooses a variation control: shorter, more professional, more energetic, sales-focused, or another platform.
 2. System sends the original artifact plus requested delta, not the entire conversation.
 3. New version is linked to the original.
-4. User compares and promotes one version as current.
+4. User compares and promotes one version as current; promotion creates a new
+   version, so no historical content is overwritten.
 
 ## Flow principles
 

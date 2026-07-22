@@ -143,6 +143,12 @@ Returns the current project and latest editable content as `hitrendy-project/v1`
 
 Lists authorized project version metadata, newest first.
 
+### `POST /projects/{project_id}/versions/{version_id}/restore`
+
+Promotes an earlier authorized version by creating a new current version. It
+never overwrites or deletes historical content, and rejects the already-current
+version.
+
 ## Templates
 
 ### `GET /templates`

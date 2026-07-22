@@ -216,3 +216,81 @@ async def test_list_project_versions(client: AsyncClient, artifact_id: str) -> N
     )
     assert response.status_code == 200
     assert response.json()[0]["version_number"] == 1
+
+
+@pytest.mark.asyncio
+async def test_restore_project_version_creates_a_new_current_version(
+    client: AsyncClient, artifact_id: str
+) -> None:
+    created = await client.post(
+        "/api/v1/projects",
+        json={"artifact_id": artifact_id},
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    project_id = created.json()["id"]
+    original_hook = created.json()["artifact_snapshot"]["hook"]
+    update = await client.put(
+        f"/api/v1/projects/{project_id}/artifact-version",
+        json={
+            "hook": "Un gancho editado",
+            "caption": "Un texto editado para el proyecto.",
+            "call_to_action": "Escríbenos hoy.",
+            "hashtags": ["#HiTrendy"],
+            "visual_direction": "Producto en primer plano.",
+            "format_recommendation": "static_post",
+        },
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    assert update.status_code == 200
+    versions = await client.get(
+        f"/api/v1/projects/{project_id}/versions", headers={"X-Workspace-Id": WORKSPACE_ID}
+    )
+    original_version = next(v for v in versions.json() if v["version_number"] == 1)
+
+    restored = await client.post(
+        f"/api/v1/projects/{project_id}/versions/{original_version['id']}/restore",
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+
+    assert restored.status_code == 200
+    assert restored.json()["version_number"] == 3
+    assert restored.json()["restored_from_version"] == 1
+    project = await client.get(
+        f"/api/v1/projects/{project_id}", headers={"X-Workspace-Id": WORKSPACE_ID}
+    )
+    assert project.json()["artifact_snapshot"]["hook"] == original_hook
+    version_numbers = [
+        version["version_number"]
+        for version in (
+            await client.get(
+                f"/api/v1/projects/{project_id}/versions",
+                headers={"X-Workspace-Id": WORKSPACE_ID},
+            )
+        ).json()
+    ]
+    assert version_numbers == [3, 2, 1]
+
+
+@pytest.mark.asyncio
+async def test_restore_project_version_is_workspace_scoped(
+    client: AsyncClient, artifact_id: str
+) -> None:
+    created = await client.post(
+        "/api/v1/projects",
+        json={"artifact_id": artifact_id},
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    project_id = created.json()["id"]
+    version = (
+        await client.get(
+            f"/api/v1/projects/{project_id}/versions",
+            headers={"X-Workspace-Id": WORKSPACE_ID},
+        )
+    ).json()[0]
+
+    forbidden = await client.post(
+        f"/api/v1/projects/{project_id}/versions/{version['id']}/restore",
+        headers={"X-Workspace-Id": "ws_other"},
+    )
+
+    assert forbidden.status_code == 403
