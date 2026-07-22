@@ -259,6 +259,32 @@ async def duplicate_project_endpoint(
     return project_to_dict(duplicate)
 
 
+@router.get("/{project_id}/export")
+async def export_project_endpoint(
+    project_id: str,
+    workspace_id: str = Depends(require_workspace),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    result = await db.execute(
+        select(Project).where(Project.id == project_id, Project.workspace_id == workspace_id)
+    )
+    project = result.scalar_one_or_none()
+    if project is None:
+        raise NotFoundError("Proyecto")
+    exported = project_to_dict(project)
+    if project.artifact_id:
+        version_result = await db.execute(
+            select(ArtifactVersion)
+            .where(ArtifactVersion.artifact_id == project.artifact_id)
+            .order_by(ArtifactVersion.version_number.desc())
+            .limit(1)
+        )
+        version = version_result.scalar_one_or_none()
+        exported["content"] = _load_artifact_content_json(version.content_json if version else None)
+        exported["version_number"] = version.version_number if version else None
+    return {"format": "hitrendy-project/v1", "project": exported}
+
+
 class UpdateArtifactVersionRequest(BaseModel):
     hook: str = Field(min_length=1, max_length=180)
     caption: str = Field(min_length=1, max_length=2200)

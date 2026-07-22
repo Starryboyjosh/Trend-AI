@@ -135,6 +135,10 @@ Rename, archive, or update metadata.
 
 Creates a new active project in the same authorized workspace from an existing project.
 
+### `GET /projects/{project_id}/export`
+
+Returns the current project and latest editable content as `hitrendy-project/v1` JSON.
+
 ## Templates
 
 ### `GET /templates`

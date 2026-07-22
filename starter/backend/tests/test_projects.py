@@ -184,3 +184,23 @@ async def test_duplicate_project_is_workspace_scoped(client: AsyncClient, artifa
         f"/api/v1/projects/{project_id}/duplicate", headers={"X-Workspace-Id": "ws_other"}
     )
     assert forbidden.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_export_project_is_workspace_scoped(client: AsyncClient, artifact_id: str) -> None:
+    created = await client.post(
+        "/api/v1/projects",
+        json={"artifact_id": artifact_id},
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    project_id = created.json()["id"]
+    exported = await client.get(
+        f"/api/v1/projects/{project_id}/export", headers={"X-Workspace-Id": WORKSPACE_ID}
+    )
+    assert exported.status_code == 200
+    assert exported.json()["format"] == "hitrendy-project/v1"
+    assert exported.json()["project"]["content"]
+    forbidden = await client.get(
+        f"/api/v1/projects/{project_id}/export", headers={"X-Workspace-Id": "ws_other"}
+    )
+    assert forbidden.status_code == 403
