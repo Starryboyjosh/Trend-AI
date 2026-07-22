@@ -182,6 +182,20 @@ export default function Home() {
           >
             Configurar negocio
           </Link>
+          <Link
+            href="/settings"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              padding: "10px 12px",
+              color: "var(--muted-foreground)",
+              borderRadius: "var(--radius-sm)",
+              textDecoration: "none",
+            }}
+          >
+            Configuración
+          </Link>
         </nav>
       </aside>
 
