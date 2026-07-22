@@ -43,7 +43,8 @@ mantienen documentados como planeados y se rechazan de forma explícita.
 
 - E3-T1 Conversation CRUD. **Implementado.**
 - E3-T2 Message composer and thread display. **Implementado:** incluye
-  recuperación de artefactos y revisiones visuales al recargar una conversación.
+  recuperación de artefactos y revisiones visuales al recargar una conversación,
+  y conserva el borrador local de forma aislada por conversación.
 - E3-T3 Intent classifier. **Implementado como intents explícitos de UI:** no se
   infiere ni reinterpreta una acción no disponible.
 - E3-T4 Demo content provider. **Implementado.**

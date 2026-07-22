@@ -371,7 +371,11 @@ function AssistantContent() {
         onVariation={handleVariation}
         onFeedback={handleFeedback}
       />
-      <Composer onSend={handleSend} disabled={loading || !conversationId} />
+      <Composer
+        onSend={handleSend}
+        disabled={loading || !conversationId}
+        draftKey={conversationId || undefined}
+      />
     </div>
   );
 }

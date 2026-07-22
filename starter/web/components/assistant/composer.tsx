@@ -1,14 +1,24 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
+
+const DRAFT_STORAGE_PREFIX = "hitrendy:composer-draft:";
 
 interface Props {
   onSend: (text: string) => void;
   disabled: boolean;
   placeholder?: string;
+  /** Identifies the conversation whose local draft is being edited. */
+  draftKey?: string;
 }
 
-export function Composer({ onSend, disabled, placeholder }: Props) {
+export function Composer({ onSend, disabled, placeholder, draftKey }: Props) {
   const [value, setValue] = useState("");
   const [voiceAvailable, setVoiceAvailable] = useState(false);
   const [listening, setListening] = useState(false);
@@ -16,6 +26,46 @@ export function Composer({ onSend, disabled, placeholder }: Props) {
   const recognitionRef = useRef<{ start: () => void; stop: () => void } | null>(
     null
   );
+  const activeDraftKeyRef = useRef(draftKey);
+
+  const updateDraft = useCallback(
+    (nextValue: string | ((current: string) => string)) => {
+      setValue((current) => {
+        const resolved =
+          typeof nextValue === "function" ? nextValue(current) : nextValue;
+        const key = activeDraftKeyRef.current;
+
+        if (key) {
+          try {
+            if (resolved) {
+              window.localStorage.setItem(`${DRAFT_STORAGE_PREFIX}${key}`, resolved);
+            } else {
+              window.localStorage.removeItem(`${DRAFT_STORAGE_PREFIX}${key}`);
+            }
+          } catch {
+            // The composer remains usable when browser storage is unavailable.
+          }
+        }
+
+        return resolved;
+      });
+    },
+    []
+  );
+
+  useEffect(() => {
+    activeDraftKeyRef.current = draftKey;
+    if (!draftKey) {
+      setValue("");
+      return;
+    }
+
+    try {
+      setValue(window.localStorage.getItem(`${DRAFT_STORAGE_PREFIX}${draftKey}`) || "");
+    } catch {
+      setValue("");
+    }
+  }, [draftKey]);
 
   useEffect(() => {
     const VoiceRecognition = (
@@ -37,14 +87,14 @@ export function Composer({ onSend, disabled, placeholder }: Props) {
     recognition.lang = "es-ES";
     recognition.interimResults = false;
     recognition.onresult = (event) =>
-      setValue((current) =>
+      updateDraft((current) =>
         `${current} ${event.results[0][0].transcript}`.trim()
       );
     recognition.onend = () => setListening(false);
     recognitionRef.current = recognition;
     setVoiceAvailable(true);
     return () => recognition.stop();
-  }, []);
+  }, [updateDraft]);
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -57,7 +107,7 @@ export function Composer({ onSend, disabled, placeholder }: Props) {
     const trimmed = value.trim();
     if (!trimmed || disabled) return;
     onSend(trimmed);
-    setValue("");
+    updateDraft("");
     if (textRef.current) {
       textRef.current.style.height = "auto";
     }
@@ -84,7 +134,7 @@ export function Composer({ onSend, disabled, placeholder }: Props) {
       <textarea
         ref={textRef}
         value={value}
-        onChange={(e) => setValue(e.target.value)}
+        onChange={(e) => updateDraft(e.target.value)}
         onKeyDown={handleKeyDown}
         onInput={handleInput}
         placeholder={placeholder || "Escribe tu mensaje..."}
