@@ -270,15 +270,64 @@ async def duplicate_project_endpoint(
     project = result.scalar_one_or_none()
     if project is None:
         raise NotFoundError("Proyecto")
+
+    duplicated_artifact_id: str | None = None
+    duplicated_artifact: GeneratedArtifact | None = None
+    if project.artifact_id:
+        source_artifact = (
+            await db.execute(
+                select(GeneratedArtifact).where(GeneratedArtifact.id == project.artifact_id)
+            )
+        ).scalar_one_or_none()
+        if source_artifact is None:
+            raise NotFoundError("Artículo")
+        source_version = (
+            await db.execute(
+                select(ArtifactVersion)
+                .where(ArtifactVersion.artifact_id == source_artifact.id)
+                .order_by(ArtifactVersion.version_number.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if source_version is None:
+            raise NotFoundError("Versión")
+        duplicated_artifact = GeneratedArtifact(
+            conversation_id=source_artifact.conversation_id,
+            artifact_type=source_artifact.artifact_type,
+            platform=source_artifact.platform,
+            objective=source_artifact.objective,
+            model_provider=source_artifact.model_provider,
+            model_name=source_artifact.model_name,
+            prompt_version=source_artifact.prompt_version,
+            business_profile_version=source_artifact.business_profile_version,
+        )
+        db.add(duplicated_artifact)
+        await db.flush()
+        duplicated_version = ArtifactVersion(
+            artifact_id=duplicated_artifact.id,
+            version_number=1,
+            content_json=source_version.content_json,
+            user_edited=source_version.user_edited,
+            parent_version_id=source_version.id,
+        )
+        db.add(duplicated_version)
+        await db.flush()
+        duplicated_artifact.active_version_id = duplicated_version.id
+        duplicated_artifact_id = duplicated_artifact.id
+
     duplicate = Project(
         workspace_id=workspace_id,
         business_id=project.business_id,
         name=f"{project.name} (copia)",
-        artifact_id=project.artifact_id,
+        artifact_id=duplicated_artifact_id,
+        source_template_id=project.source_template_id,
         platform=project.platform,
         status="active",
     )
     db.add(duplicate)
+    await db.flush()
+    if duplicated_artifact:
+        duplicated_artifact.project_id = duplicate.id
     await db.commit()
     await db.refresh(duplicate)
     return project_to_dict(duplicate)

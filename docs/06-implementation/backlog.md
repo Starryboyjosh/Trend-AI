@@ -6,6 +6,20 @@ status: proposed
 
 # Backlog
 
+## Estado de implementación — 2026-07-21
+
+El MVP está aproximadamente al **88% funcional**. Están implementados y
+verificados los flujos de perfil de negocio, autenticación y workspace,
+generación de publicaciones y guiones cortos, variaciones, proyectos
+versionados, plantillas, biblioteca de activos, revisión visual, historial de
+conversaciones, voz en navegador, proveedores demo/intercambiables y medidas
+base de seguridad y operación.
+
+Pendiente antes de declarar el MVP terminado: consolidar la independencia de
+copias de proyectos, ampliar la regresión de escenarios de IA y accesibilidad,
+y cerrar los detalles de pulido y despliegue. Los intents no implementados se
+mantienen documentados como planeados y se rechazan de forma explícita.
+
 ## Epic E1 — Foundation
 
 - E1-T1 Initialize monorepo and quality scripts.
@@ -27,35 +41,41 @@ status: proposed
 
 ## Epic E3 — Assistant
 
-- E3-T1 Conversation CRUD.
-- E3-T2 Message composer and thread display.
-- E3-T3 Intent classifier.
-- E3-T4 Demo content provider.
-- E3-T5 Structured artifact rendering.
-- E3-T6 Retry and error handling.
+- E3-T1 Conversation CRUD. **Implementado.**
+- E3-T2 Message composer and thread display. **Implementado:** incluye
+  recuperación de artefactos y revisiones visuales al recargar una conversación.
+- E3-T3 Intent classifier. **Implementado como intents explícitos de UI:** no se
+  infiere ni reinterpreta una acción no disponible.
+- E3-T4 Demo content provider. **Implementado.**
+- E3-T5 Structured artifact rendering. **Implementado:** publicaciones, guiones
+  cortos y revisiones visuales se renderizan con contratos tipados.
+- E3-T6 Retry and error handling. **Implementado para contratos de generación y
+  respuestas inválidas del proveedor.**
 
 ## Epic E4 — Projects
 
-- E4-T1 Artifact versions.
-- E4-T2 Save project.
-- E4-T3 Project grid.
-- E4-T4 Project editor.
-- E4-T5 Archive and recovery.
+- E4-T1 Artifact versions. **Implementado.**
+- E4-T2 Save project. **Implementado.**
+- E4-T3 Project grid. **Implementado.**
+- E4-T4 Project editor. **Implementado:** publicaciones y guiones de video.
+- E4-T5 Archive and recovery. **Implementado.**
 
 ## Epic E5 — Templates
 
-- E5-T1 Template model and seed.
-- E5-T2 Catalog UI.
-- E5-T3 Filters.
-- E5-T4 Recommendation service.
-- E5-T5 Start project from template.
+- E5-T1 Template model and seed. **Implementado.**
+- E5-T2 Catalog UI. **Implementado.**
+- E5-T3 Filters. **Implementado.**
+- E5-T4 Recommendation service. **Implementado.**
+- E5-T5 Start project from template. **Implementado:** crea un artefacto y una
+  primera versión editables, con origen de plantilla trazable.
 
 ## Epic E6 — Library and visual review
 
-- E6-T1 Secure object upload.
-- E6-T2 Asset listing.
-- E6-T3 Image preview.
-- E6-T4 Visual review schema and demo provider.
+- E6-T1 Secure object upload. **Implementado.**
+- E6-T2 Asset listing. **Implementado.**
+- E6-T3 Image preview. **Implementado.**
+- E6-T4 Visual review schema and demo provider. **Implementado:** también desde
+  el asistente mediante un adjunto autorizado.
 - E6-T5 Vision-provider adapter. **Implemented:** demo and explicit
   OpenAI-compatible adapters preserve the validated `AssetAnalysis` contract.
 

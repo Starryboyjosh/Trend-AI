@@ -5,7 +5,7 @@ project:
   language: es
   product_type: web_saas
   primary_goal: personalized_social_content_assistant
-  mvp_status: planned
+  mvp_status: in_progress
 
 source_of_truth:
   contracts: contracts/schemas

@@ -214,6 +214,25 @@ async def test_duplicate_project_is_workspace_scoped(client: AsyncClient, artifa
     assert copied.status_code == 201
     assert copied.json()["id"] != project_id
     assert copied.json()["name"].endswith("(copia)")
+    assert copied.json()["artifact_id"] != created.json()["artifact_id"]
+
+    update_copy = await client.put(
+        f"/api/v1/projects/{copied.json()['id']}/artifact-version",
+        json={
+            "hook": "Gancho de la copia",
+            "caption": "Texto independiente de la copia.",
+            "call_to_action": "Escríbenos hoy.",
+            "hashtags": ["#HiTrendy"],
+            "visual_direction": "Producto en primer plano.",
+            "format_recommendation": "static_post",
+        },
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    assert update_copy.status_code == 200
+    original = await client.get(
+        f"/api/v1/projects/{project_id}", headers={"X-Workspace-Id": WORKSPACE_ID}
+    )
+    assert original.json()["artifact_snapshot"]["hook"] != "Gancho de la copia"
     forbidden = await client.post(
         f"/api/v1/projects/{project_id}/duplicate", headers={"X-Workspace-Id": "ws_other"}
     )
@@ -243,10 +262,13 @@ async def test_export_project_is_workspace_scoped(client: AsyncClient, artifact_
 @pytest.mark.asyncio
 async def test_list_project_versions(client: AsyncClient, artifact_id: str) -> None:
     created = await client.post(
-        "/api/v1/projects", json={"artifact_id": artifact_id}, headers={"X-Workspace-Id": WORKSPACE_ID}
+        "/api/v1/projects",
+        json={"artifact_id": artifact_id},
+        headers={"X-Workspace-Id": WORKSPACE_ID},
     )
     response = await client.get(
-        f"/api/v1/projects/{created.json()['id']}/versions", headers={"X-Workspace-Id": WORKSPACE_ID}
+        f"/api/v1/projects/{created.json()['id']}/versions",
+        headers={"X-Workspace-Id": WORKSPACE_ID},
     )
     assert response.status_code == 200
     assert response.json()[0]["version_number"] == 1
