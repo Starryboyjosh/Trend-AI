@@ -1,4 +1,4 @@
-.PHONY: validate demo test-demo graphify install dev test lint format
+.PHONY: validate demo demo-reset test-demo graphify install dev test lint format
 
 validate:
 	python scripts/validate_package.py
@@ -8,6 +8,9 @@ test-demo:
 
 demo:
 	cd demo && uvicorn app:app --reload
+
+demo-reset:
+	.venv/bin/python scripts/reset_demo_database.py --confirm
 
 install:
 	npm install --legacy-peer-deps
@@ -30,4 +33,3 @@ format:
 
 graphify:
 	@echo "Run /graphify . from a supported coding assistant after installing graphifyy"
-

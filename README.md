@@ -70,6 +70,18 @@ Open `http://127.0.0.1:8000`.
 
 The demo works without external APIs. It uses deterministic example generation so the product flow can be evaluated before connecting a real model.
 
+## Reset the local product demo
+
+To reset the backend demo database and local uploaded assets, then migrate and
+seed the template catalog:
+
+```bash
+make demo-reset
+```
+
+This command only works for the repository-local `hitrendy_demo.db`; it refuses
+production environments and intentionally cannot reset a remote database.
+
 ## Recommended implementation order
 
 1. Read `docs/INDEX.md`.

@@ -70,6 +70,8 @@ status: proposed
 - E8-T1 Accessibility test pass.
 - E8-T2 Security test pass.
 - E8-T3 Rate limits.
-- E8-T4 Deployment runbook.
-- E8-T5 Demo reset and seed command.
+- E8-T4 Deployment runbook. **Implemented:** release sequence, smoke checks,
+  secret boundaries, and provider/storage safeguards are documented.
+- E8-T5 Demo reset and seed command. **Implemented:** `make demo-reset`
+  recreates only the protected local demo database and seeds templates.
 - E8-T6 Graphify generation and report review.
