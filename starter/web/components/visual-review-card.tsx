@@ -1,5 +1,7 @@
 "use client";
 
+import { useId } from "react";
+
 export interface VisualImprovement {
   priority: "high" | "medium" | "low";
   area: string;
@@ -43,16 +45,18 @@ const AREA_LABELS: Record<string, string> = {
 };
 
 export function VisualReviewCard({ analysis }: Props) {
+  const titleId = useId();
+
   return (
     <article
       className="artifact-card"
       style={{ marginTop: 12 }}
-      aria-labelledby="analysis-title"
+      aria-labelledby={titleId}
     >
       <p className="eyebrow">ANÁLISIS VISUAL</p>
 
       <section>
-        <h3 id="analysis-title">Resumen</h3>
+        <h3 id={titleId}>Resumen</h3>
         <p>{analysis.summary}</p>
       </section>
 

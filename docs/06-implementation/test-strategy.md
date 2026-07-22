@@ -73,3 +73,8 @@ Run deterministic fixtures on every commit. Run live-provider evaluation only in
 - Visible focus review.
 - Contrast verification for tokens.
 - Screen-reader labels for icon controls.
+
+The component test suite runs `vitest-axe` against the assistant conversation
+log. Extend this coverage whenever a primary-flow component adds controls or
+dynamic status updates; browser walkthroughs remain required for responsive and
+focus-order behavior.

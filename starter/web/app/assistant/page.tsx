@@ -358,7 +358,10 @@ function AssistantContent() {
           {uploadingVisual ? "Subiendo…" : "Analizar imagen"}
         </button>
         {error && (
-          <span style={{ fontSize: "0.8rem", color: "var(--ht-danger)" }}>
+          <span
+            role="alert"
+            style={{ fontSize: "0.8rem", color: "var(--ht-danger)" }}
+          >
             {error}
           </span>
         )}

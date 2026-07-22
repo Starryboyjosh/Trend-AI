@@ -94,7 +94,9 @@ de forma explícita.
 
 ## Epic E8 — Readiness
 
-- E8-T1 Accessibility test pass.
+- E8-T1 Accessibility test pass. **Implementado para los flujos críticos:**
+  foco visible, movimiento reducido, etiquetas de controles, estados anunciados
+  y una comprobación automatizada axe del hilo del asistente.
 - E8-T2 Security test pass. **Implementado:** pruebas negativas cubren sesión,
   workspace, cargas, encabezados, rotación de sesión y configuración de
   producción insegura.

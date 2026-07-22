@@ -36,7 +36,10 @@ export function MessageList({
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    bottomRef.current?.scrollIntoView({
+      behavior: reducedMotion ? "auto" : "smooth",
+    });
   }, [messages]);
 
   if (messages.length === 0 && !loading) {
@@ -64,7 +67,14 @@ export function MessageList({
   }
 
   return (
-    <div style={{ flex: 1, overflowY: "auto", padding: "16px 0" }}>
+    <div
+      role="log"
+      aria-label="Conversación"
+      aria-live="polite"
+      aria-relevant="additions text"
+      aria-busy={loading}
+      style={{ flex: 1, overflowY: "auto", padding: "16px 0" }}
+    >
       {messages.map((msg) => (
         <div
           key={msg.id}
@@ -110,7 +120,10 @@ export function MessageList({
       ))}
 
       {loading && (
-        <div style={{ padding: "8px 16px", color: "var(--muted-foreground)" }}>
+        <div
+          role="status"
+          style={{ padding: "8px 16px", color: "var(--muted-foreground)" }}
+        >
           Preparando una propuesta para tu negocio…
         </div>
       )}
