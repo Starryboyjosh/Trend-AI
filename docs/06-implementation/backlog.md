@@ -15,10 +15,10 @@ versionados, plantillas, biblioteca de activos, revisión visual, historial de
 conversaciones, voz en navegador, proveedores demo/intercambiables y medidas
 base de seguridad y operación.
 
-Pendiente antes de declarar el MVP terminado: consolidar la independencia de
-copias de proyectos, ampliar la regresión de escenarios de IA y accesibilidad,
-y cerrar los detalles de pulido y despliegue. Los intents no implementados se
-mantienen documentados como planeados y se rechazan de forma explícita.
+Pendiente antes de declarar el MVP terminado: ampliar las pruebas de
+accesibilidad y seguridad, y cerrar los detalles de pulido y despliegue. Los
+intents no implementados se mantienen documentados como planeados y se rechazan
+de forma explícita.
 
 ## Epic E1 — Foundation
 
@@ -87,7 +87,9 @@ mantienen documentados como planeados y se rechazan de forma explícita.
 - E7-T3 Deterministic evaluator. **Implementado:** comprueba plataforma, CTA,
   palabras prohibidas, precios/descuentos y garantías no sustentadas.
 - E7-T4 Repair flow. **Implementado.**
-- E7-T5 Scenario regression suite.
+- E7-T5 Scenario regression suite. **Implementado:** 30 escenarios
+  versionados y deterministas cubren seis rubros y solicitudes directas, vagas y
+  contradictorias sin requerir un proveedor externo.
 - E7-T6 User feedback events.
 
 ## Epic E8 — Readiness

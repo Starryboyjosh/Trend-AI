@@ -64,6 +64,21 @@ For every prompt/model change, record:
 - estimated cost,
 - notable failures.
 
+## Deterministic MVP suite
+
+`contracts/fixtures/ai-regression-scenarios.v1.json` is the versioned,
+provider-independent regression set that runs on every backend test run. Its
+current set is `mvp-demo-v1` and contains 30 scenarios across gastronomy,
+fashion, health/wellness, art/creator, services, and retail. It includes direct,
+vague, and contradictory requests and validates the demo provider against the
+same typed output contracts and deterministic social-post evaluator used by the
+application.
+
+The suite intentionally makes no live model call and therefore records no
+provider cost or latency. A protected live-provider evaluation must record the
+provider/model, prompt and schema versions, pass rate, latency, cost, and any
+notable failures before a prompt or model change is released.
+
 ## User feedback
 
 Collect simple signals:
