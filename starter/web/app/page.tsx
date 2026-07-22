@@ -141,6 +141,20 @@ export default function Home() {
             Plantillas
           </Link>
           <Link
+            href="/projects"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              padding: "10px 12px",
+              color: "var(--muted-foreground)",
+              borderRadius: "var(--radius-sm)",
+              textDecoration: "none",
+            }}
+          >
+            Proyectos
+          </Link>
+          <Link
             href="/library"
             style={{
               display: "flex",

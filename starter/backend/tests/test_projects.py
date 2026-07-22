@@ -164,3 +164,23 @@ async def test_project_isolation_by_workspace(client: AsyncClient, artifact_id: 
         headers={"X-Workspace-Id": "ws_other"},
     )
     assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_duplicate_project_is_workspace_scoped(client: AsyncClient, artifact_id: str) -> None:
+    created = await client.post(
+        "/api/v1/projects",
+        json={"artifact_id": artifact_id},
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    project_id = created.json()["id"]
+    copied = await client.post(
+        f"/api/v1/projects/{project_id}/duplicate", headers={"X-Workspace-Id": WORKSPACE_ID}
+    )
+    assert copied.status_code == 201
+    assert copied.json()["id"] != project_id
+    assert copied.json()["name"].endswith("(copia)")
+    forbidden = await client.post(
+        f"/api/v1/projects/{project_id}/duplicate", headers={"X-Workspace-Id": "ws_other"}
+    )
+    assert forbidden.status_code == 403

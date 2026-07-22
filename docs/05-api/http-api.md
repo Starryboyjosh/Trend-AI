@@ -131,6 +131,10 @@ Project with current artifact and version summary.
 
 Rename, archive, or update metadata.
 
+### `POST /projects/{project_id}/duplicate`
+
+Creates a new active project in the same authorized workspace from an existing project.
+
 ## Templates
 
 ### `GET /templates`

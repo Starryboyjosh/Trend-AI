@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Literal
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
@@ -28,7 +29,7 @@ class CreateProjectRequest(BaseModel):
 
 class UpdateProjectRequest(BaseModel):
     name: str | None = Field(None, max_length=240)
-    status: str | None = None
+    status: Literal["active", "archived"] | None = None
 
 
 def project_to_dict(p: Project) -> dict:
@@ -230,6 +231,32 @@ async def update_project_endpoint(
     await db.commit()
     await db.refresh(project)
     return project_to_dict(project)
+
+
+@router.post("/{project_id}/duplicate", status_code=201)
+async def duplicate_project_endpoint(
+    project_id: str,
+    workspace_id: str = Depends(require_workspace),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    result = await db.execute(
+        select(Project).where(Project.id == project_id, Project.workspace_id == workspace_id)
+    )
+    project = result.scalar_one_or_none()
+    if project is None:
+        raise NotFoundError("Proyecto")
+    duplicate = Project(
+        workspace_id=workspace_id,
+        business_id=project.business_id,
+        name=f"{project.name} (copia)",
+        artifact_id=project.artifact_id,
+        platform=project.platform,
+        status="active",
+    )
+    db.add(duplicate)
+    await db.commit()
+    await db.refresh(duplicate)
+    return project_to_dict(duplicate)
 
 
 class UpdateArtifactVersionRequest(BaseModel):

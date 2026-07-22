@@ -125,6 +125,14 @@ export const api = {
         body: JSON.stringify(data),
       });
     },
+    duplicate(id: string) {
+      return request<Record<string, unknown>>(
+        `${BASE}/projects/${id}/duplicate`,
+        {
+          method: "POST",
+        }
+      );
+    },
     updateArtifactVersion(projectId: string, data: Record<string, unknown>) {
       return request<Record<string, unknown>>(
         `${BASE}/projects/${projectId}/artifact-version`,
