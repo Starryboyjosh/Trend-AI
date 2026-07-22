@@ -24,6 +24,7 @@ interface Props {
     artifactId: string | undefined,
     rating: "useful" | "not_useful"
   ) => void;
+  onCopy?: (artifactId: string | undefined) => void;
 }
 
 export function MessageList({
@@ -32,6 +33,7 @@ export function MessageList({
   onSave,
   onVariation,
   onFeedback,
+  onCopy,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -105,12 +107,14 @@ export function MessageList({
                 onSave={() => onSave?.(msg.artifactId)}
                 onVariation={(kind) => onVariation?.(msg.artifactId, kind)}
                 onFeedback={(rating) => onFeedback?.(msg.artifactId, rating)}
+                onCopy={() => onCopy?.(msg.artifactId)}
               />
             ) : msg.artifact?.artifact_type === "short_video_script" ? (
               <GeneratedVideoScriptCard
                 artifact={msg.artifact}
                 onSave={() => onSave?.(msg.artifactId)}
                 onFeedback={(rating) => onFeedback?.(msg.artifactId, rating)}
+                onCopy={() => onCopy?.(msg.artifactId)}
               />
             ) : (
               <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{msg.content}</p>

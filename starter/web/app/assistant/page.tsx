@@ -190,6 +190,7 @@ function AssistantContent() {
     setError("");
     try {
       const project = await api.projects.create({ artifact_id: artifactId });
+      void api.artifacts.event(artifactId, "saved");
       setError("Proyecto guardado ✓");
     } catch (err) {
       if (err instanceof ApiError) {
@@ -198,6 +199,10 @@ function AssistantContent() {
         setError("Error al guardar el proyecto.");
       }
     }
+  }, []);
+
+  const handleCopy = useCallback((artifactId: string | undefined) => {
+    if (artifactId) void api.artifacts.event(artifactId, "copied");
   }, []);
 
   const handleVariation = useCallback(
@@ -373,6 +378,7 @@ function AssistantContent() {
         onSave={handleSave}
         onVariation={handleVariation}
         onFeedback={handleFeedback}
+        onCopy={handleCopy}
       />
       <Composer
         onSend={handleSend}

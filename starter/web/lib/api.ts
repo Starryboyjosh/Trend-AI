@@ -123,6 +123,12 @@ export const api = {
         { method: "POST", body: JSON.stringify({ rating }) }
       );
     },
+    event(artifactId: string, eventType: "copied" | "saved") {
+      return request<Record<string, unknown>>(
+        `${BASE}/conversations/artifacts/${artifactId}/events`,
+        { method: "POST", body: JSON.stringify({ event_type: eventType }) }
+      );
+    },
   },
   projects: {
     create(data: Record<string, unknown>) {

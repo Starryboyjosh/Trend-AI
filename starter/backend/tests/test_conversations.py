@@ -119,6 +119,13 @@ async def test_send_message_generates_artifact(client: AsyncClient, business_id:
     )
     assert feedback.status_code == 201
     assert feedback.json()["rating"] == "useful"
+    event = await client.post(
+        f"/api/v1/conversations/artifacts/{data['artifact_id']}/events",
+        json={"event_type": "copied"},
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    assert event.status_code == 201
+    assert event.json()["event_type"] == "copied"
 
 
 @pytest.mark.asyncio

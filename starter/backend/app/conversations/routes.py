@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.analysis_service import analysis_to_dict, analyze_authorized_asset
 from app.conversations.models import (
+    ArtifactEvent,
     ArtifactFeedback,
     ArtifactVersion,
     Conversation,
@@ -71,6 +72,10 @@ class ArtifactFeedbackRequest(BaseModel):
     reason: str | None = Field(None, max_length=500)
 
 
+class ArtifactEventRequest(BaseModel):
+    event_type: Literal["copied", "saved"]
+
+
 @router.post("/artifacts/{artifact_id}/feedback", status_code=201)
 async def create_artifact_feedback_endpoint(
     artifact_id: str,
@@ -90,6 +95,27 @@ async def create_artifact_feedback_endpoint(
     await db.commit()
     await db.refresh(feedback)
     return {"id": feedback.id, "artifact_id": feedback.artifact_id, "rating": feedback.rating}
+
+
+@router.post("/artifacts/{artifact_id}/events", status_code=201)
+async def create_artifact_event_endpoint(
+    artifact_id: str,
+    body: ArtifactEventRequest,
+    workspace_id: str = Depends(require_workspace),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    result = await db.execute(
+        select(GeneratedArtifact)
+        .join(Conversation, Conversation.id == GeneratedArtifact.conversation_id)
+        .where(GeneratedArtifact.id == artifact_id, Conversation.workspace_id == workspace_id)
+    )
+    if result.scalar_one_or_none() is None:
+        raise NotFoundError("Artículo")
+    event = ArtifactEvent(artifact_id=artifact_id, event_type=body.event_type)
+    db.add(event)
+    await db.commit()
+    await db.refresh(event)
+    return {"id": event.id, "artifact_id": event.artifact_id, "event_type": event.event_type}
 
 
 @router.post("", status_code=201)

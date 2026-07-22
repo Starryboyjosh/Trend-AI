@@ -77,3 +77,12 @@ class ArtifactFeedback(Base):
     rating: Mapped[str] = mapped_column(String(16), nullable=False)
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ArtifactEvent(Base):
+    __tablename__ = "artifact_events"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_uuid)
+    artifact_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

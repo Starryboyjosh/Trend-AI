@@ -6,6 +6,7 @@ interface Props {
   onSave?: () => void;
   onVariation?: (kind: VariationKind) => void;
   onFeedback?: (rating: "useful" | "not_useful") => void;
+  onCopy?: () => void;
 }
 
 export function GeneratedArtifactCard({
@@ -13,6 +14,7 @@ export function GeneratedArtifactCard({
   onSave,
   onVariation,
   onFeedback,
+  onCopy,
 }: Props) {
   const titleId = useId();
   const [copyStatus, setCopyStatus] = useState("");
@@ -31,6 +33,7 @@ export function GeneratedArtifactCard({
           .join("\n\n")
       );
       setCopyStatus("Contenido copiado.");
+      onCopy?.();
     } catch {
       setCopyStatus("No pudimos copiar el contenido. Selecciónalo y cópialo manualmente.");
     }

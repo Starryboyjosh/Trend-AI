@@ -5,9 +5,10 @@ interface Props {
   artifact: GeneratedShortVideoScript;
   onSave?: () => void;
   onFeedback?: (rating: "useful" | "not_useful") => void;
+  onCopy?: () => void;
 }
 
-export function GeneratedVideoScriptCard({ artifact, onSave, onFeedback }: Props) {
+export function GeneratedVideoScriptCard({ artifact, onSave, onFeedback, onCopy }: Props) {
   const titleId = useId();
   const [copyStatus, setCopyStatus] = useState("");
 
@@ -25,6 +26,7 @@ export function GeneratedVideoScriptCard({ artifact, onSave, onFeedback }: Props
         )
       );
       setCopyStatus("Guion copiado.");
+      onCopy?.();
     } catch {
       setCopyStatus("No pudimos copiar el guion. Selecciónalo y cópialo manualmente.");
     }

@@ -91,9 +91,9 @@ de forma explícita.
 - E7-T5 Scenario regression suite. **Implementado:** 30 escenarios
   versionados y deterministas cubren seis rubros y solicitudes directas, vagas y
   contradictorias sin requerir un proveedor externo.
-- E7-T6 User feedback events. **Parcial:** la valoración `útil` / `no útil` y
-  su motivo se persisten de forma autorizada; faltan eventos explícitos de
-  copia, guardado y magnitud de edición.
+- E7-T6 User feedback events. **Parcial:** la valoración `útil` / `no útil`,
+  copia y guardado se persisten de forma autorizada; falta registrar la
+  magnitud de edición.
 
 ## Epic E8 — Readiness
 
