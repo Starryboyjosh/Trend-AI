@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import io
+from base64 import b64decode
+
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
@@ -25,6 +28,9 @@ BRAND_DATA = {
 }
 
 WORKSPACE_ID = "ws_test_001"
+PNG_1X1 = b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+)
 
 
 @pytest_asyncio.fixture
@@ -142,6 +148,39 @@ async def test_send_message_generates_short_video_script(
     assert artifact["platform"] == "tiktok"
     assert len(artifact["scenes"]) >= 2
     assert artifact["scenes"][0]["order"] == 1
+
+
+@pytest.mark.asyncio
+async def test_send_message_analyzes_an_authorized_visual_asset(
+    client: AsyncClient, business_id: str
+) -> None:
+    upload = await client.post("/api/v1/assets/uploads", headers={"X-Workspace-Id": WORKSPACE_ID})
+    completed = await client.post(
+        f"/api/v1/assets/uploads/{upload.json()['upload_id']}/complete",
+        files={"file": ("design.png", io.BytesIO(PNG_1X1), "image/png")},
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    conv = await client.post(
+        "/api/v1/conversations",
+        json={"business_id": business_id, "title": "Revisión visual"},
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+
+    response = await client.post(
+        f"/api/v1/conversations/{conv.json()['id']}/messages",
+        json={
+            "text": "Revisa este diseño",
+            "ui_intent": "analyze_visual",
+            "attachment_ids": [completed.json()["asset_id"]],
+        },
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["type"] == "visual_analysis"
+    assert data["analysis"]["asset_id"] == completed.json()["asset_id"]
+    assert data["analysis"]["strengths"]
 
 
 @pytest.mark.asyncio

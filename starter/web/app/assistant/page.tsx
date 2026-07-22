@@ -1,24 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useState, useCallback, useEffect } from "react";
+import { Suspense, useState, useCallback, useEffect, useRef, type ChangeEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Composer } from "@/components/assistant/composer";
 import { MessageList } from "@/components/assistant/message-list";
 import { api, ApiError } from "@/lib/api";
 import type { GeneratedArtifact, GeneratedSocialPost } from "@/types/artifact";
+import type { VisualAnalysis } from "@/components/visual-review-card";
 
 interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
   artifact?: GeneratedArtifact;
+  analysis?: VisualAnalysis;
   artifactId?: string;
 }
 
 interface ConvData {
   id: string;
-  messages?: Array<{ id: string; role: string; content: string }>;
+  messages?: Array<{
+    id: string;
+    role: string;
+    content: string;
+    metadata?: { analysis?: VisualAnalysis } | null;
+  }>;
 }
 
 interface SendResult {
@@ -27,6 +34,7 @@ interface SendResult {
   assistant_message?: { id: string; content: string };
   artifact?: GeneratedArtifact;
   artifact_id?: string;
+  analysis?: VisualAnalysis;
 }
 
 function AssistantContent() {
@@ -37,6 +45,8 @@ function AssistantContent() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [initializing, setInitializing] = useState(true);
+  const [uploadingVisual, setUploadingVisual] = useState(false);
+  const visualFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     initConversation();
@@ -71,6 +81,7 @@ function AssistantContent() {
         id: m.id,
         role: m.role as "user" | "assistant",
         content: m.content,
+        analysis: m.metadata?.analysis,
       }));
       setMessages(msgs);
     } catch (err) {
@@ -91,7 +102,11 @@ function AssistantContent() {
   const handleSend = useCallback(
     async (
       text: string,
-      uiIntent: "create_social_post" | "create_short_video_script" = "create_social_post"
+      uiIntent:
+        | "create_social_post"
+        | "create_short_video_script"
+        | "analyze_visual" = "create_social_post",
+      attachmentIds: string[] = []
     ) => {
       if (!conversationId || loading) return;
 
@@ -105,7 +120,8 @@ function AssistantContent() {
         const result = (await api.conversations.sendMessage(
           conversationId,
           text,
-          uiIntent
+          uiIntent,
+          attachmentIds
         )) as unknown as SendResult;
 
         if (result.type === "artifact") {
@@ -117,6 +133,17 @@ function AssistantContent() {
             artifactId: result.artifact_id,
           };
           setMessages((prev) => [...prev, assistantMsg]);
+        } else if (result.type === "visual_analysis" && result.analysis) {
+          const analysis = result.analysis;
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: result.assistant_message?.id || `analysis_${Date.now()}`,
+              role: "assistant",
+              content: result.assistant_message?.content || analysis.summary,
+              analysis,
+            },
+          ]);
         } else if (result.type === "error") {
           setError(result.message || "Error al generar contenido.");
         }
@@ -131,6 +158,27 @@ function AssistantContent() {
       }
     },
     [conversationId, loading]
+  );
+
+  const handleVisualUpload = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file || loading || !conversationId) return;
+      setUploadingVisual(true);
+      setError("");
+      try {
+        const uploaded = await api.assets.upload(file);
+        const assetId = uploaded.asset_id as string | undefined;
+        if (!assetId) throw new Error("La imagen no se pudo preparar.");
+        await handleSend("Analiza esta imagen para mi negocio.", "analyze_visual", [assetId]);
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : "No pudimos subir la imagen.");
+      } finally {
+        setUploadingVisual(false);
+        event.target.value = "";
+      }
+    },
+    [conversationId, handleSend, loading]
   );
 
   const handleSave = useCallback(async (artifactId: string | undefined) => {
@@ -280,6 +328,30 @@ function AssistantContent() {
           }}
         >
           Crear guion
+        </button>
+        <input
+          ref={visualFileRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          onChange={handleVisualUpload}
+          disabled={loading || uploadingVisual || !conversationId}
+          style={{ display: "none" }}
+          aria-label="Subir imagen para analizar"
+        />
+        <button
+          type="button"
+          onClick={() => visualFileRef.current?.click()}
+          disabled={loading || uploadingVisual || !conversationId}
+          style={{
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius-md)",
+            background: "var(--surface)",
+            color: "var(--foreground)",
+            padding: "7px 10px",
+            cursor: loading || uploadingVisual || !conversationId ? "not-allowed" : "pointer",
+          }}
+        >
+          {uploadingVisual ? "Subiendo…" : "Analizar imagen"}
         </button>
         {error && (
           <span style={{ fontSize: "0.8rem", color: "var(--ht-danger)" }}>

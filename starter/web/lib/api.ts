@@ -91,13 +91,21 @@ export const api = {
     sendMessage(
       conversationId: string,
       text: string,
-      uiIntent?: "create_social_post" | "create_short_video_script"
+      uiIntent?:
+        | "create_social_post"
+        | "create_short_video_script"
+        | "analyze_visual",
+      attachmentIds: string[] = []
     ) {
       return request<Record<string, unknown>>(
         `${BASE}/conversations/${conversationId}/messages`,
         {
           method: "POST",
-          body: JSON.stringify({ text, ...(uiIntent ? { ui_intent: uiIntent } : {}) }),
+          body: JSON.stringify({
+            text,
+            ...(uiIntent ? { ui_intent: uiIntent } : {}),
+            ...(attachmentIds.length ? { attachment_ids: attachmentIds } : {}),
+          }),
         }
       );
     },

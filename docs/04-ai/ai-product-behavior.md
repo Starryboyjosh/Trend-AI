@@ -38,7 +38,7 @@ silently routed to another generation flow.
 | `rewrite_content` | Revised content plus change summary | Planeado |
 | `create_short_video_script` | Hook, scenes, voiceover, CTA | Disponible |
 | `create_campaign_idea` | Small campaign concept and assets | Planeado |
-| `analyze_visual` | Structured design feedback | Planeado |
+| `analyze_visual` | Structured design feedback | Disponible |
 | `recommend_templates` | Template filters and rationale | Planeado |
 | `brand_setup_help` | Suggested brand voice and identity inputs | Planeado |
 | `general_marketing_help` | Concise guidance with stated assumptions | Planeado |

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { GeneratedArtifactCard } from "@/components/generated-artifact-card";
 import { GeneratedVideoScriptCard } from "@/components/generated-video-script-card";
+import { VisualReviewCard, type VisualAnalysis } from "@/components/visual-review-card";
 import type { GeneratedArtifact } from "@/types/artifact";
 
 interface Message {
@@ -10,6 +11,7 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   artifact?: GeneratedArtifact;
+  analysis?: VisualAnalysis;
   artifactId?: string;
 }
 
@@ -85,7 +87,9 @@ export function MessageList({
                   : "var(--foreground)",
             }}
           >
-            {msg.artifact?.artifact_type === "social_post" ? (
+            {msg.analysis ? (
+              <VisualReviewCard analysis={msg.analysis} />
+            ) : msg.artifact?.artifact_type === "social_post" ? (
               <GeneratedArtifactCard
                 artifact={msg.artifact}
                 onSave={() => onSave?.(msg.artifactId)}

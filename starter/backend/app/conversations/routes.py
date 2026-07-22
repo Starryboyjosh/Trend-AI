@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
@@ -7,6 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.assets.analysis_service import analysis_to_dict, analyze_authorized_asset
 from app.conversations.models import (
     ArtifactFeedback,
     ArtifactVersion,
@@ -40,7 +42,9 @@ from app.services.generate_short_video_script import GenerateShortVideoScriptSer
 from app.services.generate_social_post import GenerateSocialPostService
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
-SupportedGenerationIntent = Literal["create_social_post", "create_short_video_script"]
+SupportedGenerationIntent = Literal[
+    "create_social_post", "create_short_video_script", "analyze_visual"
+]
 
 
 class CreateConversationRequest(BaseModel):
@@ -189,6 +193,7 @@ async def get_conversation_endpoint(
                 "role": m.role,
                 "content": m.content,
                 "intent": m.intent,
+                "metadata": json.loads(m.metadata_json) if m.metadata_json else None,
                 "created_at": m.created_at.isoformat() if m.created_at else None,
             }
             for m in msgs
@@ -206,20 +211,59 @@ async def send_message_endpoint(
     conv = await get_conversation(db, workspace_id, conversation_id)
     if conv.status != "active":
         raise ValidationError_("Restaura la conversación antes de enviar un mensaje.")
-    if body.attachment_ids:
-        raise ValidationError_(
-            "Adjuntar imágenes al chat todavía no está disponible. Usa la Biblioteca para revisarlas."
-        )
-
     intent: SupportedGenerationIntent
     if body.ui_intent in (None, "create_social_post"):
         intent = "create_social_post"
     elif body.ui_intent == "create_short_video_script":
         intent = "create_short_video_script"
+    elif body.ui_intent == "analyze_visual":
+        intent = "analyze_visual"
     else:
         raise ValidationError_("Esta acción todavía no está disponible en el asistente.")
+    if intent == "analyze_visual" and len(body.attachment_ids) != 1:
+        raise ValidationError_("Selecciona exactamente una imagen para analizar.")
+    if intent != "analyze_visual" and body.attachment_ids:
+        raise ValidationError_(
+            "Los adjuntos sólo están disponibles al analizar una imagen en el asistente."
+        )
 
-    user_msg = await add_message(db, conversation_id, "user", body.text, intent=intent)
+    user_msg = await add_message(
+        db,
+        conversation_id,
+        "user",
+        body.text,
+        intent=intent,
+        metadata_json={"attachment_ids": body.attachment_ids} if body.attachment_ids else None,
+    )
+
+    if intent == "analyze_visual":
+        analysis_record, analysis, review_mode = await analyze_authorized_asset(
+            db, workspace_id=workspace_id, asset_id=body.attachment_ids[0]
+        )
+        analysis_data = analysis_to_dict(analysis_record, analysis, review_mode)
+        assistant_msg = await add_message(
+            db,
+            conversation_id,
+            "assistant",
+            analysis.summary,
+            intent="generated_visual_analysis",
+            metadata_json={"analysis": analysis_data},
+        )
+        await db.commit()
+        await db.refresh(analysis_record)
+        analysis_data["created_at"] = (
+            analysis_record.created_at.isoformat() if analysis_record.created_at else None
+        )
+        return {
+            "type": "visual_analysis",
+            "user_message": {"id": user_msg.id, "role": "user", "content": body.text},
+            "assistant_message": {
+                "id": assistant_msg.id,
+                "role": "assistant",
+                "content": analysis.summary,
+            },
+            "analysis": analysis_data,
+        }
 
     biz_repo = SqlBusinessContextRepository(db)
     art_repo = SqlArtifactRepository(db)

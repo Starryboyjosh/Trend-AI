@@ -98,9 +98,10 @@ Returns thread metadata and paginated messages.
 
 `ui_intent` admite `create_social_post` (valor por defecto) y
 `create_short_video_script`. El segundo devuelve un borrador estructurado con
-hook, duración, escenas, texto en pantalla, locución, CTA y caption. Otras
-acciones y adjuntos en el chat se rechazan explícitamente hasta que exista el
-flujo autorizado correspondiente; no se reinterpretan como publicaciones.
+hook, duración, escenas, texto en pantalla, locución, CTA y caption.
+`analyze_visual` exige exactamente un elemento en `attachment_ids`, lo analiza
+con el proveedor de visión autorizado y devuelve una revisión estructurada. Las
+demás acciones se rechazan explícitamente; no se reinterpretan como publicaciones.
 
 ## Generation
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import uuid
 import warnings
 from dataclasses import dataclass
@@ -10,18 +9,16 @@ from io import BytesIO
 from fastapi import APIRouter, Depends, Response, UploadFile
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, Field
-from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.assets.models import Asset, AssetAnalysis, UploadSession
-from app.assets.schemas import AssetAnalysisResult
+from app.assets.analysis_service import analysis_to_dict, analyze_authorized_asset
+from app.assets.models import Asset, UploadSession
 from app.core.config import settings
-from app.core.errors import AppError, NotFoundError, ValidationError_
+from app.core.errors import NotFoundError, ValidationError_
 from app.dependencies import get_db, require_workspace
 from app.providers.factory import get_vision_provider
 from app.providers.storage import get_object_storage_provider
-from app.providers.vision import VisionReviewRequest
 
 router = APIRouter(prefix="/assets", tags=["assets"])
 
@@ -236,58 +233,12 @@ async def analyze_asset_endpoint(
     workspace_id: str = Depends(require_workspace),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    result = await db.execute(
-        select(Asset).where(Asset.id == asset_id, Asset.workspace_id == workspace_id)
-    )
-    asset = result.scalar_one_or_none()
-    if asset is None:
-        raise NotFoundError("Activo")
-
-    provider = get_vision_provider()
-    image_bytes = None
-    if provider.requires_image_content:
-        image_bytes = await get_object_storage_provider().read(key=asset.storage_path)
-    try:
-        analysis = AssetAnalysisResult.model_validate(
-            await provider.analyze(
-                request=VisionReviewRequest(
-                    mime_type=asset.mime_type,
-                    width=asset.width,
-                    height=asset.height,
-                    image_bytes=image_bytes,
-                )
-            )
-        )
-    except PydanticValidationError as exc:
-        raise AppError(
-            "ANALYSIS_INVALID_RESPONSE",
-            "No pudimos validar el resultado del análisis visual. Inténtalo nuevamente.",
-            status_code=502,
-            retryable=True,
-        ) from exc
-    analysis_record = AssetAnalysis(
+    analysis_record, analysis, review_mode = await analyze_authorized_asset(
+        db,
+        workspace_id=workspace_id,
         asset_id=asset_id,
-        provider=provider.provider_name,
-        summary=analysis.summary,
-        strengths_json=json.dumps(analysis.strengths),
-        improvements_json=json.dumps([i.model_dump() for i in analysis.improvements]),
-        revised_copy=analysis.revised_copy,
-        accessibility_notes_json=json.dumps(analysis.accessibility_notes),
+        provider_factory=get_vision_provider,
     )
-    db.add(analysis_record)
     await db.commit()
     await db.refresh(analysis_record)
-
-    return {
-        "id": analysis_record.id,
-        "asset_id": asset_id,
-        "summary": analysis.summary,
-        "strengths": analysis.strengths,
-        "improvements": [i.model_dump() for i in analysis.improvements],
-        "revised_copy": analysis.revised_copy,
-        "accessibility_notes": analysis.accessibility_notes,
-        "review_mode": "technical" if provider.provider_name == "demo" else "visual",
-        "created_at": analysis_record.created_at.isoformat()
-        if analysis_record.created_at
-        else None,
-    }
+    return analysis_to_dict(analysis_record, analysis, review_mode)

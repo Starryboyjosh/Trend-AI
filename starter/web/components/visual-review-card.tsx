@@ -1,23 +1,23 @@
 "use client";
 
-interface Improvement {
+export interface VisualImprovement {
   priority: "high" | "medium" | "low";
   area: string;
   reason: string;
   action: string;
 }
 
-interface Analysis {
+export interface VisualAnalysis {
   id: string;
   summary: string;
   strengths: string[];
-  improvements: Improvement[];
+  improvements: VisualImprovement[];
   revised_copy: string | null;
   accessibility_notes: string[];
 }
 
 interface Props {
-  analysis: Analysis;
+  analysis: VisualAnalysis;
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
