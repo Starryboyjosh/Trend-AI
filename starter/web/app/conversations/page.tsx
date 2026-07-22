@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { AppShell } from "@/components/shell/app-shell";
 import { api, ApiError } from "@/lib/api";
 
 interface ConversationItem {
@@ -108,7 +109,8 @@ export default function ConversationsPage() {
   }, [items, query]);
 
   return (
-    <main style={{ maxWidth: 800, margin: "0 auto", padding: "32px 24px" }}>
+    <AppShell>
+    <main className="app-page app-page--narrow" style={{ maxWidth: 800, margin: "0 auto", padding: "32px 24px" }}>
       <Link
         href="/"
         style={{ color: "var(--primary)", textDecoration: "none" }}
@@ -300,5 +302,6 @@ export default function ConversationsPage() {
         ))}
       </section>
     </main>
+    </AppShell>
   );
 }

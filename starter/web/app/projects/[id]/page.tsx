@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
+import { AppShell } from "@/components/shell/app-shell";
 import type {
   GeneratedArtifact,
   GeneratedShortVideoScript,
@@ -255,7 +256,8 @@ export default function ProjectEditorPage() {
   }
 
   return (
-    <div
+    <AppShell>
+    <main className="app-page app-page--narrow"
       style={{
         maxWidth: 720,
         margin: "0 auto",
@@ -624,7 +626,8 @@ export default function ProjectEditorPage() {
           </p>
         )}
       </section>
-    </div>
+    </main>
+    </AppShell>
   );
 }
 

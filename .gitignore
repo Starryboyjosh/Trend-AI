@@ -20,6 +20,8 @@ uploads/
 storage/
 graphify-out/
 coverage/
+test-results/
+playwright-report/
 *.db
 .ruff_cache/
 test_*.db

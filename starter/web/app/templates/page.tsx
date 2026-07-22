@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { TemplateCard } from "@/components/template-card";
+import { AppShell } from "@/components/shell/app-shell";
 import { api, ApiError } from "@/lib/api";
 import type { Template } from "@/types/template";
 
@@ -132,238 +134,142 @@ export default function TemplatesPage() {
     }
   }
 
+  const visualSources = [
+    "/figma/home/source-15.png",
+    "/figma/home/source-16.png",
+    "/figma/home/source-18.png",
+    "/figma/home/source-19.png",
+    "/figma/home/source-4.jpeg",
+    "/figma/home/source-5.jpeg",
+  ];
+
   return (
-    <div
-      style={{
-        maxWidth: 960,
-        margin: "0 auto",
-        padding: "32px 24px",
-        minHeight: "100vh",
-      }}
-    >
-      <header style={{ marginBottom: 32 }}>
-        <button
-          onClick={() => router.push("/")}
-          style={{
-            background: "none",
-            border: "none",
-            color: "var(--primary)",
-            cursor: "pointer",
-            padding: 0,
-            marginBottom: 8,
-            display: "block",
-          }}
-        >
-          &larr; Volver
-        </button>
-        <h1
-          style={{
-            fontFamily: "var(--font-heading)",
-            fontSize: "1.8rem",
-            margin: 0,
-            color: "var(--foreground)",
-          }}
-        >
-          Plantillas
-        </h1>
-        <p style={{ color: "var(--muted-foreground)", margin: "4px 0 0" }}>
-          Elige una plantilla para empezar tu proyecto.
-        </p>
-      </header>
+    <AppShell>
+      <main className="app-page templates-page">
+        <header className="templates-hero">
+          <p>INSPIRACIÓN PARA TU NEGOCIO</p>
+          <h1>Empieza a diseñar</h1>
+          <span>Elige una idea, edítala y hazla tuya.</span>
+        </header>
 
-      <div
-        style={{
-          display: "flex",
-          gap: 12,
-          marginBottom: 24,
-          flexWrap: "wrap",
-        }}
-      >
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={handleSearchKeyDown}
-          placeholder="Buscar plantillas..."
-          aria-label="Buscar plantillas"
-          style={{
-            flex: 1,
-            minWidth: 200,
-            border: "1px solid var(--border)",
-            borderRadius: "var(--radius-md)",
-            padding: "10px 14px",
-            font: "inherit",
-            background: "var(--input)",
-            color: "var(--foreground)",
-          }}
-        />
-        <select
-          value={platform}
-          onChange={(e) => setPlatform(e.target.value)}
-          aria-label="Filtrar por plataforma"
-          style={{
-            border: "1px solid var(--border)",
-            borderRadius: "var(--radius-md)",
-            padding: "10px 14px",
-            font: "inherit",
-            background: "var(--surface)",
-            color: "var(--foreground)",
-          }}
-        >
-          {PLATFORM_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-        <select
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          aria-label="Filtrar por categoría"
-          style={{
-            border: "1px solid var(--border)",
-            borderRadius: "var(--radius-md)",
-            padding: "10px 14px",
-            font: "inherit",
-            background: "var(--surface)",
-            color: "var(--foreground)",
-          }}
-        >
-          {CATEGORY_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <section
-        style={{ marginBottom: 24 }}
-        aria-labelledby="recommendations-title"
-      >
-        <div
-          style={{
-            display: "flex",
-            gap: 12,
-            alignItems: "center",
-            flexWrap: "wrap",
-          }}
-        >
-          <h2
-            id="recommendations-title"
-            style={{ fontSize: "1rem", margin: 0 }}
+        <div className="template-toolbar">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={handleSearchKeyDown}
+            placeholder="Buscar plantillas..."
+            aria-label="Buscar plantillas"
+          />
+          <select
+            value={platform}
+            onChange={(e) => setPlatform(e.target.value)}
+            aria-label="Filtrar por plataforma"
           >
-            Recomendadas para ti
-          </h2>
-          <button
-            type="button"
-            onClick={loadRecommendations}
-            disabled={recommending}
-            style={{
-              padding: "8px 12px",
-              border: "1px solid var(--border)",
-              borderRadius: "var(--radius-sm)",
-              background: "var(--surface)",
-              color: "var(--foreground)",
-              cursor: recommending ? "not-allowed" : "pointer",
-            }}
+            {PLATFORM_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            aria-label="Filtrar por categoría"
           >
-            {recommending ? "Buscando…" : "Recomendar"}
-          </button>
+            {CATEGORY_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
         </div>
-        {recommendations.length > 0 ? (
-          <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
-            {recommendations.map((template) => (
-              <div
-                key={template.id}
-                style={{
-                  padding: 12,
-                  border: "1px solid var(--border)",
-                  borderRadius: "var(--radius-sm)",
-                  background: "var(--surface)",
-                }}
-              >
-                <strong>{template.title}</strong>
-                <p
-                  style={{
-                    margin: "4px 0 0",
-                    color: "var(--muted-foreground)",
-                    fontSize: "0.85rem",
-                  }}
-                >
-                  {template.rationale}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => handleUseTemplate(template.id)}
-                  disabled={creating !== null}
-                  style={{
-                    marginTop: 10,
-                    padding: "7px 10px",
-                    border: "1px solid var(--border)",
-                    borderRadius: "var(--radius-sm)",
-                    background: "var(--surface)",
-                    color: "var(--foreground)",
-                    cursor: creating !== null ? "not-allowed" : "pointer",
-                    opacity: creating !== null ? 0.65 : 1,
-                  }}
-                >
-                  {creating === template.id ? "Creando…" : "Usar esta plantilla"}
-                </button>
-              </div>
+
+        <section
+          className="template-recommendations"
+          aria-labelledby="recommendations-title"
+        >
+          <div className="section-heading">
+            <h2 id="recommendations-title">Recomendadas para ti</h2>
+            <button
+              type="button"
+              onClick={loadRecommendations}
+              disabled={recommending}
+              className="button-secondary"
+            >
+              {recommending ? "Buscando…" : "Recomendar"}
+            </button>
+          </div>
+          {recommendations.length > 0 ? (
+            <div className="recommendation-list">
+              {recommendations.map((template) => (
+                <div key={template.id} className="recommendation-item">
+                  <strong>{template.title}</strong>
+                  <p>{template.rationale}</p>
+                  <button
+                    type="button"
+                    onClick={() => handleUseTemplate(template.id)}
+                    disabled={creating !== null}
+                    className="button-ghost"
+                  >
+                    {creating === template.id
+                      ? "Creando…"
+                      : "Usar esta plantilla"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </section>
+
+        {error && (
+          <div role="alert" className="page-error">
+            {error}
+          </div>
+        )}
+
+        {loading ? (
+          <p className="page-intro">Cargando plantillas...</p>
+        ) : templates.length === 0 ? (
+          <div className="templates-empty">
+            <p>No se encontraron plantillas con esos filtros.</p>
+          </div>
+        ) : (
+          <div className="template-grid">
+            {templates.map((t, index) => (
+              <TemplateCard
+                key={t.id}
+                template={t}
+                onUse={handleUseTemplate}
+                using={creating === t.id}
+                previewSrc={visualSources[index % visualSources.length]}
+              />
             ))}
           </div>
-        ) : null}
-      </section>
+        )}
 
-      {error && (
-        <div
-          role="alert"
-          style={{
-            padding: "12px 16px",
-            background: "#fef2f2",
-            color: "#b91c1c",
-            borderRadius: "var(--radius-md)",
-            marginBottom: 16,
-            border: "1px solid #fecaca",
-          }}
-        >
-          {error}
-        </div>
-      )}
-
-      {loading ? (
-        <p style={{ color: "var(--muted-foreground)" }}>
-          Cargando plantillas...
-        </p>
-      ) : templates.length === 0 ? (
-        <div
-          style={{
-            textAlign: "center",
-            padding: 48,
-            color: "var(--muted-foreground)",
-          }}
-        >
-          <p>No se encontraron plantillas con esos filtros.</p>
-        </div>
-      ) : (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
-            gap: 20,
-          }}
-        >
-          {templates.map((t) => (
-            <TemplateCard
-              key={t.id}
-              template={t}
-              onUse={handleUseTemplate}
-              using={creating === t.id}
-            />
-          ))}
-        </div>
-      )}
-    </div>
+        <section className="tiktok-inspiration" aria-labelledby="tiktok-title">
+          <p>Descubre nuevas ideas</p>
+          <h2 id="tiktok-title">
+            Explora videos de TikTok listos para editar y publicar
+          </h2>
+          <div className="tiktok-grid">
+            {[1, 2, 3, 4].map((item) => (
+              <article key={item}>
+                <Image
+                  src={`/figma/templates/tiktok-${item}.jpeg`}
+                  alt="Inspiración visual para video corto"
+                  fill
+                  sizes="(max-width: 639px) 50vw, 25vw"
+                />
+                <button type="button" onClick={() => router.push("/assistant")}>
+                  Editar plantilla
+                </button>
+              </article>
+            ))}
+          </div>
+        </section>
+      </main>
+    </AppShell>
   );
 }

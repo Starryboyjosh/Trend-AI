@@ -5,6 +5,7 @@ import { Suspense, useState, useCallback, useEffect, useRef, type ChangeEvent } 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Composer } from "@/components/assistant/composer";
 import { MessageList } from "@/components/assistant/message-list";
+import { AppShell } from "@/components/shell/app-shell";
 import { api, ApiError } from "@/lib/api";
 import type { GeneratedArtifact, GeneratedSocialPost } from "@/types/artifact";
 import type { VisualAnalysis } from "@/components/visual-review-card";
@@ -280,41 +281,17 @@ function AssistantContent() {
   }
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100vh",
-        maxWidth: 800,
-        margin: "0 auto",
-        background: "var(--background)",
-      }}
-    >
-      <header
-        style={{
-          padding: "12px 16px",
-          borderBottom: "1px solid var(--border)",
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-        }}
-      >
-        <span
-          style={{
-            fontFamily: "var(--font-heading)",
-            fontWeight: 700,
-            fontSize: "1.1rem",
-          }}
-        >
-          Asistente de Contenido
-        </span>
+    <AppShell>
+      <section className="assistant-workspace" aria-label="Asistente de contenido">
+      <header className="assistant-header">
+        <div>
+          <p className="eyebrow">ESTUDIO CREATIVO</p>
+          <h1>¿Qué quieres crear hoy?</h1>
+        </div>
+        <div className="assistant-header-actions">
         <Link
           href="/conversations"
-          style={{
-            color: "var(--primary)",
-            fontSize: "0.85rem",
-            marginLeft: "auto",
-          }}
+          className="button-ghost"
         >
           Conversaciones
         </Link>
@@ -327,14 +304,7 @@ function AssistantContent() {
             )
           }
           disabled={loading || !conversationId}
-          style={{
-            border: "1px solid var(--border)",
-            borderRadius: "var(--radius-md)",
-            background: "var(--surface)",
-            color: "var(--foreground)",
-            padding: "7px 10px",
-            cursor: loading || !conversationId ? "not-allowed" : "pointer",
-          }}
+          className="button-secondary"
         >
           Crear guion
         </button>
@@ -344,32 +314,26 @@ function AssistantContent() {
           accept="image/jpeg,image/png,image/webp"
           onChange={handleVisualUpload}
           disabled={loading || uploadingVisual || !conversationId}
-          style={{ display: "none" }}
+          className="visually-hidden"
           aria-label="Subir imagen para analizar"
         />
         <button
           type="button"
           onClick={() => visualFileRef.current?.click()}
           disabled={loading || uploadingVisual || !conversationId}
-          style={{
-            border: "1px solid var(--border)",
-            borderRadius: "var(--radius-md)",
-            background: "var(--surface)",
-            color: "var(--foreground)",
-            padding: "7px 10px",
-            cursor: loading || uploadingVisual || !conversationId ? "not-allowed" : "pointer",
-          }}
+          className="button-secondary"
         >
           {uploadingVisual ? "Subiendo…" : "Analizar imagen"}
         </button>
         {error && (
           <span
             role="alert"
-            style={{ fontSize: "0.8rem", color: "var(--ht-danger)" }}
+            className="assistant-error"
           >
             {error}
           </span>
         )}
+        </div>
       </header>
 
       <MessageList
@@ -385,7 +349,8 @@ function AssistantContent() {
         disabled={loading || !conversationId}
         draftKey={conversationId || undefined}
       />
-    </div>
+      </section>
+    </AppShell>
   );
 }
 

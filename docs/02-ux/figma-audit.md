@@ -3,17 +3,19 @@ id: UX-FIGMA-001
 kind: ux_audit
 status: accepted
 inputs:
-  - references/figma/01-validation-survey.png
-  - references/figma/02-chat-concepts.png
-  - references/figma/03-chat-generation.png
-  - references/figma/04-chat-review.png
-  - references/figma/05-settings-library.png
-  - references/figma/06-login.png
-  - references/figma/07-home-projects.png
-  - references/figma/08-templates-landing.png
+  - references/figma/README.md
+  - https://www.figma.com/design/H8wgItUFi0j9sWZ5qcvp6a/Carrusel--Community-
 ---
 
 # Figma audit and implementation alignment
+
+## Source of truth
+
+The live Figma file linked from `references/figma/README.md` is the visual
+source of truth. The previous exported screenshots were intentionally removed;
+they must not be reintroduced as a competing visual specification. This audit
+remains the product-normalization layer: where the Figma file and product
+contracts differ, follow the product contracts and record a design decision.
 
 ## Overall assessment
 

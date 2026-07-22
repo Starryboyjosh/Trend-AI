@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { AppShell } from "@/components/shell/app-shell";
 import { api, ApiError } from "@/lib/api";
 
 interface ProjectItem {
@@ -85,7 +86,8 @@ export default function ProjectsPage() {
   }
 
   return (
-    <main style={{ maxWidth: 960, margin: "0 auto", padding: "32px 24px" }}>
+    <AppShell>
+    <main className="app-page" style={{ maxWidth: 960, margin: "0 auto", padding: "32px 24px" }}>
       <Link
         href="/"
         style={{ color: "var(--primary)", textDecoration: "none" }}
@@ -222,5 +224,6 @@ export default function ProjectsPage() {
         ))}
       </section>
     </main>
+    </AppShell>
   );
 }

@@ -1,14 +1,15 @@
-# Supplied Figma screenshots
+# Figma project reference
 
-These images are reference inputs supplied by the user. They are included so design and coding agents can compare implementation decisions with the original concept.
+Live Figma source for UI and layout work.
 
-1. Validation survey.
-2. Chat and navigation concepts.
-3. Content generation conversations.
-4. Template and visual-review conversations.
-5. Settings, search, templates, and library.
-6. Login.
-7. Home and projects.
-8. Template exploration and public landing.
+- File: [Carrusel](https://www.figma.com/design/H8wgItUFi0j9sWZ5qcvp6a/Carrusel--Community-?node-id=0-1&p=f&t=MqBOztVKCkT7LwJq-0)
+- File key: `H8wgItUFi0j9sWZ5qcvp6a`
 
-Do not treat placeholder gray boxes as finished component specifications. Use `docs/02-ux/` and `docs/01-brand/` as the implementation source of truth.
+Use the Figma file as the editable visual source. For implementation details,
+rely on `docs/02-ux/` and `docs/01-brand/`.
+
+The operational sequence, route batches, and validation gate live in
+[`docs/06-implementation/figma-implementation-plan.md`](../../docs/06-implementation/figma-implementation-plan.md).
+
+Do not substitute screenshots for the live file. Start each visual task from a
+Figma file or node URL so the agent can inspect the structured design context.

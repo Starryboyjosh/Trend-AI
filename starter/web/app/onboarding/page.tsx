@@ -214,7 +214,7 @@ export default function OnboardingPage() {
   if (!hydrated) return null;
 
   return (
-    <div
+    <main className="onboarding-page"
       style={{
         maxWidth: 640,
         margin: "0 auto",
@@ -354,6 +354,6 @@ export default function OnboardingPage() {
           Usa <kbd>Enter</kbd> para avanzar · <kbd>Esc</kbd> para retroceder
         </p>
       </form>
-    </div>
+    </main>
   );
 }

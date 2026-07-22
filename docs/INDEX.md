@@ -60,6 +60,7 @@ This index is the human and agent entry point.
 - [Test strategy](06-implementation/test-strategy.md)
 - [Deployment](06-implementation/deployment.md)
 - [Graphify preparation](06-implementation/graphify-ready.md)
+- [Figma implementation plan](06-implementation/figma-implementation-plan.md)
 
 ## Demo and sources
 

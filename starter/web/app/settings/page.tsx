@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, ApiError } from "@/lib/api";
 import { StepBrand } from "@/components/onboarding/step-brand";
+import { AppShell } from "@/components/shell/app-shell";
 import type { Tone } from "@/types/brand";
 
 interface Business {
@@ -138,7 +139,8 @@ export default function SettingsPage() {
   }
 
   return (
-    <main style={{ maxWidth: 680, margin: "0 auto", padding: "32px 24px" }}>
+    <AppShell>
+    <main className="app-page app-page--narrow" style={{ maxWidth: 680, margin: "0 auto", padding: "32px 24px" }}>
       <Link
         href="/"
         style={{ color: "var(--primary)", textDecoration: "none" }}
@@ -229,5 +231,6 @@ export default function SettingsPage() {
         </div>
       )}
     </main>
+    </AppShell>
   );
 }

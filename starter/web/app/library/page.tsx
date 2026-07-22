@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { VisualReviewCard } from "@/components/visual-review-card";
+import { AppShell } from "@/components/shell/app-shell";
 import { api, ApiError } from "@/lib/api";
 
 interface AssetItem {
@@ -115,7 +116,8 @@ export default function LibraryPage() {
   }
 
   return (
-    <div
+    <AppShell>
+    <main className="app-page app-page--narrow"
       style={{
         maxWidth: 800,
         margin: "0 auto",
@@ -334,6 +336,7 @@ export default function LibraryPage() {
           <VisualReviewCard analysis={analysisResult} />
         </div>
       )}
-    </div>
+    </main>
+    </AppShell>
   );
 }
