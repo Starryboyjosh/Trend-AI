@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useCallback, useEffect } from "react";
+import { Suspense, useState, useCallback, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Composer } from "@/components/assistant/composer";
 import { MessageList } from "@/components/assistant/message-list";
@@ -29,7 +29,7 @@ interface SendResult {
   artifact_id?: string;
 }
 
-export default function AssistantPage() {
+function AssistantContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -251,5 +251,13 @@ export default function AssistantPage() {
       />
       <Composer onSend={handleSend} disabled={loading || !conversationId} />
     </div>
+  );
+}
+
+export default function AssistantPage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100vh" }}>Iniciando…</div>}>
+      <AssistantContent />
+    </Suspense>
   );
 }

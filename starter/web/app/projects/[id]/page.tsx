@@ -99,6 +99,30 @@ export default function ProjectEditorPage() {
     }
   }
 
+  async function handleExport() {
+    if (!project) return;
+    setError("");
+    try {
+      const payload = await api.projects.export(project.id);
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${project.name.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "proyecto"}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setSuccess("Exportación preparada ✓");
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "No pudimos exportar el proyecto."
+      );
+    }
+  }
+
   if (!project) {
     return (
       <div
@@ -175,6 +199,20 @@ export default function ProjectEditorPage() {
         >
           {project.status === "active" ? "Activo" : "Archivado"}
         </span>
+        <button
+          type="button"
+          onClick={handleExport}
+          style={{
+            padding: "8px 12px",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius-sm)",
+            background: "var(--surface)",
+            color: "var(--foreground)",
+            cursor: "pointer",
+          }}
+        >
+          Exportar JSON
+        </button>
       </header>
 
       {error && (

@@ -36,6 +36,10 @@ export default function TemplatesPage() {
   const [category, setCategory] = useState("");
   const [creating, setCreating] = useState<string | null>(null);
   const [businessId, setBusinessId] = useState<string | null>(null);
+  const [recommendations, setRecommendations] = useState<
+    Array<Template & { rationale: string }>
+  >([]);
+  const [recommending, setRecommending] = useState(false);
 
   useEffect(() => {
     const loadBusiness = async () => {
@@ -105,6 +109,28 @@ export default function TemplatesPage() {
     },
     [businessId, router]
   );
+
+  async function loadRecommendations() {
+    setRecommending(true);
+    setError("");
+    try {
+      setRecommendations(
+        (await api.templates.recommend({
+          platform: platform || "instagram",
+          objective: "sales",
+          category: category || undefined,
+        })) as unknown as Array<Template & { rationale: string }>
+      );
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : "No pudimos recomendar plantillas."
+      );
+    } finally {
+      setRecommending(false);
+    }
+  }
 
   return (
     <div
@@ -210,6 +236,68 @@ export default function TemplatesPage() {
           ))}
         </select>
       </div>
+
+      <section
+        style={{ marginBottom: 24 }}
+        aria-labelledby="recommendations-title"
+      >
+        <div
+          style={{
+            display: "flex",
+            gap: 12,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <h2
+            id="recommendations-title"
+            style={{ fontSize: "1rem", margin: 0 }}
+          >
+            Recomendadas para ti
+          </h2>
+          <button
+            type="button"
+            onClick={loadRecommendations}
+            disabled={recommending}
+            style={{
+              padding: "8px 12px",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-sm)",
+              background: "var(--surface)",
+              color: "var(--foreground)",
+              cursor: recommending ? "not-allowed" : "pointer",
+            }}
+          >
+            {recommending ? "Buscando…" : "Recomendar"}
+          </button>
+        </div>
+        {recommendations.length > 0 ? (
+          <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+            {recommendations.map((template) => (
+              <div
+                key={template.id}
+                style={{
+                  padding: 12,
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius-sm)",
+                  background: "var(--surface)",
+                }}
+              >
+                <strong>{template.title}</strong>
+                <p
+                  style={{
+                    margin: "4px 0 0",
+                    color: "var(--muted-foreground)",
+                    fontSize: "0.85rem",
+                  }}
+                >
+                  {template.rationale}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </section>
 
       {error && (
         <div
