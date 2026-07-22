@@ -46,7 +46,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ruff pytest pytest-asyncio fastapi uvicorn pydantic sqlalchemy alembic psycopg[binary] redis httpx
+          pip install ruff pytest pytest-asyncio fastapi uvicorn pydantic sqlalchemy alembic psycopg[binary] redis httpx boto3 pillow
 
       - name: Run ruff check
         run: python -m ruff check starter/backend/

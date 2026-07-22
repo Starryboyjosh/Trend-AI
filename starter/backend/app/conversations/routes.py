@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from typing import Literal
+
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.conversations.models import ArtifactVersion, GeneratedArtifact
+from app.conversations.models import ArtifactVersion, Conversation, GeneratedArtifact, Message
 from app.conversations.repository import (
     SqlArtifactRepository,
     SqlBusinessContextRepository,
@@ -15,7 +17,7 @@ from app.conversations.repository import (
     get_messages,
     list_conversations,
 )
-from app.core.errors import AppError, NotFoundError
+from app.core.errors import AppError, NotFoundError, ValidationError_
 from app.dependencies import get_db, require_workspace
 from app.domain.models import (
     GeneratedSocialPost,
@@ -47,6 +49,11 @@ class SendMessageRequest(BaseModel):
     attachment_ids: list[str] = Field(default_factory=list, max_length=5)
 
 
+class UpdateConversationRequest(BaseModel):
+    title: str | None = Field(None, min_length=1, max_length=240)
+    status: Literal["active", "archived"] | None = None
+
+
 @router.post("", status_code=201)
 async def create_conversation_endpoint(
     body: CreateConversationRequest,
@@ -68,10 +75,31 @@ async def create_conversation_endpoint(
 @router.get("")
 async def list_conversations_endpoint(
     business_id: str | None = None,
+    status: Literal["active", "archived"] = "active",
+    search: str | None = Query(None, min_length=1, max_length=120),
     workspace_id: str = Depends(require_workspace),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
-    convs = await list_conversations(db, workspace_id, business_id)
+    convs = await list_conversations(db, workspace_id, business_id, status, search)
+    latest_message = (
+        select(Message.content)
+        .where(Message.conversation_id == Conversation.id)
+        .order_by(Message.created_at.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+    # Load the compact history card data in one query, rather than one message query per thread.
+    history_result = (
+        await db.execute(
+            select(Conversation.id, latest_message.label("last_message")).where(
+                Conversation.id.in_([c.id for c in convs]),
+                Conversation.workspace_id == workspace_id,
+            )
+        )
+        if convs
+        else None
+    )
+    last_messages = {row.id: row.last_message for row in history_result} if history_result else {}
     return [
         {
             "id": c.id,
@@ -80,9 +108,32 @@ async def list_conversations_endpoint(
             "status": c.status,
             "created_at": c.created_at.isoformat() if c.created_at else None,
             "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+            "last_message": last_messages.get(c.id),
         }
         for c in convs
     ]
+
+
+@router.patch("/{conversation_id}")
+async def update_conversation_endpoint(
+    conversation_id: str,
+    body: UpdateConversationRequest,
+    workspace_id: str = Depends(require_workspace),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    conversation = await get_conversation(db, workspace_id, conversation_id)
+    if body.title is not None:
+        conversation.title = body.title
+    if body.status is not None:
+        conversation.status = body.status
+    await db.commit()
+    await db.refresh(conversation)
+    return {
+        "id": conversation.id,
+        "title": conversation.title,
+        "status": conversation.status,
+        "updated_at": conversation.updated_at.isoformat() if conversation.updated_at else None,
+    }
 
 
 @router.get("/{conversation_id}")
@@ -119,6 +170,8 @@ async def send_message_endpoint(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     conv = await get_conversation(db, workspace_id, conversation_id)
+    if conv.status != "active":
+        raise ValidationError_("Restaura la conversación antes de enviar un mensaje.")
 
     user_msg = await add_message(
         db, conversation_id, "user", body.text, intent="create_social_post"

@@ -71,7 +71,14 @@ Create or replace approved brand profile version.
 
 ### `GET /conversations`
 
-Filters: business, cursor, search, archived.
+Filters: `business_id`, `status` (`active` or `archived`) and `search`.
+Each row includes a compact `last_message` preview.
+
+### `PATCH /conversations/{conversation_id}`
+
+Renames a conversation or changes its status between `active` and `archived`.
+The operation is workspace-authorized and archived conversations reject new messages
+until restored.
 
 ### `GET /conversations/{conversation_id}`
 
@@ -138,7 +145,9 @@ Returns preview and editable slots.
 
 ### `POST /assets/uploads`
 
-Request upload session and signed target.
+Request an upload session. The current API finalizes through its protected
+endpoint; a storage provider may use the same session to implement a direct
+upload target later.
 
 ### `POST /assets/uploads/{upload_id}/complete`
 
@@ -151,6 +160,11 @@ Run visual review.
 ### `GET /assets`
 
 List authorized library assets.
+
+### `GET /assets/{asset_id}/content`
+
+Streams the authorized image with a private, short-lived cache policy. Object
+storage keys and permanent public URLs are never exposed to the browser.
 
 ## Feedback
 

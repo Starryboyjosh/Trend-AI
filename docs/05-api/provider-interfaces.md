@@ -39,10 +39,16 @@ Providers receive a bounded `SocialPostModelRequest`, never a database session, 
 
 ```python
 class ObjectStorageProvider(Protocol):
-    async def create_upload(self, key: str, content_type: str) -> UploadTarget: ...
-    async def create_read_url(self, key: str, expires_seconds: int) -> str: ...
-    async def delete(self, key: str) -> None: ...
+    async def put(self, *, key: str, content: bytes, content_type: str) -> None: ...
+    async def read(self, *, key: str) -> bytes: ...
+    async def delete(self, *, key: str) -> None: ...
 ```
+
+The application generates opaque workspace-scoped keys and authorizes every
+content read before calling the provider. `LocalObjectStorageProvider` is for
+development only; production uses the `s3` adapter configured through the
+object-storage environment variables. A future direct-upload implementation
+may add signed upload targets without exposing permanent read URLs.
 
 ## Template catalog provider
 

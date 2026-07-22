@@ -57,9 +57,13 @@ Output:
 
 ## SKILL-006 `analyze_visual_asset`
 
-Input: signed asset reference, business context, intended platform.
+Input: an authorized, short-lived asset reference, business context, intended platform.
 
 Output: `AssetAnalysis` schema.
+
+In demo mode, this skill returns only verified technical metadata and explicit
+human-review prompts. It must not claim to have interpreted the image. A vision
+provider can replace that evaluator while preserving the output schema.
 
 The provider must not receive a permanent public URL.
 

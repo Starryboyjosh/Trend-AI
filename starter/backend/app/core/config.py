@@ -13,6 +13,8 @@ class Settings:
     object_storage_access_key: str = environ.get("OBJECT_STORAGE_ACCESS_KEY", "")
     object_storage_secret_key: str = environ.get("OBJECT_STORAGE_SECRET_KEY", "")
     object_storage_bucket: str = environ.get("OBJECT_STORAGE_BUCKET", "hitrendy")
+    object_storage_provider: str = environ.get("OBJECT_STORAGE_PROVIDER", "local")
+    object_storage_local_dir: str = environ.get("OBJECT_STORAGE_LOCAL_DIR", "./storage")
     ai_provider: str = environ.get("AI_PROVIDER", "demo")
     ai_model: str = environ.get("AI_MODEL", "demo-v1")
     ai_base_url: str = environ.get("AI_BASE_URL", "")
@@ -23,6 +25,8 @@ class Settings:
     session_ttl_hours: int = int(environ.get("SESSION_TTL_HOURS", "168"))
     allowed_origins: str = environ.get("ALLOWED_ORIGINS", "http://localhost:3000")
     max_upload_mb: int = int(environ.get("MAX_UPLOAD_MB", "10"))
+    max_upload_pixels: int = int(environ.get("MAX_UPLOAD_PIXELS", "25_000_000"))
+    max_upload_expansion_ratio: int = int(environ.get("MAX_UPLOAD_EXPANSION_RATIO", "200"))
 
     @property
     def is_demo(self) -> bool:

@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useCallback, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Composer } from "@/components/assistant/composer";
 import { MessageList } from "@/components/assistant/message-list";
 import { api, ApiError } from "@/lib/api";
@@ -30,6 +31,7 @@ interface SendResult {
 
 export default function AssistantPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -39,7 +41,7 @@ export default function AssistantPage() {
   useEffect(() => {
     initConversation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [searchParams]);
 
   async function initConversation() {
     setInitializing(true);
@@ -48,10 +50,20 @@ export default function AssistantPage() {
       const convs = await api.conversations.list();
 
       if (convs.length === 0) {
-        router.push("/onboarding");
+        const businesses = await api.businesses.list();
+        if (businesses.length === 0) {
+          router.push("/onboarding");
+          return;
+        }
+        setError("Crea una conversación para empezar a generar contenido.");
         return;
       }
-      const convId = convs[0].id as string;
+      const requestedId = searchParams.get("conversation");
+      const convId = (
+        convs.some((conversation) => conversation.id === requestedId)
+          ? requestedId
+          : convs[0].id
+      ) as string;
       setConversationId(convId);
 
       const full = (await api.conversations.get(convId)) as unknown as ConvData;
@@ -214,6 +226,16 @@ export default function AssistantPage() {
         >
           Asistente de Contenido
         </span>
+        <Link
+          href="/conversations"
+          style={{
+            color: "var(--primary)",
+            fontSize: "0.85rem",
+            marginLeft: "auto",
+          }}
+        >
+          Conversaciones
+        </Link>
         {error && (
           <span style={{ fontSize: "0.8rem", color: "var(--ht-danger)" }}>
             {error}

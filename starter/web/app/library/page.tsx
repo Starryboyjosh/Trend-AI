@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { VisualReviewCard } from "@/components/visual-review-card";
 import { api, ApiError } from "@/lib/api";
@@ -12,6 +13,8 @@ interface AssetItem {
   file_size_bytes: number;
   asset_type: string;
   status: string;
+  width: number | null;
+  height: number | null;
   created_at: string | null;
 }
 
@@ -149,7 +152,7 @@ export default function LibraryPage() {
         <input
           ref={fileRef}
           type="file"
-          accept="image/jpeg,image/png,image/webp,image/gif"
+          accept="image/jpeg,image/png,image/webp"
           onChange={handleUpload}
           disabled={uploading}
           style={{ display: "none" }}
@@ -176,7 +179,7 @@ export default function LibraryPage() {
             marginTop: 8,
           }}
         >
-          JPEG, PNG, WebP o GIF
+          JPEG, PNG o WebP. Máximo 10 MB.
         </p>
       </div>
 
@@ -219,23 +222,60 @@ export default function LibraryPage() {
                 border: "1px solid var(--border)",
                 borderRadius: "var(--radius-md)",
                 display: "flex",
+                gap: 16,
                 justifyContent: "space-between",
                 alignItems: "center",
+                flexWrap: "wrap",
               }}
             >
-              <div>
-                <strong style={{ color: "var(--foreground)" }}>
-                  {asset.original_name}
-                </strong>
-                <span
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  minWidth: 0,
+                }}
+              >
+                <Image
+                  src={api.assets.contentUrl(asset.id)}
+                  alt={`Vista previa de ${asset.original_name}`}
+                  width={56}
+                  height={56}
+                  unoptimized
                   style={{
-                    marginLeft: 12,
-                    fontSize: "0.8rem",
-                    color: "var(--muted-foreground)",
+                    width: 56,
+                    height: 56,
+                    objectFit: "cover",
+                    flexShrink: 0,
+                    borderRadius: "var(--radius-sm)",
+                    background: "var(--muted)",
                   }}
-                >
-                  {formatSize(asset.file_size_bytes)}
-                </span>
+                />
+                <div style={{ minWidth: 0 }}>
+                  <strong
+                    style={{
+                      color: "var(--foreground)",
+                      display: "block",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                    title={asset.original_name}
+                  >
+                    {asset.original_name}
+                  </strong>
+                  <span
+                    style={{
+                      fontSize: "0.8rem",
+                      color: "var(--muted-foreground)",
+                    }}
+                  >
+                    {formatSize(asset.file_size_bytes)}
+                    {asset.width && asset.height
+                      ? ` · ${asset.width} × ${asset.height} px`
+                      : ""}
+                  </span>
+                </div>
               </div>
               <button
                 type="button"
@@ -261,6 +301,11 @@ export default function LibraryPage() {
 
       {analysisResult && (
         <div style={{ marginTop: 32 }}>
+          <p style={{ color: "var(--muted-foreground)", fontSize: "0.85rem" }}>
+            Esta revisión local confirma metadatos técnicos. Para
+            recomendaciones visuales sobre composición, contraste o texto se
+            requiere un proveedor de visión configurado.
+          </p>
           <VisualReviewCard
             analysis={
               analysisResult as unknown as {

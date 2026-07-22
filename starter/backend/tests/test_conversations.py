@@ -59,7 +59,7 @@ async def test_create_conversation(client: AsyncClient, business_id: str) -> Non
 
 @pytest.mark.asyncio
 async def test_list_conversations(client: AsyncClient, business_id: str) -> None:
-    await client.post(
+    first = await client.post(
         "/api/v1/conversations",
         json={"business_id": business_id, "title": "Conversación 1"},
         headers={"X-Workspace-Id": WORKSPACE_ID},
@@ -75,6 +75,15 @@ async def test_list_conversations(client: AsyncClient, business_id: str) -> None
     )
     assert resp.status_code == 200
     assert len(resp.json()) >= 2
+    first_id = first.json()["id"]
+    await client.post(
+        f"/api/v1/conversations/{first_id}/messages",
+        json={"text": "Mensaje que debe aparecer en el historial"},
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    response = await client.get("/api/v1/conversations", headers={"X-Workspace-Id": WORKSPACE_ID})
+    row = next(item for item in response.json() if item["id"] == first_id)
+    assert row["last_message"] == "Mensaje que debe aparecer en el historial"
 
 
 @pytest.mark.asyncio
@@ -141,3 +150,58 @@ async def test_conversation_access_rejected_wrong_workspace(
         headers={"X-Workspace-Id": "ws_other"},
     )
     assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_archive_and_restore_conversation(client: AsyncClient, business_id: str) -> None:
+    created = await client.post(
+        "/api/v1/conversations",
+        json={"business_id": business_id, "title": "Para archivar"},
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    conversation_id = created.json()["id"]
+
+    archived = await client.patch(
+        f"/api/v1/conversations/{conversation_id}",
+        json={"status": "archived"},
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    assert archived.status_code == 200
+    assert archived.json()["status"] == "archived"
+
+    message_response = await client.post(
+        f"/api/v1/conversations/{conversation_id}/messages",
+        json={"text": "No debe generar contenido"},
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    assert message_response.status_code == 422
+
+    active = await client.get("/api/v1/conversations", headers={"X-Workspace-Id": WORKSPACE_ID})
+    assert conversation_id not in {item["id"] for item in active.json()}
+    archived_list = await client.get(
+        "/api/v1/conversations?status=archived", headers={"X-Workspace-Id": WORKSPACE_ID}
+    )
+    assert conversation_id in {item["id"] for item in archived_list.json()}
+
+    restored = await client.patch(
+        f"/api/v1/conversations/{conversation_id}",
+        json={"status": "active"},
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    assert restored.status_code == 200
+    assert restored.json()["status"] == "active"
+
+
+@pytest.mark.asyncio
+async def test_archive_rejects_wrong_workspace(client: AsyncClient, business_id: str) -> None:
+    created = await client.post(
+        "/api/v1/conversations",
+        json={"business_id": business_id, "title": "Privada"},
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    response = await client.patch(
+        f"/api/v1/conversations/{created.json()['id']}",
+        json={"status": "archived"},
+        headers={"X-Workspace-Id": "ws_other"},
+    )
+    assert response.status_code == 403

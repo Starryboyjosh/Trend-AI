@@ -17,6 +17,7 @@ dist/
 
 # Generated assets
 uploads/
+storage/
 graphify-out/
 coverage/
 *.db

@@ -37,10 +37,11 @@ related: [NFR-002, NFR-003]
 ### Files
 
 - Allow only explicit media types.
-- Check actual file signature.
+- Decode and verify the actual image format; never trust the multipart MIME type.
 - Limit file size, dimensions, and decompression ratio.
 - Never use user-supplied filenames as storage paths.
-- Serve through signed URLs with short expiration.
+- Keep object keys opaque and authorize every read through a private endpoint
+  (or an equivalently short-lived signed URL).
 - Strip unnecessary metadata where policy requires it.
 
 ### LLM boundary
@@ -71,6 +72,7 @@ related: [NFR-002, NFR-003]
 
 - User A cannot retrieve User B’s project by ID.
 - SVG and executable uploads are rejected in MVP.
+- A malformed image with a valid-looking header is rejected.
 - Oversized images are rejected before provider call.
 - Prompt content cannot invoke an unauthorized tool.
 - Provider key never appears in browser bundle or API response.

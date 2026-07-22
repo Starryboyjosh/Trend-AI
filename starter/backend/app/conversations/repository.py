@@ -59,14 +59,20 @@ async def get_conversation(
 
 
 async def list_conversations(
-    db: AsyncSession, workspace_id: str, business_id: str | None = None
+    db: AsyncSession,
+    workspace_id: str,
+    business_id: str | None = None,
+    status: str = "active",
+    search: str | None = None,
 ) -> list[Conversation]:
     query = select(Conversation).where(
         Conversation.workspace_id == workspace_id,
-        Conversation.status == "active",
+        Conversation.status == status,
     )
     if business_id:
         query = query.where(Conversation.business_id == business_id)
+    if search:
+        query = query.where(Conversation.title.ilike(f"%{search}%"))
     query = query.order_by(Conversation.updated_at.desc())
     result = await db.execute(query)
     return list(result.scalars().all())

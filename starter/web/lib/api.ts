@@ -70,11 +70,23 @@ export const api = {
         body: JSON.stringify(data),
       });
     },
-    list(): Promise<Array<Record<string, unknown>>> {
-      return request(`${BASE}/conversations`);
+    list(
+      params?: Record<string, string>
+    ): Promise<Array<Record<string, unknown>>> {
+      const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+      return request(`${BASE}/conversations${qs}`);
     },
     get(id: string) {
       return request<Record<string, unknown>>(`${BASE}/conversations/${id}`);
+    },
+    update(
+      id: string,
+      data: { title?: string; status?: "active" | "archived" }
+    ) {
+      return request<Record<string, unknown>>(`${BASE}/conversations/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      });
     },
     sendMessage(conversationId: string, text: string) {
       return request<Record<string, unknown>>(
@@ -126,6 +138,9 @@ export const api = {
     },
     get(id: string) {
       return request<Record<string, unknown>>(`${BASE}/assets/${id}`);
+    },
+    contentUrl(id: string) {
+      return `${BASE}/assets/${id}/content`;
     },
     async upload(file: File): Promise<Record<string, unknown>> {
       const init = await request<{ upload_id: string; upload_url: string }>(

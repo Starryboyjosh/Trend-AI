@@ -113,6 +113,20 @@ export default function Home() {
             Asistente
           </Link>
           <Link
+            href="/conversations"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              padding: "10px 12px",
+              color: "var(--muted-foreground)",
+              borderRadius: "var(--radius-sm)",
+              textDecoration: "none",
+            }}
+          >
+            Conversaciones
+          </Link>
+          <Link
             href="/templates"
             style={{
               display: "flex",
