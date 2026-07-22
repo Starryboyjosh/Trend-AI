@@ -20,7 +20,8 @@ status: proposed
 - E2-T2 Workspace and membership model.
 - E2-T3 Business profile endpoints.
 - E2-T4 Multi-step onboarding UI.
-- E2-T5 Brand profile editing.
+- E2-T5 Brand profile editing. **Implemented:** settings now edits business
+  context and the validated brand profile used by generation.
 
 ## Epic E3 — Assistant
 
