@@ -7,7 +7,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.conversations.models import ArtifactVersion, Conversation, GeneratedArtifact, Message
+from app.conversations.models import (
+    ArtifactFeedback,
+    ArtifactVersion,
+    Conversation,
+    GeneratedArtifact,
+    Message,
+)
 from app.conversations.repository import (
     SqlArtifactRepository,
     SqlBusinessContextRepository,
@@ -52,6 +58,32 @@ class SendMessageRequest(BaseModel):
 class UpdateConversationRequest(BaseModel):
     title: str | None = Field(None, min_length=1, max_length=240)
     status: Literal["active", "archived"] | None = None
+
+
+class ArtifactFeedbackRequest(BaseModel):
+    rating: Literal["useful", "not_useful"]
+    reason: str | None = Field(None, max_length=500)
+
+
+@router.post("/artifacts/{artifact_id}/feedback", status_code=201)
+async def create_artifact_feedback_endpoint(
+    artifact_id: str,
+    body: ArtifactFeedbackRequest,
+    workspace_id: str = Depends(require_workspace),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    result = await db.execute(
+        select(GeneratedArtifact)
+        .join(Conversation, Conversation.id == GeneratedArtifact.conversation_id)
+        .where(GeneratedArtifact.id == artifact_id, Conversation.workspace_id == workspace_id)
+    )
+    if result.scalar_one_or_none() is None:
+        raise NotFoundError("Artículo")
+    feedback = ArtifactFeedback(artifact_id=artifact_id, rating=body.rating, reason=body.reason)
+    db.add(feedback)
+    await db.commit()
+    await db.refresh(feedback)
+    return {"id": feedback.id, "artifact_id": feedback.artifact_id, "rating": feedback.rating}
 
 
 @router.post("", status_code=201)

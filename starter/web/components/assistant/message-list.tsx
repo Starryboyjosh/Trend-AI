@@ -17,9 +17,19 @@ interface Props {
   loading: boolean;
   onSave?: (artifactId: string | undefined) => void;
   onVariation?: (artifactId: string | undefined, kind: string) => void;
+  onFeedback?: (
+    artifactId: string | undefined,
+    rating: "useful" | "not_useful"
+  ) => void;
 }
 
-export function MessageList({ messages, loading, onSave, onVariation }: Props) {
+export function MessageList({
+  messages,
+  loading,
+  onSave,
+  onVariation,
+  onFeedback,
+}: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -79,6 +89,7 @@ export function MessageList({ messages, loading, onSave, onVariation }: Props) {
                 artifact={msg.artifact}
                 onSave={() => onSave?.(msg.artifactId)}
                 onVariation={(kind) => onVariation?.(msg.artifactId, kind)}
+                onFeedback={(rating) => onFeedback?.(msg.artifactId, rating)}
               />
             ) : (
               <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{msg.content}</p>

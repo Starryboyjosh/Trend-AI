@@ -106,6 +106,13 @@ async def test_send_message_generates_artifact(client: AsyncClient, business_id:
     assert "artifact" in data
     assert data["artifact"]["platform"] in ("instagram", "tiktok")
     assert len(data["artifact"]["hashtags"]) <= 5
+    feedback = await client.post(
+        f"/api/v1/conversations/artifacts/{data['artifact_id']}/feedback",
+        json={"rating": "useful"},
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    assert feedback.status_code == 201
+    assert feedback.json()["rating"] == "useful"
 
 
 @pytest.mark.asyncio

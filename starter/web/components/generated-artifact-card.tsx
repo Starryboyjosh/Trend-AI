@@ -4,12 +4,14 @@ interface Props {
   artifact: GeneratedSocialPost;
   onSave?: () => void;
   onVariation?: (kind: "shorter" | "more_youthful") => void;
+  onFeedback?: (rating: "useful" | "not_useful") => void;
 }
 
 export function GeneratedArtifactCard({
   artifact,
   onSave,
   onVariation,
+  onFeedback,
 }: Props) {
   return (
     <article className="artifact-card" aria-labelledby="artifact-title">
@@ -37,6 +39,12 @@ export function GeneratedArtifactCard({
         </button>
         <button type="button" onClick={() => onVariation?.("more_youthful")}>
           Más juvenil
+        </button>
+        <button type="button" onClick={() => onFeedback?.("useful")}>
+          Útil
+        </button>
+        <button type="button" onClick={() => onFeedback?.("not_useful")}>
+          No útil
         </button>
       </div>
       <small>

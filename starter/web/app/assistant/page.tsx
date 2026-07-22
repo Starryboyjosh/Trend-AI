@@ -181,6 +181,27 @@ function AssistantContent() {
     [conversationId, loading]
   );
 
+  const handleFeedback = useCallback(
+    async (artifactId: string | undefined, rating: "useful" | "not_useful") => {
+      if (!artifactId) return;
+      try {
+        await api.artifacts.feedback(artifactId, rating);
+        setError(
+          rating === "useful"
+            ? "Gracias por tu feedback."
+            : "Gracias; usaremos tu feedback para mejorar."
+        );
+      } catch (err) {
+        setError(
+          err instanceof ApiError
+            ? err.message
+            : "No pudimos guardar tu feedback."
+        );
+      }
+    },
+    []
+  );
+
   if (initializing) {
     return (
       <div
@@ -248,6 +269,7 @@ function AssistantContent() {
         loading={loading}
         onSave={handleSave}
         onVariation={handleVariation}
+        onFeedback={handleFeedback}
       />
       <Composer onSend={handleSend} disabled={loading || !conversationId} />
     </div>

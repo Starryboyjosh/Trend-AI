@@ -180,7 +180,7 @@ storage keys and permanent public URLs are never exposed to the browser.
 
 ## Feedback
 
-### `POST /artifacts/{artifact_id}/feedback`
+### `POST /conversations/artifacts/{artifact_id}/feedback`
 
 ```json
 {

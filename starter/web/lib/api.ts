@@ -102,6 +102,12 @@ export const api = {
         { method: "POST", body: JSON.stringify({ kind }) }
       );
     },
+    feedback(artifactId: string, rating: "useful" | "not_useful") {
+      return request<Record<string, unknown>>(
+        `${BASE}/conversations/artifacts/${artifactId}/feedback`,
+        { method: "POST", body: JSON.stringify({ rating }) }
+      );
+    },
   },
   projects: {
     create(data: Record<string, unknown>) {
