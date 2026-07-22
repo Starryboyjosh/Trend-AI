@@ -99,6 +99,27 @@ async def test_create_variation_more_youthful(
 
 
 @pytest.mark.asyncio
+async def test_create_variation_more_professional_and_friendly(
+    client: AsyncClient, conversation_id: str, artifact_id: str
+) -> None:
+    professional = await client.post(
+        f"/api/v1/conversations/{conversation_id}/artifacts/{artifact_id}/variations",
+        json={"kind": "more_professional"},
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    assert professional.status_code == 200
+    assert professional.json()["artifact"]["hook"].endswith("Café del Valle")
+
+    friendly = await client.post(
+        f"/api/v1/conversations/{conversation_id}/artifacts/{artifact_id}/variations",
+        json={"kind": "more_friendly"},
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    assert friendly.status_code == 200
+    assert friendly.json()["artifact"]["hook"] == "¡Tenemos algo especial para ti! 🎉"
+
+
+@pytest.mark.asyncio
 async def test_variation_rejected_wrong_workspace(
     client: AsyncClient, conversation_id: str, artifact_id: str
 ) -> None:

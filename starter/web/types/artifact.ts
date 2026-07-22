@@ -40,3 +40,9 @@ export interface GeneratedShortVideoScript {
 }
 
 export type GeneratedArtifact = GeneratedSocialPost | GeneratedShortVideoScript;
+
+export type VariationKind =
+  | "shorter"
+  | "more_youthful"
+  | "more_professional"
+  | "more_friendly";

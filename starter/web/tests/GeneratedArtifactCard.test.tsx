@@ -69,5 +69,11 @@ describe("GeneratedArtifactCard", () => {
     });
     fireEvent.click(moreYouthfulButton);
     expect(onVariationMock).toHaveBeenCalledWith("more_youthful");
+
+    fireEvent.click(screen.getByRole("button", { name: "Más profesional" }));
+    expect(onVariationMock).toHaveBeenCalledWith("more_professional");
+
+    fireEvent.click(screen.getByRole("button", { name: "Más amigable" }));
+    expect(onVariationMock).toHaveBeenCalledWith("more_friendly");
   });
 });

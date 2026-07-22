@@ -1,9 +1,9 @@
-import type { GeneratedSocialPost } from "@/types/artifact";
+import type { GeneratedSocialPost, VariationKind } from "@/types/artifact";
 
 interface Props {
   artifact: GeneratedSocialPost;
   onSave?: () => void;
-  onVariation?: (kind: "shorter" | "more_youthful") => void;
+  onVariation?: (kind: VariationKind) => void;
   onFeedback?: (rating: "useful" | "not_useful") => void;
 }
 
@@ -39,6 +39,12 @@ export function GeneratedArtifactCard({
         </button>
         <button type="button" onClick={() => onVariation?.("more_youthful")}>
           Más juvenil
+        </button>
+        <button type="button" onClick={() => onVariation?.("more_professional")}>
+          Más profesional
+        </button>
+        <button type="button" onClick={() => onVariation?.("more_friendly")}>
+          Más amigable
         </button>
         <button type="button" onClick={() => onFeedback?.("useful")}>
           Útil
