@@ -21,6 +21,7 @@ class Project(Base):
     business_id: Mapped[str] = mapped_column(String(64), nullable=False)
     name: Mapped[str] = mapped_column(String(240), nullable=False)
     artifact_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_template_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     platform: Mapped[str] = mapped_column(String(32), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

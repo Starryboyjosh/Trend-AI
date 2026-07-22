@@ -124,4 +124,23 @@ async def test_create_project_from_template(seeded_client: AsyncClient) -> None:
     assert data["platform"] == "instagram"
     assert data["status"] == "active"
     assert data["artifact_snapshot"] is not None
-    assert data["artifact_snapshot"]["template_id"] == "tpl_reel_01"
+    assert data["source_template_id"] == "tpl_reel_01"
+    assert data["artifact_id"] is not None
+
+    reopened = await seeded_client.get(
+        f"/api/v1/projects/{data['id']}", headers={"X-Workspace-Id": WORKSPACE_ID}
+    )
+    assert reopened.status_code == 200
+    snapshot = reopened.json()["artifact_snapshot"]
+    assert snapshot["hook"] == "Reel promocional"
+
+    edited = await seeded_client.put(
+        f"/api/v1/projects/{data['id']}/artifact-version",
+        json={
+            **snapshot,
+            "hook": "Un reel listo para editar",
+        },
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    assert edited.status_code == 200
+    assert edited.json()["version_number"] == 2

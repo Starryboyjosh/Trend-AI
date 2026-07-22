@@ -44,7 +44,7 @@ class GeneratedArtifact(Base):
     __tablename__ = "generated_artifacts"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_uuid)
-    conversation_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    conversation_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     project_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     artifact_type: Mapped[str] = mapped_column(String(32), nullable=False)
     platform: Mapped[str] = mapped_column(String(32), nullable=False)

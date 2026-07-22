@@ -40,6 +40,7 @@ def project_to_dict(p: Project) -> dict:
         "business_id": p.business_id,
         "name": p.name,
         "artifact_id": p.artifact_id,
+        "source_template_id": p.source_template_id,
         "platform": p.platform,
         "status": p.status,
         "created_at": p.created_at.isoformat() if p.created_at else None,
@@ -62,7 +63,7 @@ async def create_project_endpoint(
     workspace_id: str = Depends(require_workspace),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    content: dict | None = None
+    content: dict | GeneratedSocialPost | None = None
     artifact_id: str | None = None
     platform: str = "instagram"
     business_id: str | None = body.business_id
@@ -80,19 +81,39 @@ async def create_project_endpoint(
         template_data = await get_template(db, body.template_id)
         platform = template_data["platforms"][0] if template_data["platforms"] else "instagram"
         title = body.name or template_data["title"]
-        content = {
-            "hook": title,
-            "caption": "",
-            "call_to_action": "",
-            "hashtags": [],
-            "visual_direction": "",
-            "format_recommendation": template_data["formats"][0]
+        content = GeneratedSocialPost(
+            platform=platform,
+            hook=title,
+            caption="Escribe aquí el texto principal de tu publicación.",
+            call_to_action="",
+            hashtags=[],
+            visual_direction="Añade una indicación visual para esta plantilla.",
+            format_recommendation=template_data["formats"][0]
             if template_data["formats"]
             else "static_post",
-            "platform": platform,
-            "artifact_type": "social_post",
-            "template_id": body.template_id,
-        }
+            assumptions=[f"Proyecto iniciado desde la plantilla {template_data['title']}."],
+        )
+        template_artifact = GeneratedArtifact(
+            artifact_type=content.artifact_type,
+            platform=platform,
+            objective=template_data["objective"],
+            model_provider="template",
+            model_name="template-v1",
+            prompt_version=None,
+            business_profile_version=1,
+        )
+        db.add(template_artifact)
+        await db.flush()
+        version = ArtifactVersion(
+            artifact_id=template_artifact.id,
+            version_number=1,
+            content_json=content.model_dump_json(),
+            user_edited=False,
+        )
+        db.add(version)
+        await db.flush()
+        template_artifact.active_version_id = version.id
+        artifact_id = template_artifact.id
     elif body.artifact_id:
         artifact_result = await db.execute(
             select(GeneratedArtifact, Conversation)
@@ -118,7 +139,7 @@ async def create_project_endpoint(
         version = version_result.scalar_one_or_none()
         content = json.loads(version.content_json) if version else None
         artifact_id = artifact.id
-        title = body.name or (content.get("hook", "")[:100] if content else "")
+        title = body.name or (content.get("hook", "")[:100] if isinstance(content, dict) else "")
     else:
         raise NotFoundError("Artículo o plantilla")
 
@@ -130,6 +151,7 @@ async def create_project_endpoint(
         business_id=business_id,
         name=title,
         artifact_id=artifact_id,
+        source_template_id=body.template_id,
         platform=platform,
     )
     db.add(project)
@@ -147,7 +169,9 @@ async def create_project_endpoint(
     await db.commit()
 
     result = project_to_dict(project)
-    result["artifact_snapshot"] = content
+    result["artifact_snapshot"] = (
+        content.model_dump() if isinstance(content, GeneratedSocialPost) else content
+    )
     return result
 
 
@@ -322,18 +346,13 @@ async def update_artifact_version_endpoint(
     if not project.artifact_id:
         raise NotFoundError("Artículo")
 
-    art_result = await db.execute(
-        select(GeneratedArtifact, Conversation)
-        .join(Conversation, Conversation.id == GeneratedArtifact.conversation_id)
-        .where(
-            GeneratedArtifact.id == project.artifact_id,
-            Conversation.workspace_id == workspace_id,
+    artifact_record = (
+        await db.execute(
+            select(GeneratedArtifact).where(GeneratedArtifact.id == project.artifact_id)
         )
-    )
-    row = art_result.one_or_none()
-    if row is None:
+    ).scalar_one_or_none()
+    if artifact_record is None:
         raise NotFoundError("Artículo")
-    artifact_record, _ = row
     if artifact_record.artifact_type != body.artifact_type:
         raise ValidationError_("El contenido no corresponde al tipo de este proyecto.")
 
@@ -427,27 +446,18 @@ async def restore_project_version_endpoint(
     if not project.artifact_id:
         raise NotFoundError("Artículo")
 
-    artifact_result = await db.execute(
-        select(GeneratedArtifact, Conversation)
-        .join(Conversation, Conversation.id == GeneratedArtifact.conversation_id)
-        .where(
-            GeneratedArtifact.id == project.artifact_id,
-            Conversation.workspace_id == workspace_id,
+    artifact_record = (
+        await db.execute(
+            select(GeneratedArtifact).where(GeneratedArtifact.id == project.artifact_id)
         )
-    )
-    artifact_row = artifact_result.one_or_none()
-    if artifact_row is None:
+    ).scalar_one_or_none()
+    if artifact_record is None:
         raise NotFoundError("Artículo")
-    artifact_record, _ = artifact_row
 
     target_result = await db.execute(
-        select(ArtifactVersion)
-        .join(GeneratedArtifact, GeneratedArtifact.id == ArtifactVersion.artifact_id)
-        .join(Conversation, Conversation.id == GeneratedArtifact.conversation_id)
-        .where(
+        select(ArtifactVersion).where(
             ArtifactVersion.id == version_id,
             ArtifactVersion.artifact_id == project.artifact_id,
-            Conversation.workspace_id == workspace_id,
         )
     )
     target_version = target_result.scalar_one_or_none()
