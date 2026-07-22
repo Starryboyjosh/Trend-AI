@@ -16,7 +16,8 @@ Base path: `/api/v1`
 - ISO 8601 timestamps in UTC.
 - Cursor pagination for conversations, projects, and assets.
 - Stable error envelope.
-- Idempotency key for generation and upload finalization.
+- `Idempotency-Key` para generación; la finalización de carga usa una sesión de
+  carga de un solo uso.
 
 ## Identity
 

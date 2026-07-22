@@ -24,7 +24,8 @@ status: accepted
 - Migration up/down where practical.
 - Provider adapters with recorded fixtures.
 - Object storage boundary.
-- Idempotency.
+- Idempotency. **Implementado para generación conversacional:** una misma clave
+  devuelve el resultado persistido sin crear otro artefacto.
 
 ### Contract tests
 

@@ -1,8 +1,21 @@
-# Production-oriented backend starter
+# HiTrendy backend
 
-This folder demonstrates the dependency direction and provider boundary. It is intentionally incomplete: database repositories, auth, migrations, and HTTP feature routes should be implemented milestone-by-milestone using the documentation.
+FastAPI backend for the authenticated MVP: business context, conversations,
+validated content generation, projects, templates, assets, visual review and
+workspace authorization. Demo mode uses deterministic providers and requires no
+external AI credentials.
 
 ```bash
-pip install -r requirements.txt
-uvicorn app.main:app --reload
+PYTHONPATH=. ../../.venv/bin/alembic upgrade head
+PYTHONPATH=. ../../.venv/bin/uvicorn app.main:app --reload --port 8000
 ```
+
+Run the backend suite from the repository root:
+
+```bash
+PYTHONPATH=starter/backend .venv/bin/pytest starter/backend/tests
+```
+
+Generation requests accept an optional `Idempotency-Key` header. Reusing the
+same key for the same workspace and conversation returns the already persisted
+result instead of creating another artifact.

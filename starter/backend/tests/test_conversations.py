@@ -129,6 +129,25 @@ async def test_send_message_generates_artifact(client: AsyncClient, business_id:
 
 
 @pytest.mark.asyncio
+async def test_generation_reuses_a_completed_idempotency_key(
+    client: AsyncClient, business_id: str
+) -> None:
+    conversation = await client.post(
+        "/api/v1/conversations",
+        json={"business_id": business_id, "title": "Idempotencia"},
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    path = f"/api/v1/conversations/{conversation.json()['id']}/messages"
+    headers = {"X-Workspace-Id": WORKSPACE_ID, "Idempotency-Key": "generation-once"}
+    first = await client.post(path, json={"text": "Crea una publicación"}, headers=headers)
+    second = await client.post(path, json={"text": "Crea una publicación"}, headers=headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json() == first.json()
+
+
+@pytest.mark.asyncio
 async def test_send_message_generates_short_video_script(
     client: AsyncClient, business_id: str
 ) -> None:

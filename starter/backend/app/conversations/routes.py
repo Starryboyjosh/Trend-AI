@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Header, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +15,7 @@ from app.conversations.models import (
     ArtifactVersion,
     Conversation,
     GeneratedArtifact,
+    IdempotencyRecord,
     Message,
 )
 from app.conversations.repository import (
@@ -259,9 +260,36 @@ async def get_conversation_endpoint(
 async def send_message_endpoint(
     conversation_id: str,
     body: SendMessageRequest,
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key", max_length=160),
     workspace_id: str = Depends(require_workspace),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
+    endpoint = f"/conversations/{conversation_id}/messages"
+    if idempotency_key:
+        existing = await db.execute(
+            select(IdempotencyRecord).where(
+                IdempotencyRecord.workspace_id == workspace_id,
+                IdempotencyRecord.endpoint == endpoint,
+                IdempotencyRecord.key == idempotency_key,
+            )
+        )
+        record = existing.scalar_one_or_none()
+        if record is not None:
+            return json.loads(record.response_json)
+
+    async def persist_response(response: dict) -> dict:
+        if idempotency_key:
+            db.add(
+                IdempotencyRecord(
+                    workspace_id=workspace_id,
+                    endpoint=endpoint,
+                    key=idempotency_key,
+                    response_json=json.dumps(response, ensure_ascii=False),
+                )
+            )
+            await db.commit()
+        return response
+
     conv = await get_conversation(db, workspace_id, conversation_id)
     if conv.status != "active":
         raise ValidationError_("Restaura la conversación antes de enviar un mensaje.")
@@ -308,16 +336,18 @@ async def send_message_endpoint(
         analysis_data["created_at"] = (
             analysis_record.created_at.isoformat() if analysis_record.created_at else None
         )
-        return {
-            "type": "visual_analysis",
-            "user_message": {"id": user_msg.id, "role": "user", "content": body.text},
-            "assistant_message": {
-                "id": assistant_msg.id,
-                "role": "assistant",
-                "content": analysis.summary,
-            },
-            "analysis": analysis_data,
-        }
+        return await persist_response(
+            {
+                "type": "visual_analysis",
+                "user_message": {"id": user_msg.id, "role": "user", "content": body.text},
+                "assistant_message": {
+                    "id": assistant_msg.id,
+                    "role": "assistant",
+                    "content": analysis.summary,
+                },
+                "analysis": analysis_data,
+            }
+        )
 
     biz_repo = SqlBusinessContextRepository(db)
     art_repo = SqlArtifactRepository(db)
@@ -375,21 +405,23 @@ async def send_message_endpoint(
 
     await db.commit()
 
-    return {
-        "type": "artifact",
-        "user_message": {
-            "id": user_msg.id,
-            "role": "user",
-            "content": body.text,
-        },
-        "assistant_message": {
-            "id": assistant_msg.id,
-            "role": "assistant",
-            "content": artifact.caption,
-        },
-        "artifact": artifact.model_dump(),
-        "artifact_id": saved_artifact.id if saved_artifact else None,
-    }
+    return await persist_response(
+        {
+            "type": "artifact",
+            "user_message": {
+                "id": user_msg.id,
+                "role": "user",
+                "content": body.text,
+            },
+            "assistant_message": {
+                "id": assistant_msg.id,
+                "role": "assistant",
+                "content": artifact.caption,
+            },
+            "artifact": artifact.model_dump(),
+            "artifact_id": saved_artifact.id if saved_artifact else None,
+        }
+    )
 
 
 class CreateVariationRequest(BaseModel):

@@ -109,7 +109,10 @@ Every workspace-owned query includes `workspace_id`. Business, project, asset, c
 
 ## Idempotency
 
-Generation job creation supports an idempotency key. Repeated requests with the same user, endpoint, and key return the original job/result.
+La generación conversacional admite `Idempotency-Key`. Las solicitudes repetidas
+del mismo workspace, endpoint y clave devuelven el resultado original ya
+persistido. La finalización de cargas se protege mediante una sesión de carga de
+un solo uso.
 
 ## Observability
 
