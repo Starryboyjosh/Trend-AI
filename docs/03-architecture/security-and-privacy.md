@@ -68,6 +68,12 @@ related: [NFR-002, NFR-003]
 - Retry limit with exponential backoff.
 - Circuit breaker for failing providers.
 
+### HTTP baseline
+
+- Every response carries an opaque request ID for support and safe correlation.
+- Server responses send anti-sniffing, anti-framing, referrer and permissions-policy headers.
+- Requests exceeding the configured body limit are rejected before route handling.
+
 ## Security acceptance tests
 
 - User A cannot retrieve User B’s project by ID.

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from uuid import uuid4
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.assets.routes import router as asset_router
 from app.business.routes import router as business_router
@@ -47,6 +49,32 @@ app.add_middleware(
 )
 
 app.add_exception_handler(AppError, app_error_handler)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    request_id = request.headers.get("X-Request-Id") or uuid4().hex
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > settings.max_request_body_bytes:
+        return JSONResponse(
+            status_code=413,
+            content={
+                "error": {
+                    "code": "REQUEST_TOO_LARGE",
+                    "message": "La solicitud supera el tamaño permitido.",
+                    "retryable": False,
+                }
+            },
+            headers={"X-Request-Id": request_id},
+        )
+    response = await call_next(request)
+    response.headers["X-Request-Id"] = request_id
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), geolocation=(), microphone=()"
+    return response
+
 
 app.include_router(business_router, prefix=settings.api_prefix)
 app.include_router(identity_router, prefix=settings.api_prefix)

@@ -27,6 +27,7 @@ class Settings:
     max_upload_mb: int = int(environ.get("MAX_UPLOAD_MB", "10"))
     max_upload_pixels: int = int(environ.get("MAX_UPLOAD_PIXELS", "25_000_000"))
     max_upload_expansion_ratio: int = int(environ.get("MAX_UPLOAD_EXPANSION_RATIO", "200"))
+    max_request_body_bytes: int = int(environ.get("MAX_REQUEST_BODY_BYTES", "12_000_000"))
 
     @property
     def is_demo(self) -> bool:
