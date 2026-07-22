@@ -39,5 +39,34 @@ class Settings:
     def is_demo(self) -> bool:
         return self.app_env == "development" and self.ai_provider == "demo"
 
+    def validate_runtime_configuration(self) -> None:
+        """Reject production defaults before the API accepts private traffic."""
+
+        if self.app_env != "production":
+            return
+
+        invalid = (
+            self.jwt_secret == "replace-in-local-env"
+            or self.object_storage_provider != "s3"
+            or not all(
+                [
+                    self.object_storage_endpoint,
+                    self.object_storage_access_key,
+                    self.object_storage_secret_key,
+                    self.object_storage_bucket,
+                ]
+            )
+            or self.ai_provider == "demo"
+            or self.vision_provider == "demo"
+            or not self.redis_url
+            or not self.allowed_origins
+            or any(
+                not origin.strip().startswith("https://")
+                for origin in self.allowed_origins.split(",")
+            )
+        )
+        if invalid:
+            raise RuntimeError("La configuración de producción no es segura.")
+
 
 settings = Settings()

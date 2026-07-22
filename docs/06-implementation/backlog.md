@@ -95,8 +95,12 @@ de forma explícita.
 ## Epic E8 — Readiness
 
 - E8-T1 Accessibility test pass.
-- E8-T2 Security test pass.
-- E8-T3 Rate limits.
+- E8-T2 Security test pass. **Implementado:** pruebas negativas cubren sesión,
+  workspace, cargas, encabezados, rotación de sesión y configuración de
+  producción insegura.
+- E8-T3 Rate limits. **Implementado:** autenticación y operaciones que invocan
+  proveedores están limitadas; desarrollo usa un adaptador local y producción
+  exige Redis compartido y disponible.
 - E8-T4 Deployment runbook. **Implemented:** release sequence, smoke checks,
   secret boundaries, and provider/storage safeguards are documented.
 - E8-T5 Demo reset and seed command. **Implemented:** `make demo-reset`

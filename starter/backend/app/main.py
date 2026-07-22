@@ -16,6 +16,7 @@ from app.business.routes import router as business_router
 from app.conversations.routes import router as conversation_router
 from app.core.config import settings
 from app.core.errors import AppError, app_error_handler
+from app.core.rate_limit import LocalRateLimiter, RateLimiter, RedisRateLimiter
 from app.db.session import get_session_factory
 from app.identity.routes import router as identity_router
 from app.projects.routes import router as project_router
@@ -26,6 +27,9 @@ logger = logging.getLogger("hitrendy.http")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    settings.validate_runtime_configuration()
+    if settings.app_env == "production":
+        await get_rate_limiter().ensure_available()
     if settings.is_demo:
         await _seed_templates()
     yield
@@ -55,7 +59,31 @@ app.add_middleware(
 
 app.add_exception_handler(AppError, app_error_handler)
 
-_rate_windows: dict[tuple[str, str], list[float]] = {}
+_RATE_LIMITED_PATHS = {"/api/v1/auth/login", "/api/v1/auth/register"}
+_local_rate_limiter = LocalRateLimiter()
+# Kept as a test-only inspection point while development uses the local adapter.
+_rate_windows = _local_rate_limiter.windows
+_rate_limiter: RateLimiter | None = None
+_rate_limiter_url: str | None = None
+
+
+def _requires_rate_limit(path: str) -> bool:
+    return (
+        path in _RATE_LIMITED_PATHS
+        or path.endswith("/messages")
+        or path.endswith("/variations")
+        or path.endswith("/analyses")
+    )
+
+
+def get_rate_limiter() -> RateLimiter:
+    global _rate_limiter, _rate_limiter_url
+    if settings.app_env != "production":
+        return _local_rate_limiter
+    if _rate_limiter is None or _rate_limiter_url != settings.redis_url:
+        _rate_limiter = RedisRateLimiter.from_url(settings.redis_url)
+        _rate_limiter_url = settings.redis_url
+    return _rate_limiter
 
 
 def _record_request(request: Request, request_id: str, status_code: int, started: float) -> None:
@@ -76,16 +104,13 @@ async def security_headers(request: Request, call_next):
     started = monotonic()
     request_id = request.headers.get("X-Request-Id") or uuid4().hex
     content_length = request.headers.get("content-length")
-    sensitive_paths = {"/api/v1/auth/login", "/api/v1/auth/register"}
-    if request.url.path in sensitive_paths or request.url.path.endswith("/messages"):
-        key = (request.client.host if request.client else "unknown", request.url.path)
-        now = monotonic()
-        window = [
-            item
-            for item in _rate_windows.get(key, [])
-            if now - item < settings.rate_limit_window_seconds
-        ]
-        if len(window) >= settings.rate_limit_requests:
+    if _requires_rate_limit(request.url.path):
+        key = f"hitrendy:rate-limit:{request.client.host if request.client else 'unknown'}:{request.url.path}"
+        if not await get_rate_limiter().allow(
+            key=key,
+            limit=settings.rate_limit_requests,
+            window_seconds=settings.rate_limit_window_seconds,
+        ):
             limited_response = JSONResponse(
                 status_code=429,
                 content={
@@ -102,8 +127,6 @@ async def security_headers(request: Request, call_next):
             )
             _record_request(request, request_id, limited_response.status_code, started)
             return limited_response
-        window.append(now)
-        _rate_windows[key] = window
     if content_length:
         try:
             requested_bytes = int(content_length)

@@ -91,3 +91,30 @@ async def test_login_rate_limit_returns_retryable_error(
     assert second.status_code == 429
     assert second.headers["retry-after"]
     assert second.json()["error"]["code"] == "RATE_LIMITED"
+
+
+@pytest.mark.asyncio
+async def test_visual_analysis_is_rate_limited_before_processing(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _rate_windows.clear()
+    monkeypatch.setattr(settings, "rate_limit_requests", 1)
+    try:
+        first = await client.post("/api/v1/assets/not-an-asset/analyses")
+        second = await client.post("/api/v1/assets/not-an-asset/analyses")
+    finally:
+        _rate_windows.clear()
+
+    assert first.status_code == 404
+    assert second.status_code == 429
+    assert second.json()["error"]["code"] == "RATE_LIMITED"
+
+
+def test_production_configuration_fails_closed_for_insecure_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "app_env", "production")
+    monkeypatch.setattr(settings, "jwt_secret", "replace-in-local-env")
+
+    with pytest.raises(RuntimeError, match="configuración de producción"):
+        settings.validate_runtime_configuration()

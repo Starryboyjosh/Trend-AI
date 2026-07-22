@@ -69,6 +69,9 @@ the template catalog. It is not a production database tool.
 ## Production safeguards
 
 - Set `APP_ENV=production` and use a strong, deployment-managed `JWT_SECRET`.
+- Use HTTPS origins only, managed S3-compatible object storage, non-demo text
+  and vision providers, and a Redis URL. The API rejects the known unsafe
+  production defaults during startup.
 - Configure HTTPS at the edge and set secure cookie attributes there or in the
   session deployment configuration.
 - Use a managed PostgreSQL database and S3-compatible object storage; local

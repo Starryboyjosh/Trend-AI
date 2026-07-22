@@ -23,6 +23,8 @@ related: [NFR-002, NFR-003]
 
 - Use secure, HttpOnly, SameSite cookies.
 - Rotate session identifiers after authentication.
+- Replace prior sessions for the account after login; a token that predates a
+  successful login must not remain usable.
 - Add CSRF protection where applicable.
 - Rate-limit login and recovery.
 - Store passwords with a modern password hash through an established auth library.
@@ -73,7 +75,11 @@ related: [NFR-002, NFR-003]
 - Every response carries an opaque request ID for support and safe correlation.
 - Server responses send anti-sniffing, anti-framing, referrer and permissions-policy headers.
 - Requests exceeding the configured body limit are rejected before route handling.
-- Login, registration and generation have a configurable local rate limit; deployments with multiple API instances must use Redis for the shared limiter.
+- Login, registration and generation have a configurable rate limit. Development
+  uses a local deterministic adapter; production uses Redis and refuses to
+  start when the shared limiter is unavailable.
+- Production startup rejects demo providers, local object storage, an absent
+  Redis URL, the documented development secret, and non-HTTPS allowed origins.
 
 ## Security acceptance tests
 

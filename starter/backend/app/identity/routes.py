@@ -51,6 +51,9 @@ class LoginRequest(BaseModel):
 
 
 async def _create_session(db: AsyncSession, user_id: str) -> str:
+    # A successful authentication replaces earlier sessions for this account,
+    # so a token observed before login cannot remain valid after rotation.
+    await db.execute(delete(AuthSession).where(AuthSession.user_id == user_id))
     token = secrets.token_urlsafe(32)
     db.add(
         AuthSession(
@@ -69,7 +72,7 @@ def _set_session_cookie(response: Response, token: str) -> None:
         value=token,
         httponly=True,
         secure=settings.app_env == "production",
-        samesite="lax",
+        samesite="strict",
         max_age=settings.session_ttl_hours * 3600,
         path="/",
     )
