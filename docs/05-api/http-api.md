@@ -145,6 +145,10 @@ Filters: platform, format, category, objective, search.
 
 Returns preview and editable slots.
 
+### `POST /templates/recommendations`
+
+Returns ranked internal templates with an explicit rationale for platform, objective and optional category.
+
 ## Assets
 
 ### `POST /assets/uploads`

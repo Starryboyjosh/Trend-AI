@@ -83,6 +83,20 @@ async def test_get_template_not_found(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_recommend_templates_returns_ranked_rationales(seeded_client: AsyncClient) -> None:
+    response = await seeded_client.post(
+        "/api/v1/templates/recommendations",
+        json={"platform": "instagram", "objective": "sales", "category": "promotion"},
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    assert response.status_code == 200
+    recommendations = response.json()
+    assert recommendations
+    assert recommendations[0]["score"] >= recommendations[-1]["score"]
+    assert recommendations[0]["rationale"]
+
+
+@pytest.mark.asyncio
 async def test_create_project_from_template(seeded_client: AsyncClient) -> None:
     business_response = await seeded_client.post(
         "/api/v1/businesses",

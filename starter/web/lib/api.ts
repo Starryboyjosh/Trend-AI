@@ -178,6 +178,20 @@ export const api = {
     get(id: string) {
       return request<Record<string, unknown>>(`${BASE}/templates/${id}`);
     },
+    recommend(data: {
+      platform: string;
+      objective: string;
+      category?: string;
+      limit?: number;
+    }) {
+      return request<Array<Record<string, unknown>>>(
+        `${BASE}/templates/recommendations`,
+        {
+          method: "POST",
+          body: JSON.stringify(data),
+        }
+      );
+    },
   },
   businesses: {
     create(data: Record<string, unknown>) {
