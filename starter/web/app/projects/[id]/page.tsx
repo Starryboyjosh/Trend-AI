@@ -22,6 +22,14 @@ export default function ProjectEditorPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [versions, setVersions] = useState<
+    Array<{
+      id: string;
+      version_number: number;
+      user_edited: boolean;
+      created_at: string | null;
+    }>
+  >([]);
   const [form, setForm] = useState({
     hook: "",
     caption: "",
@@ -38,6 +46,14 @@ export default function ProjectEditorPage() {
         params.id
       )) as unknown as ProjectData;
       setProject(data);
+      setVersions(
+        (await api.projects.versions(params.id)) as Array<{
+          id: string;
+          version_number: number;
+          user_edited: boolean;
+          created_at: string | null;
+        }>
+      );
       const snap = data.artifact_snapshot;
       if (snap) {
         setForm({
@@ -369,6 +385,28 @@ export default function ProjectEditorPage() {
           )}
         </div>
       </div>
+      <section
+        style={{ marginTop: 24 }}
+        aria-labelledby="version-history-title"
+      >
+        <h2 id="version-history-title" style={{ fontSize: "1rem" }}>
+          Historial de versiones
+        </h2>
+        {versions.length ? (
+          <ol style={{ color: "var(--muted-foreground)", paddingLeft: 20 }}>
+            {versions.map((version) => (
+              <li key={version.id}>
+                Versión {version.version_number}
+                {version.user_edited ? " · editada" : " · generada"}
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p style={{ color: "var(--muted-foreground)" }}>
+            Este proyecto aún no tiene versiones editables.
+          </p>
+        )}
+      </section>
     </div>
   );
 }

@@ -204,3 +204,15 @@ async def test_export_project_is_workspace_scoped(client: AsyncClient, artifact_
         f"/api/v1/projects/{project_id}/export", headers={"X-Workspace-Id": "ws_other"}
     )
     assert forbidden.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_list_project_versions(client: AsyncClient, artifact_id: str) -> None:
+    created = await client.post(
+        "/api/v1/projects", json={"artifact_id": artifact_id}, headers={"X-Workspace-Id": WORKSPACE_ID}
+    )
+    response = await client.get(
+        f"/api/v1/projects/{created.json()['id']}/versions", headers={"X-Workspace-Id": WORKSPACE_ID}
+    )
+    assert response.status_code == 200
+    assert response.json()[0]["version_number"] == 1

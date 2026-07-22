@@ -142,6 +142,11 @@ export const api = {
     export(id: string) {
       return request<Record<string, unknown>>(`${BASE}/projects/${id}/export`);
     },
+    versions(id: string) {
+      return request<Array<Record<string, unknown>>>(
+        `${BASE}/projects/${id}/versions`
+      );
+    },
     updateArtifactVersion(projectId: string, data: Record<string, unknown>) {
       return request<Record<string, unknown>>(
         `${BASE}/projects/${projectId}/artifact-version`,

@@ -354,3 +354,33 @@ async def update_artifact_version_endpoint(
         "version": post.model_dump(),
         "version_number": (current_version.version_number + 1) if current_version else 1,
     }
+
+
+@router.get("/{project_id}/versions")
+async def list_project_versions_endpoint(
+    project_id: str,
+    workspace_id: str = Depends(require_workspace),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    project_result = await db.execute(
+        select(Project).where(Project.id == project_id, Project.workspace_id == workspace_id)
+    )
+    project = project_result.scalar_one_or_none()
+    if project is None:
+        raise NotFoundError("Proyecto")
+    if not project.artifact_id:
+        return []
+    result = await db.execute(
+        select(ArtifactVersion)
+        .where(ArtifactVersion.artifact_id == project.artifact_id)
+        .order_by(ArtifactVersion.version_number.desc())
+    )
+    return [
+        {
+            "id": version.id,
+            "version_number": version.version_number,
+            "user_edited": version.user_edited,
+            "created_at": version.created_at.isoformat() if version.created_at else None,
+        }
+        for version in result.scalars().all()
+    ]
