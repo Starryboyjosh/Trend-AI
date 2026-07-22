@@ -1,5 +1,5 @@
 import { describe, test, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { GeneratedArtifactCard } from "@/components/generated-artifact-card";
 import type { GeneratedSocialPost } from "@/types/artifact";
 
@@ -75,5 +75,17 @@ describe("GeneratedArtifactCard", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Más amigable" }));
     expect(onVariationMock).toHaveBeenCalledWith("more_friendly");
+  });
+
+  test("copies the structured post and reports success", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    render(<GeneratedArtifactCard artifact={mockArtifact} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Copiar contenido" }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining(mockArtifact.caption));
+    expect(screen.getByRole("status")).toHaveTextContent("Contenido copiado.");
   });
 });
