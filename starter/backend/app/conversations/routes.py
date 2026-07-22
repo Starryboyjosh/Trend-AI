@@ -173,8 +173,6 @@ async def get_conversation_endpoint(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     conv = await get_conversation(db, workspace_id, conversation_id)
-    if conv.status != "active":
-        raise ValidationError_("Restaura la conversación antes de crear una variación.")
     msgs = await get_messages(db, conversation_id)
     return {
         "id": conv.id,
@@ -280,6 +278,8 @@ async def create_variation_endpoint(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     conv = await get_conversation(db, workspace_id, conversation_id)
+    if conv.status != "active":
+        raise ValidationError_("Restaura la conversación antes de crear una variación.")
 
     art_result = await db.execute(
         select(GeneratedArtifact).where(

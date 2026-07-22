@@ -176,6 +176,13 @@ async def test_archive_and_restore_conversation(client: AsyncClient, business_id
     assert archived.status_code == 200
     assert archived.json()["status"] == "archived"
 
+    archived_detail = await client.get(
+        f"/api/v1/conversations/{conversation_id}",
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    assert archived_detail.status_code == 200
+    assert archived_detail.json()["status"] == "archived"
+
     message_response = await client.post(
         f"/api/v1/conversations/{conversation_id}/messages",
         json={"text": "No debe generar contenido"},
