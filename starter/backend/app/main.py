@@ -8,6 +8,7 @@ from uuid import uuid4
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from app.assets.routes import router as asset_router
 from app.business.routes import router as business_router
@@ -133,6 +134,20 @@ def live() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/health/ready")
-async def ready() -> dict[str, str]:
-    return {"status": "ready"}
+@app.get("/health/ready", response_model=None)
+async def ready() -> dict[str, object] | JSONResponse:
+    """Report readiness only when the application can use its database."""
+
+    try:
+        factory = get_session_factory()
+        async with factory() as session:
+            await session.execute(text("SELECT 1"))
+    except Exception:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "not_ready",
+                "checks": {"database": "unavailable"},
+            },
+        )
+    return {"status": "ok", "checks": {"database": "ok"}}

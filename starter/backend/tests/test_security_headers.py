@@ -17,6 +17,35 @@ async def test_security_headers_and_request_id(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_readiness_checks_database(client: AsyncClient) -> None:
+    response = await client.get("/health/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "checks": {"database": "ok"}}
+
+
+@pytest.mark.asyncio
+async def test_readiness_fails_closed_when_database_is_unavailable(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class BrokenSession:
+        async def __aenter__(self):
+            raise RuntimeError("database unavailable")
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return False
+
+    monkeypatch.setattr("app.main.get_session_factory", lambda: lambda: BrokenSession())
+    response = await client.get("/health/ready")
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "not_ready",
+        "checks": {"database": "unavailable"},
+    }
+
+
+@pytest.mark.asyncio
 async def test_malformed_content_length_returns_safe_error(client: AsyncClient) -> None:
     response = await client.get("/health/live", headers={"Content-Length": "not-a-number"})
 
