@@ -84,18 +84,33 @@ async def security_headers(request: Request, call_next):
             )
         window.append(now)
         _rate_windows[key] = window
-    if content_length and int(content_length) > settings.max_request_body_bytes:
-        return JSONResponse(
-            status_code=413,
-            content={
-                "error": {
-                    "code": "REQUEST_TOO_LARGE",
-                    "message": "La solicitud supera el tamaño permitido.",
-                    "retryable": False,
-                }
-            },
-            headers={"X-Request-Id": request_id},
-        )
+    if content_length:
+        try:
+            requested_bytes = int(content_length)
+        except ValueError:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": {
+                        "code": "INVALID_CONTENT_LENGTH",
+                        "message": "El tamaño de la solicitud no es válido.",
+                        "retryable": False,
+                    }
+                },
+                headers={"X-Request-Id": request_id},
+            )
+        if requested_bytes > settings.max_request_body_bytes:
+            return JSONResponse(
+                status_code=413,
+                content={
+                    "error": {
+                        "code": "REQUEST_TOO_LARGE",
+                        "message": "La solicitud supera el tamaño permitido.",
+                        "retryable": False,
+                    }
+                },
+                headers={"X-Request-Id": request_id},
+            )
     response = await call_next(request)
     response.headers["X-Request-Id"] = request_id
     response.headers["X-Content-Type-Options"] = "nosniff"
