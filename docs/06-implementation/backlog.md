@@ -6,17 +6,18 @@ status: proposed
 
 # Backlog
 
-## Estado de implementación — 2026-07-21
+## Estado de implementación — 2026-07-22
 
-El MVP está aproximadamente al **88% funcional**. Están implementados y
+El MVP está aproximadamente al **96% funcional**. Están implementados y
 verificados los flujos de perfil de negocio, autenticación y workspace,
 generación de publicaciones y guiones cortos, variaciones, proyectos
 versionados, plantillas, biblioteca de activos, revisión visual, historial de
 conversaciones, voz en navegador, proveedores demo/intercambiables y medidas
 base de seguridad y operación.
 
-Pendiente antes de declarar el MVP terminado: ampliar las pruebas de
-accesibilidad y seguridad, y cerrar los detalles de pulido y despliegue. Los
+Pendiente antes de declarar el MVP terminado: instrumentar las señales de uso
+restantes (copia, guardado y magnitud de edición), ampliar la cobertura de
+accesibilidad a las demás rutas y ejecutar la revisión Graphify final. Los
 intents no implementados se mantienen documentados como planeados y se rechazan
 de forma explícita.
 
@@ -90,7 +91,9 @@ de forma explícita.
 - E7-T5 Scenario regression suite. **Implementado:** 30 escenarios
   versionados y deterministas cubren seis rubros y solicitudes directas, vagas y
   contradictorias sin requerir un proveedor externo.
-- E7-T6 User feedback events.
+- E7-T6 User feedback events. **Parcial:** la valoración `útil` / `no útil` y
+  su motivo se persisten de forma autorizada; faltan eventos explícitos de
+  copia, guardado y magnitud de edición.
 
 ## Epic E8 — Readiness
 
