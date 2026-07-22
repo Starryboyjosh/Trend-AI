@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 interface Props {
   onSend: (text: string) => void;
@@ -10,7 +10,41 @@ interface Props {
 
 export function Composer({ onSend, disabled, placeholder }: Props) {
   const [value, setValue] = useState("");
+  const [voiceAvailable, setVoiceAvailable] = useState(false);
+  const [listening, setListening] = useState(false);
   const textRef = useRef<HTMLTextAreaElement>(null);
+  const recognitionRef = useRef<{ start: () => void; stop: () => void } | null>(
+    null
+  );
+
+  useEffect(() => {
+    const VoiceRecognition = (
+      window as typeof window & {
+        webkitSpeechRecognition?: new () => {
+          lang: string;
+          interimResults: boolean;
+          start: () => void;
+          stop: () => void;
+          onresult: (event: {
+            results: ArrayLike<ArrayLike<{ transcript: string }>>;
+          }) => void;
+          onend: () => void;
+        };
+      }
+    ).webkitSpeechRecognition;
+    if (!VoiceRecognition) return;
+    const recognition = new VoiceRecognition();
+    recognition.lang = "es-ES";
+    recognition.interimResults = false;
+    recognition.onresult = (event) =>
+      setValue((current) =>
+        `${current} ${event.results[0][0].transcript}`.trim()
+      );
+    recognition.onend = () => setListening(false);
+    recognitionRef.current = recognition;
+    setVoiceAvailable(true);
+    return () => recognition.stop();
+  }, []);
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -71,6 +105,30 @@ export function Composer({ onSend, disabled, placeholder }: Props) {
           maxHeight: 160,
         }}
       />
+      {voiceAvailable ? (
+        <button
+          type="button"
+          onClick={() => {
+            if (listening) recognitionRef.current?.stop();
+            else {
+              setListening(true);
+              recognitionRef.current?.start();
+            }
+          }}
+          disabled={disabled}
+          aria-label={listening ? "Detener dictado" : "Dictar mensaje"}
+          style={{
+            padding: "10px",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius-md)",
+            background: "var(--surface)",
+            color: "var(--foreground)",
+            cursor: "pointer",
+          }}
+        >
+          {listening ? "Detener" : "Dictar"}
+        </button>
+      ) : null}
       <button
         type="button"
         onClick={submit}
