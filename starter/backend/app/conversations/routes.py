@@ -33,8 +33,6 @@ from app.domain.models import (
     Tone,
     VariationKind,
 )
-from app.generation.contracts import SocialPostModelRequest
-from app.generation.prompt_registry import get_social_copy_prompt
 from app.providers.factory import get_content_provider
 from app.services.generate_social_post import GenerateSocialPostService
 
@@ -175,6 +173,8 @@ async def get_conversation_endpoint(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     conv = await get_conversation(db, workspace_id, conversation_id)
+    if conv.status != "active":
+        raise ValidationError_("Restaura la conversación antes de crear una variación.")
     msgs = await get_messages(db, conversation_id)
     return {
         "id": conv.id,
@@ -323,37 +323,13 @@ async def create_variation_endpoint(
     )
 
     biz_repo = SqlBusinessContextRepository(db)
-    context = await biz_repo.get_for_generation(
-        workspace_id=workspace_id, business_id=conv.business_id
-    )
-
-    provider = get_content_provider()
-    _, prompt_version = get_social_copy_prompt()
-    request = SocialPostModelRequest.from_command(
-        context=context, command=command, prompt_version=prompt_version
-    )
-    raw = await provider.generate_social_post(request=request)
-
-    try:
-        artifact = GeneratedSocialPost.model_validate(raw)
-    except Exception as e:
-        return {"type": "error", "message": f"Error al generar variación: {e}"}
-
-    forbidden = {word.casefold() for word in context.forbidden_words}
-    text = " ".join([artifact.hook, artifact.caption, artifact.call_to_action]).casefold()
-    if any(word in text for word in forbidden):
-        return {
-            "type": "error",
-            "message": "La variación contiene términos prohibidos de la marca.",
-        }
-
     art_repo = SqlArtifactRepository(db)
-    await art_repo.add_artifact_version(
+    service = GenerateSocialPostService(biz_repo, art_repo, get_content_provider())
+    artifact = await service.execute_variation(
+        command=command,
         artifact_id=artifact_id,
-        content=artifact,
         parent_version_id=current_version.id if current_version else None,
     )
-
     await db.commit()
 
     return {

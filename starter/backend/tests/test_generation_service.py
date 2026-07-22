@@ -58,6 +58,10 @@ class ArtifactRepository:
         self.saved = kwargs
         return kwargs["artifact"]  # type: ignore[return-value]
 
+    async def add_artifact_version(self, **kwargs: object) -> GeneratedSocialPost:
+        self.saved = kwargs
+        return kwargs["content"]  # type: ignore[return-value]
+
 
 class RepairingProvider:
     provider_name = "test-provider"
@@ -101,3 +105,27 @@ async def test_generation_repairs_invalid_output_and_persists_auditable_metadata
     assert repository.saved["provider_name"] == "test-provider"
     assert repository.saved["model_name"] == "test-model"
     assert repository.saved["prompt_version"] == "social-copy@1.0.0"
+
+
+@pytest.mark.asyncio
+async def test_variation_uses_the_same_contract_repair_flow() -> None:
+    repository = ArtifactRepository()
+    provider = RepairingProvider()
+    service = GenerateSocialPostService(ContextRepository(), repository, provider)
+
+    artifact = await service.execute_variation(
+        command=GenerateSocialPostCommand(
+            workspace_id="ws_001",
+            business_id="biz_001",
+            conversation_id="conv_001",
+            text="Hazlo más corto",
+        ),
+        artifact_id="artifact_001",
+        parent_version_id="version_001",
+    )
+
+    assert artifact.caption == _artifact()["caption"]
+    assert provider.repair_calls == 1
+    assert repository.saved is not None
+    assert repository.saved["artifact_id"] == "artifact_001"
+    assert repository.saved["parent_version_id"] == "version_001"
