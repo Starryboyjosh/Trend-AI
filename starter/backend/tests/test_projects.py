@@ -113,6 +113,7 @@ async def test_video_script_project_can_be_edited_and_versioned(
     assert saved.status_code == 200
     assert saved.json()["version_number"] == 2
     assert saved.json()["version"]["hook"] == "Un café que transforma tu pausa"
+    assert saved.json()["edit_magnitude_percent"] > 0
 
 
 @pytest.mark.asyncio

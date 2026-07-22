@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from difflib import SequenceMatcher
 from typing import Literal
 
 from fastapi import APIRouter, Depends
@@ -10,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.business.models import Business
-from app.conversations.models import ArtifactVersion, Conversation, GeneratedArtifact
+from app.conversations.models import ArtifactEvent, ArtifactVersion, Conversation, GeneratedArtifact
 from app.conversations.repository import SqlArtifactRepository
 from app.core.errors import AppError, NotFoundError, ValidationError_
 from app.dependencies import get_db, require_workspace
@@ -55,6 +56,12 @@ def _load_artifact_content_json(snapshot: str | None) -> dict | None:
         return json.loads(snapshot)
     except (json.JSONDecodeError, TypeError):
         return None
+
+
+def _edit_magnitude_percent(previous_content: str | None, updated_content: str) -> int:
+    if not previous_content:
+        return 100
+    return round((1 - SequenceMatcher(None, previous_content, updated_content).ratio()) * 100)
 
 
 @router.post("", status_code=201)
@@ -435,17 +442,29 @@ async def update_artifact_version_endpoint(
         )
 
     repo = SqlArtifactRepository(db)
+    serialized_content = content.model_dump_json()
+    edit_magnitude_percent = _edit_magnitude_percent(
+        current_version.content_json if current_version else None, serialized_content
+    )
     await repo.add_artifact_version(
         artifact_id=project.artifact_id,
         content=content,
         user_edited=True,
         parent_version_id=current_version.id if current_version else None,
     )
+    db.add(
+        ArtifactEvent(
+            artifact_id=project.artifact_id,
+            event_type="edited",
+            magnitude_percent=edit_magnitude_percent,
+        )
+    )
     await db.commit()
 
     return {
         "version": content.model_dump(),
         "version_number": (current_version.version_number + 1) if current_version else 1,
+        "edit_magnitude_percent": edit_magnitude_percent,
     }
 
 
