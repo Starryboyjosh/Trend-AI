@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 16 16" role="img" aria-labelledby="title desc">
+  <title id="title">Carpeta violeta HiTrendy</title>
+  <desc id="desc">Adaptación visual del icono folder-violet de Papirus.</desc>
+  <defs>
+    <linearGradient id="folderBack" x1="1" y1="1" x2="14" y2="14" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5d2d8f"/>
+      <stop offset="1" stop-color="#321450"/>
+    </linearGradient>
+    <linearGradient id="folderFront" x1="2" y1="5" x2="14" y2="14" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7641aa"/>
+      <stop offset="1" stop-color="#432064"/>
+    </linearGradient>
+    <linearGradient id="folderGlow" x1="2" y1="5" x2="12" y2="12" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#bd8ee7" stop-opacity=".7"/>
+      <stop offset="1" stop-color="#8b56c5" stop-opacity=".08"/>
+    </linearGradient>
+  </defs>
+  <path fill="#1f0c36" opacity=".24" transform="translate(0 .45)" d="m 1,2 0,11 c 0,0 0,1 1,1 l 12,0 c 0,0 1,0 1,-1 L 15,4 C 15,3 14,3 14,3 L 9,3 7,1 2,1 C 2,1 1,1 1,2 Z"/>
+  <path fill="url(#folderBack)" d="m 1,2 0,11 c 0,0 0,1 1,1 l 12,0 c 0,0 1,0 1,-1 L 15,4 C 15,3 14,3 14,3 L 9,3 7,1 2,1 C 2,1 1,1 1,2 Z"/>
+  <path fill="url(#folderFront)" d="M1 5.05h14V13c0 .62-.38 1-1 1H2c-.62 0-1-.38-1-1Z"/>
+  <path fill="url(#folderGlow)" d="M1.35 5.45h13.3v1.15H1.35z" opacity=".9"/>
+  <path fill="#d8b4f5" opacity=".34" d="M2 1.45h4.8L8.75 3.4H14c.4 0 .68.13.85.38-.24-.52-.85-.78-1.38-.78H9L7 1H2c-.48 0-.82.17-1 .47.23-.02.56-.02 1-.02Z"/>
+</svg>

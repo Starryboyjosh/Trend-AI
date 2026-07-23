@@ -9,6 +9,7 @@ import { StepAudience } from "@/components/onboarding/step-audience";
 import { StepChannels } from "@/components/onboarding/step-channels";
 import { StepBrand } from "@/components/onboarding/step-brand";
 import { StepReview } from "@/components/onboarding/step-review";
+import { ProtectedRoute } from "@/components/auth/protected-route";
 import { api, ApiError } from "@/lib/api";
 import type { Category, Objective, Platform } from "@/types/business";
 import type { Tone } from "@/types/brand";
@@ -199,7 +200,7 @@ export default function OnboardingPage() {
       });
 
       clearDraft();
-      router.push("/");
+      router.push("/dashboard");
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
@@ -214,146 +215,150 @@ export default function OnboardingPage() {
   if (!hydrated) return null;
 
   return (
-    <main className="onboarding-page"
-      style={{
-        maxWidth: 640,
-        margin: "0 auto",
-        padding: "48px 24px",
-        minHeight: "100vh",
-      }}
-      onKeyDown={handleKeyDown}
-    >
-      <div
+    <ProtectedRoute>
+      <main
+        className="onboarding-page"
         style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          marginBottom: 32,
+          maxWidth: 640,
+          margin: "0 auto",
+          padding: "48px 24px",
+          minHeight: "100vh",
         }}
+        onKeyDown={handleKeyDown}
       >
         <div
           style={{
-            width: 36,
-            height: 36,
-            borderRadius: "var(--radius-sm)",
-            background: "var(--primary)",
             display: "flex",
             alignItems: "center",
-            justifyContent: "center",
-            fontWeight: "bold",
-            color: "var(--primary-foreground)",
+            gap: 12,
+            marginBottom: 32,
           }}
         >
-          H
-        </div>
-        <span
-          style={{
-            fontFamily: "var(--font-heading)",
-            fontWeight: 700,
-            fontSize: "1.2rem",
-          }}
-        >
-          Configura tu negocio
-        </span>
-        <span
-          style={{
-            marginLeft: "auto",
-            fontSize: "0.75rem",
-            color: "var(--muted-foreground)",
-          }}
-        >
-          {hydrated && "Guardado automáticamente"}
-        </span>
-      </div>
-
-      <ProgressBar steps={STEPS} current={step} />
-
-      {error && (
-        <div
-          role="alert"
-          style={{
-            padding: "12px 16px",
-            background: "#fef2f2",
-            color: "#b91c1c",
-            borderRadius: "var(--radius-md)",
-            marginBottom: 16,
-            border: "1px solid #fecaca",
-          }}
-        >
-          {error}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit}>
-        {step === 0 && <StepBusiness data={data} onChange={update} />}
-        {step === 1 && <StepAudience data={data} onChange={update} />}
-        {step === 2 && <StepChannels data={data} onChange={update} />}
-        {step === 3 && <StepBrand data={data} onChange={update} />}
-        {step === 4 && (
-          <StepReview
-            business={data as unknown as Record<string, unknown>}
-            brand={data as unknown as Record<string, unknown>}
-            submitting={submitting}
-          />
-        )}
-
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            marginTop: 32,
-          }}
-        >
-          <button
-            type="button"
-            onClick={back}
-            disabled={step === 0}
+          <div
             style={{
-              padding: "10px 20px",
-              border: "1px solid var(--border)",
+              width: 36,
+              height: 36,
               borderRadius: "var(--radius-sm)",
-              background: "var(--surface)",
-              cursor: step === 0 ? "not-allowed" : "pointer",
-              opacity: step === 0 ? 0.5 : 1,
+              background: "var(--primary)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontWeight: "bold",
+              color: "var(--primary-foreground)",
             }}
           >
-            Anterior
-          </button>
-
-          {step < STEPS.length - 1 ? (
-            <button
-              type="button"
-              onClick={next}
-              disabled={!canProceed()}
-              style={{
-                padding: "10px 24px",
-                border: 0,
-                borderRadius: "var(--radius-sm)",
-                background: canProceed()
-                  ? "var(--gradient-primary)"
-                  : "var(--border)",
-                color: canProceed()
-                  ? "var(--primary-foreground)"
-                  : "var(--muted-foreground)",
-                cursor: canProceed() ? "pointer" : "not-allowed",
-                fontWeight: 600,
-              }}
-            >
-              Siguiente <kbd style={{ marginLeft: 8, opacity: 0.7 }}>Enter</kbd>
-            </button>
-          ) : null}
+            H
+          </div>
+          <span
+            style={{
+              fontFamily: "var(--font-heading)",
+              fontWeight: 700,
+              fontSize: "1.2rem",
+            }}
+          >
+            Configura tu negocio
+          </span>
+          <span
+            style={{
+              marginLeft: "auto",
+              fontSize: "0.75rem",
+              color: "var(--muted-foreground)",
+            }}
+          >
+            {hydrated && "Guardado automáticamente"}
+          </span>
         </div>
 
-        <p
-          style={{
-            fontSize: "0.75rem",
-            color: "var(--muted-foreground)",
-            marginTop: 16,
-          }}
-        >
-          Usa <kbd>Enter</kbd> para avanzar · <kbd>Esc</kbd> para retroceder
-        </p>
-      </form>
-    </main>
+        <ProgressBar steps={STEPS} current={step} />
+
+        {error && (
+          <div
+            role="alert"
+            style={{
+              padding: "12px 16px",
+              background: "#fef2f2",
+              color: "#b91c1c",
+              borderRadius: "var(--radius-md)",
+              marginBottom: 16,
+              border: "1px solid #fecaca",
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          {step === 0 && <StepBusiness data={data} onChange={update} />}
+          {step === 1 && <StepAudience data={data} onChange={update} />}
+          {step === 2 && <StepChannels data={data} onChange={update} />}
+          {step === 3 && <StepBrand data={data} onChange={update} />}
+          {step === 4 && (
+            <StepReview
+              business={data as unknown as Record<string, unknown>}
+              brand={data as unknown as Record<string, unknown>}
+              submitting={submitting}
+            />
+          )}
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              marginTop: 32,
+            }}
+          >
+            <button
+              type="button"
+              onClick={back}
+              disabled={step === 0}
+              style={{
+                padding: "10px 20px",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius-sm)",
+                background: "var(--surface)",
+                cursor: step === 0 ? "not-allowed" : "pointer",
+                opacity: step === 0 ? 0.5 : 1,
+              }}
+            >
+              Anterior
+            </button>
+
+            {step < STEPS.length - 1 ? (
+              <button
+                type="button"
+                onClick={next}
+                disabled={!canProceed()}
+                style={{
+                  padding: "10px 24px",
+                  border: 0,
+                  borderRadius: "var(--radius-sm)",
+                  background: canProceed()
+                    ? "var(--gradient-primary)"
+                    : "var(--border)",
+                  color: canProceed()
+                    ? "var(--primary-foreground)"
+                    : "var(--muted-foreground)",
+                  cursor: canProceed() ? "pointer" : "not-allowed",
+                  fontWeight: 600,
+                }}
+              >
+                Siguiente{" "}
+                <kbd style={{ marginLeft: 8, opacity: 0.7 }}>Enter</kbd>
+              </button>
+            ) : null}
+          </div>
+
+          <p
+            style={{
+              fontSize: "0.75rem",
+              color: "var(--muted-foreground)",
+              marginTop: 16,
+            }}
+          >
+            Usa <kbd>Enter</kbd> para avanzar · <kbd>Esc</kbd> para retroceder
+          </p>
+        </form>
+      </main>
+    </ProtectedRoute>
   );
 }

@@ -1,3 +1,6 @@
+import { cloneDemo, demoData } from "@/lib/demo-data";
+import { isDemoModeEnabled } from "@/lib/demo-mode";
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -11,6 +14,10 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  if (isDemoModeEnabled()) {
+    return demoRequest<T>(path, options);
+  }
+
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(options.headers as Record<string, string>),
@@ -43,6 +50,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 async function requestForm<T>(path: string, body: FormData): Promise<T> {
+  if (isDemoModeEnabled()) {
+    return demoRequest<T>(path, { method: "POST", body });
+  }
+
   const res = await fetch(path, {
     method: "POST",
     body,
@@ -58,6 +69,103 @@ async function requestForm<T>(path: string, body: FormData): Promise<T> {
     );
   }
   return res.json();
+}
+
+async function demoRequest<T>(path: string, options: RequestInit): Promise<T> {
+  const method = (options.method || "GET").toUpperCase();
+  const url = new URL(path, "http://localhost");
+  const pathname = url.pathname;
+
+  if (pathname === "/api/v1/auth/me") return cloneDemo(demoData.auth) as T;
+  if (pathname === "/api/v1/auth/login" || pathname === "/api/v1/auth/register")
+    return cloneDemo(demoData.auth) as T;
+  if (pathname === "/api/v1/auth/logout") return { ok: true } as T;
+
+  if (pathname === "/api/v1/projects" && method === "GET") {
+    return cloneDemo(demoData.projects) as T;
+  }
+  if (pathname.startsWith("/api/v1/projects/") && method === "PATCH") {
+    return { ok: true } as T;
+  }
+  if (pathname.startsWith("/api/v1/projects/") && method === "POST") {
+    return { ok: true } as T;
+  }
+
+  if (pathname === "/api/v1/templates" && method === "GET") {
+    return cloneDemo(demoData.templates) as T;
+  }
+  if (pathname === "/api/v1/templates/recommendations") {
+    return cloneDemo(demoData.templates) as T;
+  }
+
+  if (pathname === "/api/v1/businesses" && method === "GET") {
+    return cloneDemo(demoData.businesses) as T;
+  }
+  if (pathname === "/api/v1/businesses" && method === "POST") {
+    return { id: "business-demo-created" } as T;
+  }
+  if (
+    /^\/api\/v1\/businesses\/[^/]+\/brand-profile$/.test(pathname) &&
+    method === "GET"
+  ) {
+    return cloneDemo(demoData.brandProfile) as T;
+  }
+  if (
+    /^\/api\/v1\/businesses\/[^/]+\/brand-profile$/.test(pathname) &&
+    method === "PUT"
+  ) {
+    return cloneDemo(demoData.brandProfile) as T;
+  }
+  if (/^\/api\/v1\/businesses\/[^/]+$/.test(pathname) && method === "PATCH") {
+    return cloneDemo(demoData.businesses[0]) as T;
+  }
+
+  if (pathname === "/api/v1/conversations" && method === "GET") {
+    return cloneDemo(demoData.conversations) as T;
+  }
+  if (pathname === "/api/v1/conversations" && method === "POST") {
+    return { id: "conversation-demo-created" } as T;
+  }
+  if (pathname.startsWith("/api/v1/conversations/") && method === "GET") {
+    return {
+      messages: [
+        {
+          id: "message-demo-1",
+          role: "user",
+          content: "Necesito un post para una promo de fin de semana.",
+          metadata: null,
+        },
+        {
+          id: "message-demo-2",
+          role: "assistant",
+          content: "Aquí tienes una propuesta lista para editar.",
+          artifact: demoData.artifacts.demoArtifact,
+          artifact_id: "artifact-demo-1",
+        },
+      ],
+    } as T;
+  }
+  if (pathname.startsWith("/api/v1/conversations/") && method === "POST") {
+    return {
+      type: "artifact",
+      assistant_message: {
+        id: "message-demo-3",
+        content: "Aquí tienes tu borrador de ejemplo.",
+      },
+      artifact: demoData.artifacts.demoArtifact,
+      artifact_id: "artifact-demo-1",
+    } as T;
+  }
+
+  if (pathname === "/api/v1/assets" && method === "GET") return [] as T;
+  if (pathname === "/api/v1/assets/uploads" && method === "POST") {
+    return {
+      upload_id: "upload-demo",
+      upload_url: "/api/v1/assets/uploads",
+    } as T;
+  }
+
+  return {} as T;
 }
 
 const BASE = "/api/v1";
@@ -92,9 +200,7 @@ export const api = {
       conversationId: string,
       text: string,
       uiIntent?:
-        | "create_social_post"
-        | "create_short_video_script"
-        | "analyze_visual",
+        "create_social_post" | "create_short_video_script" | "analyze_visual",
       attachmentIds: string[] = []
     ) {
       return request<Record<string, unknown>>(

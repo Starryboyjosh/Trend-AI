@@ -1,0 +1,151 @@
+import type { Template } from "@/types/template";
+
+export const templateCategories = [
+  { id: "all", label: "Todos" },
+  { id: "reels", label: "Reels" },
+  { id: "posts", label: "Posts" },
+  { id: "stories", label: "Stories" },
+  { id: "ads", label: "Anuncios" },
+] as const;
+
+export type TemplateCategory = (typeof templateCategories)[number]["id"];
+
+export type TemplatePresentation = Template & {
+  categoryId: Exclude<TemplateCategory, "all">;
+  displayCategory: string;
+  aspectRatio: "4 / 5" | "9 / 16";
+  tags: string[];
+};
+
+type PresentationMeta = Pick<
+  TemplatePresentation,
+  "categoryId" | "displayCategory" | "aspectRatio" | "tags"
+>;
+
+const fallbackMeta: PresentationMeta = {
+  categoryId: "posts",
+  displayCategory: "Posts",
+  aspectRatio: "4 / 5",
+  tags: [],
+};
+
+const metaById: Record<string, PresentationMeta> = {
+  "template-demo-1": {
+    categoryId: "posts",
+    displayCategory: "Posts",
+    aspectRatio: "4 / 5",
+    tags: ["promoción", "producto", "oferta"],
+  },
+  "template-demo-2": {
+    categoryId: "reels",
+    displayCategory: "Reels",
+    aspectRatio: "9 / 16",
+    tags: ["lanzamiento", "video", "campaña"],
+  },
+  "template-demo-3": {
+    categoryId: "stories",
+    displayCategory: "Stories",
+    aspectRatio: "9 / 16",
+    tags: ["café", "menú", "temporada"],
+  },
+  "template-demo-4": {
+    categoryId: "ads",
+    displayCategory: "Anuncios",
+    aspectRatio: "4 / 5",
+    tags: ["flores", "regalo", "venta"],
+  },
+  "template-demo-5": {
+    categoryId: "stories",
+    displayCategory: "Stories",
+    aspectRatio: "9 / 16",
+    tags: ["verano", "descuento", "historia"],
+  },
+  "template-demo-6": {
+    categoryId: "posts",
+    displayCategory: "Posts",
+    aspectRatio: "4 / 5",
+    tags: ["amor", "fecha especial", "promoción"],
+  },
+  "template-demo-7": {
+    categoryId: "reels",
+    displayCategory: "Reels",
+    aspectRatio: "9 / 16",
+    tags: ["natural", "producto", "video"],
+  },
+  "template-demo-8": {
+    categoryId: "ads",
+    displayCategory: "Anuncios",
+    aspectRatio: "4 / 5",
+    tags: ["café", "destacado", "anuncio"],
+  },
+};
+
+function inferredMeta(template: Template): PresentationMeta {
+  const category = normalize(template.category);
+  const formats = template.formats.map(normalize);
+  const vertical = formats.some(
+    (format) =>
+      format === "reel" || format === "story" || format === "short video"
+  );
+
+  if (category.includes("reel") || formats.includes("reel")) {
+    return {
+      ...fallbackMeta,
+      categoryId: "reels",
+      displayCategory: "Reels",
+      aspectRatio: "9 / 16",
+    };
+  }
+  if (category.includes("story") || formats.includes("story")) {
+    return {
+      ...fallbackMeta,
+      categoryId: "stories",
+      displayCategory: "Stories",
+      aspectRatio: "9 / 16",
+    };
+  }
+  if (category.includes("anuncio") || category.includes("ad")) {
+    return { ...fallbackMeta, categoryId: "ads", displayCategory: "Anuncios" };
+  }
+  return {
+    ...fallbackMeta,
+    aspectRatio: vertical ? "9 / 16" : "4 / 5",
+    tags: [template.category, ...template.formats].filter(Boolean),
+  };
+}
+
+export function normalize(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[_-]/g, " ")
+    .toLocaleLowerCase("es")
+    .trim();
+}
+
+export function toTemplatePresentation(
+  template: Template
+): TemplatePresentation {
+  return { ...template, ...(metaById[template.id] || inferredMeta(template)) };
+}
+
+export function matchesTemplate(
+  template: TemplatePresentation,
+  query: string,
+  category: TemplateCategory
+) {
+  const searchable = [
+    template.title,
+    template.category,
+    template.displayCategory,
+    template.formats.join(" "),
+    template.tags.join(" "),
+  ]
+    .map(normalize)
+    .join(" ");
+
+  return (
+    (category === "all" || template.categoryId === category) &&
+    (!normalize(query) || searchable.includes(normalize(query)))
+  );
+}

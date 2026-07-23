@@ -8,18 +8,18 @@ status: proposed
 
 ## Estado de implementación — 2026-07-22
 
-El MVP está aproximadamente al **96% funcional**. Están implementados y
-verificados los flujos de perfil de negocio, autenticación y workspace,
-generación de publicaciones y guiones cortos, variaciones, proyectos
-versionados, plantillas, biblioteca de activos, revisión visual, historial de
-conversaciones, voz en navegador, proveedores demo/intercambiables y medidas
-base de seguridad y operación.
+El sistema tiene un **vertical slice demo funcional**: onboarding, autenticación,
+workspace, generación de publicaciones y guiones, variaciones, proyectos
+versionados, plantillas, biblioteca de activos, revisión visual, conversaciones,
+voz en navegador y proveedores demo/intercambiables. El backend y sus pruebas
+están operativos, y el frontend compila y pasa sus pruebas unitarias.
 
-Pendiente antes de declarar el MVP terminado: instrumentar las señales de uso
-restantes (copia, guardado y magnitud de edición), ampliar la cobertura de
-accesibilidad a las demás rutas y ejecutar la revisión Graphify final. Los
-intents no implementados se mantienen documentados como planeados y se rechazan
-de forma explícita.
+No se declara el MVP terminado todavía. La integración visual reciente tiene
+pendientes P0 documentados en el [plan de resolución de errores](error-resolution-plan.md):
+logout contra la API real, creación persistente desde plantilla y miniaturas de
+las plantillas seed. También falta evidencia E2E estable en Chromium. El
+porcentaje anterior del 96% se elimina porque ocultaba estos riesgos de extremo
+a extremo.
 
 ## Epic E1 — Foundation
 
@@ -68,8 +68,9 @@ de forma explícita.
 - E5-T2 Catalog UI. **Implementado.**
 - E5-T3 Filters. **Implementado.**
 - E5-T4 Recommendation service. **Implementado.**
-- E5-T5 Start project from template. **Implementado:** crea un artefacto y una
-  primera versión editables, con origen de plantilla trazable.
+- E5-T5 Start project from template. **Backend implementado; integración web
+  pendiente:** la ruta web conserva el template seleccionado, pero aún debe
+  invocar la creación de proyecto persistente con `template_id`.
 
 ## Epic E6 — Library and visual review
 
@@ -97,7 +98,7 @@ de forma explícita.
 
 ## Epic E8 — Readiness
 
-- E8-T1 Accessibility test pass. **Implementado para los flujos críticos:**
+- E8-T1 Accessibility test pass. **Parcial para los flujos críticos:**
   foco visible, movimiento reducido, etiquetas de controles, estados anunciados
   y una comprobación automatizada axe del hilo del asistente.
 - E8-T2 Security test pass. **Implementado:** pruebas negativas cubren sesión,
@@ -110,4 +111,8 @@ de forma explícita.
   secret boundaries, and provider/storage safeguards are documented.
 - E8-T5 Demo reset and seed command. **Implemented:** `make demo-reset`
   recreates only the protected local demo database and seeds templates.
-- E8-T6 Graphify generation and report review.
+- E8-T6 Graphify generation and report review. **Pendiente.**
+
+La inteligencia de tendencias en tiempo real permanece fuera del MVP según la
+visión y el roadmap. La entrega inmediata prioriza crear y guardar contenido;
+no se deben simular integraciones ni prometer análisis de mercado no conectado.

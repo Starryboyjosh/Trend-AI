@@ -1,143 +1,95 @@
-"use client";
-
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 
-import { AppShell } from "@/components/shell/app-shell";
-import { api, ApiError } from "@/lib/api";
+import { HeroComposer } from "@/components/landing/hero-composer";
+import { PublicHeader } from "@/components/layout/public-header";
+import { Logo } from "@/components/brand/logo";
+import { loginPath, routes } from "@/lib/routes";
 
-interface Project {
-  id: string;
-  name: string;
-  platform: string;
-  created_at: string | null;
-}
+const heroImages = [
+  { src: "/templates/flores.png", alt: "Plantilla de promoción floral", label: "Nuevos sabores" },
+  { src: "/templates/summer.png", alt: "Plantilla de campaña de verano", label: "Campaña de verano" },
+  { src: "/templates/coffee.png", alt: "Plantilla para cafetería", label: "Contenido para café" },
+  { src: "/templates/amor.png", alt: "Plantilla de promoción especial", label: "Promoción especial" },
+];
 
-export default function Home() {
-  const router = useRouter();
-  const [hasBusiness, setHasBusiness] = useState(false);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
+const templateRail = [
+  { src: "/templates/flores.png", title: "Promoción floral" },
+  { src: "/templates/summer.png", title: "Final de verano" },
+  { src: "/templates/coffee.png", title: "Coffee launch" },
+  { src: "/templates/comida.png", title: "Oferta del día" },
+  { src: "/templates/amor.png", title: "Historia de marca" },
+];
 
-  useEffect(() => {
-    async function loadPrivateHome() {
-      try {
-        await api.auth.me();
-        const [businesses, projectList] = await Promise.all([
-          api.businesses.list(),
-          api.projects.list(),
-        ]);
-        setHasBusiness(businesses.length > 0);
-        setProjects(projectList as unknown as Project[]);
-      } catch (error) {
-        if (error instanceof ApiError && error.status === 401) {
-          router.replace("/login");
-        }
-      } finally {
-        setLoading(false);
-      }
-    }
-    void loadPrivateHome();
-  }, [router]);
-
+export default function HomePage() {
   return (
-    <AppShell>
-      <main className="app-page home-page">
-        <section className="home-hero">
-          <h1>Comienza a Crear</h1>
-          <div className="home-hero-collage" aria-hidden="true">
-            <Image
-              src="/figma/home/hero-collage.png"
-              alt=""
-              width={1064}
-              height={380}
-              priority
-            />
+    <main className="marketing-page">
+      <PublicHeader />
+
+      <section id="crear" className="marketing-hero" aria-labelledby="hero-title">
+        <div className="hero-grid" aria-hidden="true" />
+        <div className="hero-floating-templates" aria-hidden="true">
+          {heroImages.map((image, index) => (
+            <figure key={image.src} className={`hero-float hero-float--${index + 1}`}>
+              <Image src={image.src} alt="" width={154} height={206} priority={index < 2} />
+              <figcaption>{image.label}</figcaption>
+            </figure>
+          ))}
+        </div>
+        <div className="marketing-hero-copy">
+          <p className="hero-eyebrow"><span /> Tu estudio creativo con inteligencia artificial</p>
+          <h1 id="hero-title">Comienza a <em>crear</em></h1>
+          <p>Transforma una idea sencilla en publicaciones, campañas y contenido listo para tus redes, sin perder la identidad de tu negocio.</p>
+          <HeroComposer />
+        </div>
+      </section>
+
+      <div className="marketing-wave" aria-hidden="true" />
+
+      <section id="plantillas" className="marketing-marquee-section" aria-labelledby="marquee-title">
+        <div className="marketing-section-heading">
+          <div>
+            <p className="eyebrow">EMPIEZA CON UNA IDEA</p>
+            <h2 id="marquee-title">Una colección que se mueve al ritmo de tu marca.</h2>
           </div>
-          <Link href="/assistant" className="home-start-button">
-            Comenzar
-          </Link>
-        </section>
+          <p>Explora formatos para promociones, lanzamientos, historias y campañas. Selecciona uno y continúa personalizándolo dentro del Studio.</p>
+        </div>
+        <div className="template-marquee" aria-label="Vista previa de plantillas">
+          <div className="template-marquee-track">
+            {templateRail.map((template) => (
+              <Link className="landing-template-tile" href={routes.templates} key={template.src}>
+                <Image src={template.src} alt={`Plantilla ${template.title}`} width={240} height={320} />
+                <span>{template.title} <b aria-hidden="true">›</b></span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
 
-        {loading ? <p className="page-intro">Preparando tu espacio…</p> : null}
+      <section id="nosotros" className="about-section" aria-labelledby="about-title">
+        <div className="about-collage">
+          <Image src="/templates/about-collage.png" alt="Collage de publicaciones creadas para pequeños negocios" fill sizes="(max-width: 639px) 100vw, 45vw" />
+          <span className="about-note about-note--top">Contenido actual, sin complicaciones →</span>
+          <span className="about-note about-note--bottom">Tu idea + HiTrendy = una campaña lista</span>
+        </div>
+        <div className="about-copy">
+          <p className="eyebrow">LA HISTORIA DETRÁS DE LA PLATAFORMA</p>
+          <h2 id="about-title">¿Quiénes <em>somos?</em></h2>
+          <p>HiTrendy es una plataforma diseñada para ayudar a pequeños negocios, emprendedores y creadores a transformar sus ideas en contenido visual atractivo, profesional y alineado con las tendencias actuales usando inteligencia artificial.</p>
+          <p>Buscamos simplificar la creación de contenido para que cualquier persona, sin importar su experiencia en diseño o marketing, pueda comunicar el valor de su negocio de manera efectiva.</p>
+          <div className="about-points">
+            <span><b>01</b><small>Ideas que conservan tu identidad.</small></span>
+            <span><b>02</b><small>Contenido listo para publicar.</small></span>
+          </div>
+          <Link className="button-primary" href={loginPath(routes.studioNew)}>Crear mi primer proyecto <span aria-hidden="true">→</span></Link>
+        </div>
+      </section>
 
-        {!loading && !hasBusiness ? (
-          <section className="setup-callout surface-card">
-            <div>
-              <p className="eyebrow">PRIMER PASO</p>
-              <h2>Configura tu negocio</h2>
-              <p>
-                Para personalizar tus resultados necesitamos conocer algunos
-                datos de tu negocio.
-              </p>
-            </div>
-            <Link href="/onboarding" className="button-primary">
-              Configurar mi negocio
-            </Link>
-          </section>
-        ) : null}
-
-        {!loading && hasBusiness ? (
-          <>
-            <section
-              className="recent-projects"
-              aria-labelledby="recent-projects-title"
-            >
-              <div className="section-heading">
-                <h2 id="recent-projects-title">Tus Proyectos</h2>
-                <Link href="/projects">Ver todos</Link>
-              </div>
-              {projects.length ? (
-                <div className="recent-project-grid">
-                  {projects.slice(0, 4).map((project) => (
-                    <Link
-                      key={project.id}
-                      href={`/projects/${project.id}`}
-                      className="recent-project-card"
-                    >
-                      <Image
-                        src="/figma/home/project-folder.png"
-                        alt=""
-                        width={234}
-                        height={166}
-                        aria-hidden="true"
-                      />
-                      <span className="project-platform">
-                        {project.platform}
-                      </span>
-                      <strong>{project.name}</strong>
-                      <small>
-                        {project.created_at
-                          ? new Intl.DateTimeFormat("es", {
-                              day: "numeric",
-                              month: "short",
-                            }).format(new Date(project.created_at))
-                          : "Borrador"}
-                      </small>
-                    </Link>
-                  ))}
-                </div>
-              ) : (
-                <div className="empty-projects surface-card">
-                  <Image
-                    src="/figma/home/project-folder.png"
-                    alt=""
-                    width={234}
-                    height={166}
-                    aria-hidden="true"
-                  />
-                  <p>Aún no tienes proyectos guardados.</p>
-                  <Link href="/assistant" className="button-secondary">
-                    Crear mi primer borrador
-                  </Link>
-                </div>
-              )}
-            </section>
-          </>
-        ) : null}
-      </main>
-    </AppShell>
+      <footer className="marketing-footer">
+        <Logo inverse />
+        <span>Plataforma web de asistencia publicitaria con inteligencia artificial.</span>
+        <Link className="button-secondary" href={routes.login}>Entrar al Studio</Link>
+      </footer>
+    </main>
   );
 }

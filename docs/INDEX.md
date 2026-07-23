@@ -59,8 +59,10 @@ This index is the human and agent entry point.
 - [Backlog](06-implementation/backlog.md)
 - [Test strategy](06-implementation/test-strategy.md)
 - [Deployment](06-implementation/deployment.md)
+- [Frontend error resolution plan](06-implementation/error-resolution-plan.md)
 - [Graphify preparation](06-implementation/graphify-ready.md)
 - [Figma implementation plan](06-implementation/figma-implementation-plan.md)
+- [Frontend asset inventory](06-implementation/frontend-assets-inventory.md)
 
 ## Demo and sources
 

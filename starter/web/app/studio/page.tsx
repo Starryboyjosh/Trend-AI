@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
-export default function ConversationsRedirect() {
+export default function StudioIndexPage() {
   redirect("/studio/new");
 }

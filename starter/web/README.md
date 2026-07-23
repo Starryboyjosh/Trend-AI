@@ -1,5 +1,35 @@
-# Next.js starter
+# HiTrendy web
 
-This is a minimal typed foundation, not a complete generated app. During implementation, initialize a current stable Next.js project, copy the domain components and tokens, add the shadcn/ui components selected by the team, and pin dependencies through the lock file.
+Frontend Next.js/TypeScript integrado con el backend real del repositorio.
 
-The `latest` entries are intentional placeholders for bootstrap only; replace them with the versions resolved and tested by the implementation agent.
+## Desarrollo
+
+Desde la raíz del monorepo:
+
+```bash
+npm install
+npm run dev -w starter/web
+```
+
+Validaciones del frontend:
+
+```bash
+npm run typecheck -w starter/web
+npm run lint -w starter/web
+npm run test -w starter/web
+npm run build -w starter/web
+```
+
+El frontend conserva dos modos:
+
+- **API real:** usa `NEXT_PUBLIC_API_BASE_URL` y la autenticación del backend.
+- **Demo local:** permite recorrer el flujo sin credenciales externas y guarda
+  el estado demo en el navegador.
+
+La configuración (`/settings`) sigue siendo la implementación existente del
+repositorio. Las rutas antiguas (`/assistant`, `/conversations`, `/projects`)
+se mantienen como alias de compatibilidad hacia el App Shell actual.
+
+El análisis de tendencias en tiempo real no forma parte del MVP actual. La
+prioridad de esta entrega es generar, editar y guardar contenido, dejando el
+contexto de tendencias para una fase posterior con fuentes autorizadas.
