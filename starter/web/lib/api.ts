@@ -1,5 +1,9 @@
 import { cloneDemo, demoData } from "@/lib/demo-data";
-import { isDemoModeEnabled } from "@/lib/demo-mode";
+import {
+  isDemoModeEnabled,
+  readDemoProjects,
+  saveDemoProjects,
+} from "@/lib/demo-mode";
 
 export class ApiError extends Error {
   constructor(
@@ -46,6 +50,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     );
   }
 
+  if (res.status === 204) return undefined as T;
+
   return res.json();
 }
 
@@ -81,14 +87,82 @@ async function demoRequest<T>(path: string, options: RequestInit): Promise<T> {
     return cloneDemo(demoData.auth) as T;
   if (pathname === "/api/v1/auth/logout") return { ok: true } as T;
 
+  const demoProjects = readDemoProjects(cloneDemo(demoData.projects));
   if (pathname === "/api/v1/projects" && method === "GET") {
-    return cloneDemo(demoData.projects) as T;
+    return cloneDemo(demoProjects) as T;
   }
-  if (pathname.startsWith("/api/v1/projects/") && method === "PATCH") {
-    return { ok: true } as T;
+  if (pathname === "/api/v1/projects" && method === "POST") {
+    const data = parseJsonBody(options.body);
+    const template = demoData.templates.find(
+      (item) => item.id === data.template_id
+    );
+    const now = new Date().toISOString();
+    const project = {
+      id: `project-demo-${Date.now()}`,
+      name:
+        typeof data.name === "string"
+          ? data.name
+          : template?.title || "Proyecto sin título",
+      business_id:
+        typeof data.business_id === "string"
+          ? data.business_id
+          : "business-demo-1",
+      platform: template?.platforms[0] || "instagram",
+      status: "active" as const,
+      updated_at: now,
+      created_at: now,
+      artifact_id: `artifact-demo-${Date.now()}`,
+      source_template_id: template?.id || null,
+      artifact_snapshot: {
+        ...cloneDemo(demoData.artifacts.demoArtifact),
+        hook: template?.title || demoData.artifacts.demoArtifact.hook,
+        format_recommendation:
+          template?.formats[0] ||
+          demoData.artifacts.demoArtifact.format_recommendation,
+        assumptions: template
+          ? [`Proyecto iniciado desde la plantilla ${template.title}.`]
+          : demoData.artifacts.demoArtifact.assumptions,
+      },
+    };
+    demoProjects.unshift(project);
+    saveDemoProjects(demoProjects);
+    return cloneDemo(project) as T;
   }
-  if (pathname.startsWith("/api/v1/projects/") && method === "POST") {
-    return { ok: true } as T;
+  const projectMatch = pathname.match(
+    /^\/api\/v1\/projects\/([^/]+)(?:\/(.+))?$/
+  );
+  if (projectMatch) {
+    const [, projectId, action] = projectMatch;
+    const project = demoProjects.find((item) => item.id === projectId);
+    if (!project)
+      throw new ApiError(404, "NOT_FOUND", "Proyecto no encontrado.", false);
+
+    if (!action && method === "GET") return cloneDemo(project) as T;
+    if (!action && method === "PATCH") {
+      Object.assign(project, parseJsonBody(options.body), {
+        updated_at: new Date().toISOString(),
+      });
+      saveDemoProjects(demoProjects);
+      return cloneDemo(project) as T;
+    }
+    if (action === "versions" && method === "GET") {
+      return [
+        {
+          id: `${project.id}-version-1`,
+          version_number: 1,
+          user_edited: false,
+          created_at: project.updated_at,
+        },
+      ] as T;
+    }
+    if (action === "artifact-version" && method === "PUT") {
+      project.artifact_snapshot = parseJsonBody(
+        options.body
+      ) as typeof project.artifact_snapshot;
+      project.updated_at = new Date().toISOString();
+      saveDemoProjects(demoProjects);
+      return { version_number: 2 } as T;
+    }
   }
 
   if (pathname === "/api/v1/templates" && method === "GET") {
@@ -166,6 +240,17 @@ async function demoRequest<T>(path: string, options: RequestInit): Promise<T> {
   }
 
   return {} as T;
+}
+
+function parseJsonBody(
+  body: BodyInit | null | undefined
+): Record<string, unknown> {
+  if (typeof body !== "string") return {};
+  try {
+    return JSON.parse(body) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
 }
 
 const BASE = "/api/v1";

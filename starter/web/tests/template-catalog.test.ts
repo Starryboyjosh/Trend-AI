@@ -33,4 +33,16 @@ describe("catálogo de plantillas", () => {
   test("mantiene la proporción vertical apropiada para anuncios", () => {
     expect(toTemplatePresentation(template).aspectRatio).toBe("4 / 5");
   });
+
+  test("usa un asset local para las miniaturas del seed backend", () => {
+    const seededTemplate: Template = {
+      ...template,
+      id: "tpl_reel_01",
+      thumbnail_url: "/static/thumbnails/reel-promo.svg",
+    };
+
+    expect(toTemplatePresentation(seededTemplate).thumbnail_url).toBe(
+      "/templates/video-mar.png"
+    );
+  });
 });

@@ -101,6 +101,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             const current = isCurrentPath(pathname, item.href);
             return <Link key={item.href} href={item.href} className="mobile-nav-link" aria-current={current ? "page" : undefined} data-active={current || undefined}><AppIcon name={item.icon}/><span>{item.label}</span></Link>;
           })}
+          <button type="button" className="mobile-nav-link mobile-nav-button" onClick={logout} disabled={loggingOut}>
+            <AppIcon name="logout" />
+            <span>{loggingOut ? "Saliendo…" : "Salir"}</span>
+          </button>
         </nav>
       </div>
     </ProtectedRoute>

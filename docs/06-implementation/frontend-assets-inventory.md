@@ -15,7 +15,9 @@ related: [FR-002, FR-004, FR-006]
 
 The template images are local demo assets. The catalog still receives its
 business data from the templates API; local presentation metadata supplies
-tags, category labels and aspect ratios without extending the API schema.
+tags, category labels and aspect ratios without extending the API schema. The
+eight seed IDs (`tpl_*`) are mapped to local images because their historical
+`/static/thumbnails/*.svg` paths are not served by the integrated web app.
 
 ## Papirus attribution
 
@@ -25,6 +27,7 @@ retains the source attribution and license text.
 
 ## Replacement path
 
-Production template records can replace local thumbnails by returning their
-existing `thumbnail_url`. Search, filtering and responsive proportions remain
-in the frontend presentation adapter until server-side catalog search is added.
+Production template records can replace local thumbnails by returning a stable
+`thumbnail_url`; unknown or failed images show an accessible local fallback.
+Search, filtering and responsive proportions remain in the frontend
+presentation adapter until server-side catalog search is added.

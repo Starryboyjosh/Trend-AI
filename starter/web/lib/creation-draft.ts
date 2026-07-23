@@ -1,5 +1,4 @@
 const FIRST_PROMPT_KEY = "hitrendy:first-prompt";
-const TEMPLATE_KEY = "hitrendy:selected-template";
 
 function read(key: string): string | null {
   if (typeof window === "undefined") return null;
@@ -38,14 +37,4 @@ export function takeFirstPrompt() {
 
 export function peekFirstPrompt() {
   return read(FIRST_PROMPT_KEY);
-}
-
-export function saveSelectedTemplate(templateId: string) {
-  write(TEMPLATE_KEY, templateId);
-}
-
-export function takeSelectedTemplate() {
-  const templateId = read(TEMPLATE_KEY);
-  remove(TEMPLATE_KEY);
-  return templateId;
 }

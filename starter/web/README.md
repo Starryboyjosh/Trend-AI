@@ -22,7 +22,8 @@ npm run build -w starter/web
 
 El frontend conserva dos modos:
 
-- **API real:** usa `NEXT_PUBLIC_API_BASE_URL` y la autenticación del backend.
+- **API real:** usa el proxy `/api/v1` de Next.js, configurado mediante
+  `NEXT_PUBLIC_API_URL`, y la autenticación del backend.
 - **Demo local:** permite recorrer el flujo sin credenciales externas y guarda
   el estado demo en el navegador.
 

@@ -6,8 +6,10 @@ import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/shell/app-shell";
 import { TemplateLibrary } from "@/components/templates/template-library";
 import { api, ApiError } from "@/lib/api";
-import { saveSelectedTemplate } from "@/lib/creation-draft";
-import { routes } from "@/lib/routes";
+import {
+  createProjectFromTemplate,
+  MissingBusinessError,
+} from "@/lib/template-project";
 import type { Template } from "@/types/template";
 
 export default function TemplatesPage() {
@@ -30,9 +32,22 @@ export default function TemplatesPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  function useTemplate(template: Template) {
-    saveSelectedTemplate(template.id);
-    router.push(routes.studioNew);
+  async function useTemplate(template: Template) {
+    setError("");
+    try {
+      const project = await createProjectFromTemplate(template.id);
+      router.push(`/projects/${encodeURIComponent(project.id)}`);
+    } catch (reason) {
+      if (reason instanceof MissingBusinessError) {
+        router.push("/onboarding");
+        return;
+      }
+      setError(
+        reason instanceof ApiError
+          ? reason.message
+          : "No pudimos crear el proyecto desde esta plantilla."
+      );
+    }
   }
 
   return (

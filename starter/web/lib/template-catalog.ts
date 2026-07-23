@@ -80,6 +80,17 @@ const metaById: Record<string, PresentationMeta> = {
   },
 };
 
+const localThumbnailById: Record<string, string> = {
+  tpl_reel_01: "/templates/video-mar.png",
+  tpl_static_01: "/templates/flores.png",
+  tpl_story_01: "/templates/comida.png",
+  tpl_video_01: "/templates/video-noche.png",
+  tpl_carousel_01: "/templates/coffee.png",
+  tpl_whatsapp_01: "/templates/amor.png",
+  tpl_launch_01: "/templates/video-trigo.png",
+  tpl_event_01: "/templates/summer.png",
+};
+
 function inferredMeta(template: Template): PresentationMeta {
   const category = normalize(template.category);
   const formats = template.formats.map(normalize);
@@ -126,7 +137,12 @@ export function normalize(value: string) {
 export function toTemplatePresentation(
   template: Template
 ): TemplatePresentation {
-  return { ...template, ...(metaById[template.id] || inferredMeta(template)) };
+  const localThumbnail = localThumbnailById[template.id];
+  return {
+    ...template,
+    ...(metaById[template.id] || inferredMeta(template)),
+    ...(localThumbnail ? { thumbnail_url: localThumbnail } : {}),
+  };
 }
 
 export function matchesTemplate(

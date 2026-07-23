@@ -8,22 +8,33 @@ import {
   templateCategories,
   toTemplatePresentation,
   type TemplateCategory,
+  type TemplatePresentation,
 } from "@/lib/template-catalog";
 import type { Template } from "@/types/template";
 
 interface Props {
   templates: Template[];
-  onUse: (template: Template) => void;
+  onUse: (template: Template) => Promise<void>;
   compact?: boolean;
 }
 
 export function TemplateLibrary({ templates, onUse, compact = false }: Props) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<TemplateCategory>("all");
+  const [usingTemplateId, setUsingTemplateId] = useState<string | null>(null);
   const deferredQuery = useDeferredValue(query);
   const matching = templates
     .map(toTemplatePresentation)
     .filter((template) => matchesTemplate(template, deferredQuery, category));
+
+  async function startTemplate(template: Template) {
+    setUsingTemplateId(template.id);
+    try {
+      await onUse(template);
+    } finally {
+      setUsingTemplateId(null);
+    }
+  }
 
   return (
     <section
@@ -83,16 +94,7 @@ export function TemplateLibrary({ templates, onUse, compact = false }: Props) {
                 className="visual-template-media"
                 style={{ aspectRatio: template.aspectRatio }}
               >
-                <Image
-                  src={template.thumbnail_url}
-                  alt={`Vista previa: ${template.title}`}
-                  fill
-                  sizes={
-                    compact
-                      ? "(max-width: 639px) 45vw, 180px"
-                      : "(max-width: 639px) 45vw, (max-width: 1024px) 30vw, 220px"
-                  }
-                />
+                <TemplateThumbnail template={template} compact={compact} />
                 <span>{template.displayCategory}</span>
               </div>
               <div className="visual-template-copy">
@@ -101,8 +103,15 @@ export function TemplateLibrary({ templates, onUse, compact = false }: Props) {
                   {template.displayCategory} ·{" "}
                   {template.aspectRatio.replaceAll(" / ", ":")}
                 </p>
-                <button type="button" onClick={() => onUse(template)}>
-                  Usar plantilla <span aria-hidden="true">→</span>
+                <button
+                  type="button"
+                  onClick={() => void startTemplate(template)}
+                  disabled={usingTemplateId !== null}
+                >
+                  {usingTemplateId === template.id
+                    ? "Preparando…"
+                    : "Usar plantilla"}{" "}
+                  <span aria-hidden="true">→</span>
                 </button>
               </div>
             </article>
@@ -117,5 +126,42 @@ export function TemplateLibrary({ templates, onUse, compact = false }: Props) {
         </div>
       )}
     </section>
+  );
+}
+
+function TemplateThumbnail({
+  template,
+  compact,
+}: {
+  template: TemplatePresentation;
+  compact: boolean;
+}) {
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return (
+      <div
+        className="template-thumbnail-fallback"
+        role="img"
+        aria-label={`Vista previa no disponible: ${template.title}`}
+      >
+        <span aria-hidden="true">HT</span>
+        <small>Vista previa no disponible</small>
+      </div>
+    );
+  }
+
+  return (
+    <Image
+      src={template.thumbnail_url}
+      alt={`Vista previa: ${template.title}`}
+      fill
+      onError={() => setFailed(true)}
+      sizes={
+        compact
+          ? "(max-width: 639px) 45vw, 180px"
+          : "(max-width: 639px) 45vw, (max-width: 1024px) 30vw, 220px"
+      }
+    />
   );
 }

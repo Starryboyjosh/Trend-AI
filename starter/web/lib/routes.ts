@@ -22,7 +22,10 @@ export function isSafeNextPath(
 
   if (protectedExactPaths.has(value)) return true;
 
-  return /^\/studio\/[A-Za-z0-9_-]+$/.test(value);
+  return (
+    /^\/studio\/[A-Za-z0-9_-]+$/.test(value) ||
+    /^\/projects\/[A-Za-z0-9_-]+$/.test(value)
+  );
 }
 
 export function loginPath(next: string): string {

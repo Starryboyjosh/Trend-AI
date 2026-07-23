@@ -1189,7 +1189,7 @@ a {
     bottom: 0.5rem;
     left: 0.5rem;
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     padding: 0.35rem;
     background: rgb(24 15 75 / 0.95);
     border: 1px solid rgb(183 156 250 / 0.32);
@@ -1211,6 +1211,13 @@ a {
   .mobile-nav-link[data-active] {
     color: var(--ht-white);
     background: rgb(183 156 250 / 0.24);
+  }
+  .mobile-nav-button {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    font: inherit;
   }
   .page-header,
   .dashboard-toolbar {
@@ -1879,6 +1886,27 @@ a {
 }
 .visual-template-media img {
   object-fit: cover;
+}
+.template-thumbnail-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 0.3rem;
+  padding: 1rem;
+  background: var(--surface-muted);
+  color: var(--foreground);
+  text-align: center;
+}
+.visual-template-media .template-thumbnail-fallback span {
+  display: block;
+  color: var(--primary);
+  font-family: var(--font-heading);
+  font-size: 1.6rem;
+}
+.template-thumbnail-fallback small {
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
 }
 .visual-template-media span {
   position: absolute;

@@ -10,9 +10,7 @@ import { MessageList } from "@/components/assistant/message-list";
 import { api, ApiError } from "@/lib/api";
 import {
   peekFirstPrompt,
-  saveFirstPrompt,
   takeFirstPrompt,
-  takeSelectedTemplate,
 } from "@/lib/creation-draft";
 import { routes } from "@/lib/routes";
 import type { GeneratedArtifact, GeneratedSocialPost } from "@/types/artifact";
@@ -166,12 +164,6 @@ export function StudioWorkspace({
       if (!businesses.length) {
         router.push("/onboarding");
         return;
-      }
-      const templateId = takeSelectedTemplate();
-      if (templateId && !peekFirstPrompt()) {
-        saveFirstPrompt(
-          "Quiero personalizar la plantilla que acabo de elegir."
-        );
       }
       const conversation = await api.conversations.create({
         business_id: businesses[0].id,

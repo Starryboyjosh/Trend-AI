@@ -22,18 +22,21 @@ arquitectura ni inventar una API paralela.
 
 ### 1. Logout contra API real
 
-`POST /api/v1/auth/logout` responde `204 No Content`, pero el cliente web intenta
-parsear JSON para toda respuesta exitosa. Ajustar el cliente para devolver
-`undefined` en `204` y comprobar que el App Shell limpia sesión y vuelve a Home.
+`POST /api/v1/auth/logout` responde `204 No Content`, pero el cliente web
+intentaba parsear JSON para toda respuesta exitosa. El cliente ahora devuelve
+`undefined` en `204`; el App Shell limpia el modo demo y vuelve a Home.
 
 **Aceptación:** login real, logout real y segundo acceso sin sesión no producen
 errores de parsing ni dejan datos privados visibles.
 
 ### 2. Crear proyecto desde plantilla
 
-La biblioteca web guarda el ID de plantilla y abre Studio, pero el flujo de
-producto exige crear un proyecto editable mediante `POST /projects` con
-`template_id`, y luego abrir la conversación asociada.
+La biblioteca web guardaba el ID de plantilla y abría Studio sin persistir
+nada. Ahora crea el proyecto editable con `POST /projects`, `template_id` y el
+negocio activo, y abre directamente el editor de proyecto. Ese destino muestra
+el primer artefacto y sus versiones; el contrato actual no define una
+conversación asociada a un proyecto de plantilla, por lo que no se inventó esa
+relación.
 
 **Aceptación:** `Usar plantilla` crea un proyecto persistente, muestra su primer
 artefacto editable y aparece en Dashboard después de recargar.
@@ -41,21 +44,23 @@ artefacto editable y aparece en Dashboard después de recargar.
 ### 3. Miniaturas de plantillas seed
 
 El seed backend referencia `/static/thumbnails/*.svg`, mientras que esos paths
-no están disponibles en el servidor web integrado. Mapear los IDs a assets
-locales existentes o servirlos desde un endpoint estable; no dejar URLs rotas.
+no están disponibles en el servidor web integrado. El adaptador de presentación
+mapea los IDs seed a assets locales existentes y muestra un fallback accesible
+si una imagen falla.
 
 **Aceptación:** cada tarjeta muestra imagen válida en API real, demo y build de
 producción, con estado alternativo accesible si falta un asset.
 
 ## P1 — completar si queda tiempo
 
-- Ejecutar y estabilizar el smoke E2E en Chromium para Home, login/demo, Studio,
-  Dashboard, búsqueda/filtros y Settings.
-- Añadir estados de error visibles para fallos de API en generación, proyectos y
-  plantillas, manteniendo el modo demo operativo.
-- Verificar `prefers-reduced-motion`, foco y contraste en rutas nuevas.
-- Actualizar la evidencia de aceptación y el inventario de assets con URLs
-  reales usadas por la aplicación.
+- [x] Smoke E2E estable en Chromium desktop y móvil para Home, login/demo,
+      Studio, Dashboard, búsqueda/filtros y Settings. Usa un servidor aislado en
+      el puerto 3100 para no reutilizar procesos locales.
+- [x] Estados de error visibles en generación, proyectos y plantillas; el modo
+      demo conserva el proyecto creado dentro de la sesión del navegador.
+- [ ] Verificar visualmente `prefers-reduced-motion`, foco y contraste en rutas
+      nuevas como revisión manual de entrega.
+- [x] Actualizar la evidencia de assets con la resolución de miniaturas seed.
 
 ## P2 — después de la entrega
 
@@ -73,9 +78,9 @@ de contenido; `trend_context` puede añadirse después como proveedor opcional.
 
 ## Checklist de cierre
 
-- [ ] P0.1 logout `204` corregido y probado.
-- [ ] P0.2 plantilla crea proyecto persistente.
-- [ ] P0.3 miniaturas seed sin rutas rotas.
+- [x] P0.1 logout `204` corregido y probado.
+- [x] P0.2 plantilla crea proyecto persistente y abre su editor editable.
+- [x] P0.3 miniaturas seed sin rutas rotas y con fallback accesible.
 - [x] Typecheck, lint, pruebas unitarias y build frontend pasan.
 - [x] Suite backend pasa.
-- [ ] E2E Chromium estable y documentado.
+- [x] E2E Chromium estable y documentado: 22 pruebas desktop/móvil.

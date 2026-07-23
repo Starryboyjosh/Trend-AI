@@ -1,4 +1,5 @@
 const DEMO_ACCESS_KEY = "hitrendy-demo-access";
+const DEMO_PROJECTS_KEY = "hitrendy-demo-projects";
 
 function isBrowser() {
   return typeof window !== "undefined";
@@ -25,4 +26,24 @@ export function enableDemoMode() {
 export function disableDemoMode() {
   if (!isBrowser() || !isDemoHost()) return;
   window.localStorage.removeItem(DEMO_ACCESS_KEY);
+  window.sessionStorage.removeItem(DEMO_PROJECTS_KEY);
+}
+
+export function readDemoProjects<T>(fallback: T): T {
+  if (!isBrowser()) return fallback;
+  try {
+    const raw = window.sessionStorage.getItem(DEMO_PROJECTS_KEY);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export function saveDemoProjects(value: unknown) {
+  if (!isBrowser()) return;
+  try {
+    window.sessionStorage.setItem(DEMO_PROJECTS_KEY, JSON.stringify(value));
+  } catch {
+    // Demo mode still works for the current screen when storage is unavailable.
+  }
 }
