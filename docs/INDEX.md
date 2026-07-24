@@ -60,6 +60,8 @@ This index is the human and agent entry point.
 - [Test strategy](06-implementation/test-strategy.md)
 - [Deployment](06-implementation/deployment.md)
 - [Frontend error resolution plan](06-implementation/error-resolution-plan.md)
+- [MVP delivery plan](06-implementation/mvp-delivery-plan.md)
+- [Integration snippets](06-implementation/snippets/README.md)
 - [Graphify preparation](06-implementation/graphify-ready.md)
 - [Figma implementation plan](06-implementation/figma-implementation-plan.md)
 - [Frontend asset inventory](06-implementation/frontend-assets-inventory.md)

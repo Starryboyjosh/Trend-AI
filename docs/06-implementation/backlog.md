@@ -21,6 +21,10 @@ las plantillas seed. También falta evidencia E2E estable en Chromium. El
 porcentaje anterior del 96% se elimina porque ocultaba estos riesgos de extremo
 a extremo.
 
+El criterio actual de entrega está detallado en el [plan de MVP](mvp-delivery-plan.md):
+la Fase 1 debe validarse con backend y proveedor real antes de declarar el
+producto operativo. El análisis de tendencias permanece fuera de esa fase.
+
 ## Epic E1 — Foundation
 
 - E1-T1 Initialize monorepo and quality scripts.
