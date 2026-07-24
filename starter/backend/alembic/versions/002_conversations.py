@@ -64,7 +64,7 @@ def upgrade() -> None:
         sa.Column("artifact_id", sa.String(64), nullable=False, index=True),
         sa.Column("version_number", sa.Integer, nullable=False),
         sa.Column("content_json", sa.Text, nullable=False),
-        sa.Column("user_edited", sa.Boolean, nullable=False, server_default=sa.text("0")),
+        sa.Column("user_edited", sa.Boolean, nullable=False, server_default=sa.false()),
         sa.Column("parent_version_id", sa.String(64), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )

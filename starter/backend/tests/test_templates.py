@@ -22,6 +22,21 @@ async def test_list_templates(seeded_client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_seed_templates_is_idempotent(seeded_client: AsyncClient) -> None:
+    first = await seeded_client.get(
+        "/api/v1/templates",
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    second = await seeded_client.get(
+        "/api/v1/templates",
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    assert first.status_code == second.status_code == 200
+    assert first.json() == second.json()
+    assert len(second.json()) == len(SEED_TEMPLATES)
+
+
+@pytest.mark.asyncio
 async def test_list_templates_filter_by_platform(seeded_client: AsyncClient) -> None:
     resp = await seeded_client.get(
         "/api/v1/templates?platform=tiktok",
