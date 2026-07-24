@@ -37,6 +37,10 @@ def get_content_provider() -> ContentModelProvider:
             api_key=settings.ai_api_key,
             model_name=settings.ai_model,
             timeout_seconds=settings.ai_timeout_seconds,
+            max_retries=settings.ai_max_retries,
+            retry_base_seconds=settings.ai_retry_base_seconds,
+            http_referer=settings.ai_http_referer,
+            app_title=settings.ai_app_title,
         )
     raise AppError(
         "GENERATION_PROVIDER_UNAVAILABLE",
@@ -50,13 +54,6 @@ def get_vision_provider() -> VisionReviewProvider:
     """Build the visual-review provider without coupling it to asset storage."""
 
     if settings.vision_provider == "demo":
-        if settings.app_env == "production":
-            raise AppError(
-                "ANALYSIS_PROVIDER_UNAVAILABLE",
-                "La configuración del análisis visual no está disponible.",
-                status_code=503,
-                retryable=False,
-            )
         return DemoVisionReviewProvider()
     if settings.vision_provider == "openai-compatible":
         if not settings.vision_base_url or not settings.vision_api_key:

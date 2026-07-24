@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import json
-from typing import Protocol
+from collections.abc import Awaitable, Callable
+from typing import Any, Protocol
 
 import httpx
 
+from app.core.errors import AppError
 from app.generation.contracts import ShortVideoScriptModelRequest, SocialPostModelRequest
 from app.generation.prompt_registry import get_short_video_script_prompt, get_social_copy_prompt
 
@@ -199,12 +202,29 @@ class OpenAICompatibleContentModelProvider:
     provider_name = "openai-compatible"
 
     def __init__(
-        self, *, base_url: str, api_key: str, model_name: str, timeout_seconds: float = 30
+        self,
+        *,
+        base_url: str,
+        api_key: str,
+        model_name: str,
+        timeout_seconds: float = 30,
+        max_retries: int = 1,
+        retry_base_seconds: float = 0.5,
+        http_referer: str = "",
+        app_title: str = "HiTrendy",
+        transport: httpx.AsyncBaseTransport | None = None,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
         self.model_name = model_name
-        self._timeout_seconds = timeout_seconds
+        self._timeout = httpx.Timeout(timeout_seconds)
+        self._max_retries = max_retries
+        self._retry_base_seconds = retry_base_seconds
+        self._http_referer = http_referer
+        self._app_title = app_title
+        self._transport = transport
+        self._sleep = sleep
 
     async def generate_social_post(self, *, request: SocialPostModelRequest) -> dict:
         system_prompt, _ = get_social_copy_prompt()
@@ -266,18 +286,164 @@ class OpenAICompatibleContentModelProvider:
             ]
         )
 
+    def _headers(self) -> dict[str, str]:
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+        }
+        if self._http_referer:
+            headers["HTTP-Referer"] = self._http_referer
+        if self._app_title:
+            headers["X-Title"] = self._app_title
+        return headers
+
     async def _complete(self, *, messages: list[dict[str, str]]) -> dict:
-        headers = {"Authorization": f"Bearer {self._api_key}"}
         payload = {
             "model": self.model_name,
             "messages": messages,
             "response_format": {"type": "json_object"},
             "temperature": 0.4,
         }
-        async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
-            response = await client.post(
-                f"{self._base_url}/chat/completions", headers=headers, json=payload
+
+        for attempt in range(self._max_retries + 1):
+            try:
+                async with httpx.AsyncClient(
+                    timeout=self._timeout,
+                    transport=self._transport,
+                ) as client:
+                    response = await client.post(
+                        f"{self._base_url}/chat/completions",
+                        headers=self._headers(),
+                        json=payload,
+                    )
+            except asyncio.CancelledError:
+                raise
+            except httpx.TimeoutException as exc:
+                if attempt < self._max_retries:
+                    await self._backoff(attempt)
+                    continue
+                raise AppError(
+                    "GENERATION_PROVIDER_TIMEOUT",
+                    "La generación tardó demasiado. Inténtalo de nuevo.",
+                    status_code=504,
+                    retryable=True,
+                ) from exc
+            except httpx.RequestError as exc:
+                if attempt < self._max_retries:
+                    await self._backoff(attempt)
+                    continue
+                raise AppError(
+                    "GENERATION_PROVIDER_UNAVAILABLE",
+                    "No pudimos conectar con el servicio de generación. Inténtalo de nuevo.",
+                    status_code=503,
+                    retryable=True,
+                ) from exc
+
+            if response.status_code == 429:
+                if attempt < self._max_retries:
+                    await self._backoff(attempt)
+                    continue
+                raise AppError(
+                    "GENERATION_PROVIDER_RATE_LIMITED",
+                    "El servicio de generación está ocupado. Inténtalo de nuevo en un momento.",
+                    status_code=503,
+                    retryable=True,
+                )
+
+            if 500 <= response.status_code <= 599:
+                if attempt < self._max_retries:
+                    await self._backoff(attempt)
+                    continue
+                raise AppError(
+                    "GENERATION_PROVIDER_UNAVAILABLE",
+                    "El servicio de generación no está disponible en este momento.",
+                    status_code=503,
+                    retryable=True,
+                )
+
+            if response.status_code >= 400:
+                raise AppError(
+                    "GENERATION_PROVIDER_REJECTED",
+                    "El servicio de generación rechazó la solicitud.",
+                    status_code=502,
+                    retryable=False,
+                )
+
+            return self._decode_response(response)
+
+        raise AppError(
+            "GENERATION_PROVIDER_UNAVAILABLE",
+            "El servicio de generación no está disponible en este momento.",
+            status_code=503,
+            retryable=True,
+        )
+
+    async def _backoff(self, attempt: int) -> None:
+        delay = self._retry_base_seconds * (2**attempt)
+        await self._sleep(delay)
+
+    @staticmethod
+    def _decode_response(response: httpx.Response) -> dict[str, Any]:
+        try:
+            envelope = response.json()
+        except ValueError as exc:
+            raise AppError(
+                "GENERATION_PROVIDER_INVALID_RESPONSE",
+                "El servicio devolvió una respuesta que no pudimos procesar.",
+                status_code=502,
+                retryable=True,
+            ) from exc
+
+        if not isinstance(envelope, dict):
+            raise AppError(
+                "GENERATION_PROVIDER_INVALID_RESPONSE",
+                "El servicio devolvió una respuesta que no pudimos procesar.",
+                status_code=502,
+                retryable=True,
             )
-            response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"]
-        return json.loads(content)
+
+        choices = envelope.get("choices")
+        if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+            raise AppError(
+                "GENERATION_PROVIDER_INVALID_RESPONSE",
+                "El servicio devolvió una respuesta que no pudimos procesar.",
+                status_code=502,
+                retryable=True,
+            )
+
+        message = choices[0].get("message")
+        if not isinstance(message, dict):
+            raise AppError(
+                "GENERATION_PROVIDER_INVALID_RESPONSE",
+                "El servicio devolvió una respuesta que no pudimos procesar.",
+                status_code=502,
+                retryable=True,
+            )
+
+        content = message.get("content")
+        if not isinstance(content, str) or not content.strip():
+            raise AppError(
+                "GENERATION_PROVIDER_INVALID_RESPONSE",
+                "El servicio devolvió una respuesta que no pudimos procesar.",
+                status_code=502,
+                retryable=True,
+            )
+
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError as exc:
+            raise AppError(
+                "GENERATION_PROVIDER_INVALID_RESPONSE",
+                "El servicio devolvió una respuesta que no pudimos procesar.",
+                status_code=502,
+                retryable=True,
+            ) from exc
+
+        if not isinstance(parsed, dict):
+            raise AppError(
+                "GENERATION_PROVIDER_INVALID_RESPONSE",
+                "El servicio devolvió una respuesta que no pudimos procesar.",
+                status_code=502,
+                retryable=True,
+            )
+        return parsed
