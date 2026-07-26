@@ -7,7 +7,7 @@ Frontend Next.js/TypeScript integrado con el backend real del repositorio.
 Desde la raíz del monorepo:
 
 ```bash
-npm install
+npm ci
 npm run dev -w starter/web
 ```
 

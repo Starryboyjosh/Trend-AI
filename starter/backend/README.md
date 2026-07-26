@@ -6,14 +6,20 @@ workspace authorization. Demo mode uses deterministic providers and requires no
 external AI credentials.
 
 ```bash
-PYTHONPATH=. ../../.venv/bin/alembic upgrade head
-PYTHONPATH=. ../../.venv/bin/uvicorn app.main:app --reload --port 8000
+python -m alembic upgrade head
+python -m uvicorn app.main:app --reload --port 8000
 ```
 
 Run the backend suite from the repository root:
 
 ```bash
-PYTHONPATH=starter/backend .venv/bin/pytest starter/backend/tests
+PYTHONPATH=starter/backend python -m pytest starter/backend/tests
+```
+
+Install backend dependencies for development with:
+
+```bash
+python -m pip install -r requirements-dev.txt
 ```
 
 Generation requests accept an optional `Idempotency-Key` header. Reusing the

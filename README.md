@@ -82,6 +82,61 @@ make demo-reset
 This command only works for the repository-local `hitrendy_demo.db`; it refuses
 production environments and intentionally cannot reset a remote database.
 
+## Instalación y validación local
+
+El backend se valida con Python 3.12 y el frontend con Node.js 20/npm. Desde
+un clon nuevo:
+
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+cp .env.example .env
+python -m pip install -r starter/backend/requirements-dev.txt
+npm ci
+```
+
+Para levantar los servicios locales y aplicar las migraciones:
+
+```bash
+docker compose up -d postgres redis minio
+cd starter/backend
+PYTHONPATH=. python -m alembic upgrade head
+PYTHONPATH=. python -m uvicorn app.main:app --reload --port 8000
+```
+
+En otra terminal, desde la raíz, inicia el frontend con:
+
+```bash
+npm run dev -w starter/web
+```
+
+La validación rápida no necesita credenciales externas ni un backend en
+ejecución:
+
+```bash
+npm run validate
+```
+
+Para validar migraciones y E2E contra PostgreSQL:
+
+```bash
+npm run validate:e2e
+```
+
+El segundo comando inicia únicamente `postgres-test` en el puerto `5433` y
+usa la base `hitrendy_test`. Para una base PostgreSQL ya levantada se puede
+proporcionar una URL cuyo nombre termine en `_test` o `_e2e`:
+
+```bash
+TEST_DATABASE_URL='postgresql+psycopg://usuario:password@localhost:5432/hitrendy_test' \
+  bash scripts/validate-e2e.sh
+```
+
+El CI ejecuta estos mismos controles en jobs separados: backend rápido,
+PostgreSQL/migraciones/E2E y frontend. Usa provider demo o falso, por lo que
+no requiere `OPENAI_API_KEY`, `OPENROUTER_API_KEY` ni otros secretos. Los
+smoke tests de providers externos permanecen opcionales.
+
 ## Recommended implementation order
 
 1. Read `docs/INDEX.md`.

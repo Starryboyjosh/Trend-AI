@@ -7,7 +7,7 @@ COPY package.json package-lock.json ./
 COPY starter/web/package.json ./starter/web/
 
 # Install dependencies using the monorepo lockfile
-RUN npm install --legacy-peer-deps
+RUN npm ci
 
 # Copy the rest of the application files
 COPY . .

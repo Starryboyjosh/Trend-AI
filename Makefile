@@ -4,24 +4,24 @@ validate:
 	python scripts/validate_package.py
 
 test-demo:
-	cd demo && pytest -q
+	cd demo && python -m pytest -q
 
 demo:
 	cd demo && uvicorn app:app --reload
 
 demo-reset:
-	.venv/bin/python scripts/reset_demo_database.py --confirm
+	python scripts/reset_demo_database.py --confirm
 
 install:
-	npm install --legacy-peer-deps
-	.venv/bin/pip install -r starter/backend/requirements.txt
+	npm ci
+	python -m pip install -r starter/backend/requirements-dev.txt
 
 dev:
 	npm run dev
 
 test:
 	npm run web:test
-	PYTHONPATH=starter/backend .venv/bin/pytest starter/backend/tests
+	PYTHONPATH=starter/backend python -m pytest starter/backend/tests
 
 lint:
 	npm run web:typecheck
@@ -29,7 +29,7 @@ lint:
 
 format:
 	npx prettier --write "starter/web/**/*.{ts,tsx,css,json}"
-	.venv/bin/ruff format starter/backend/
+	python -m ruff format starter/backend/
 
 graphify:
 	@echo "Run /graphify . from a supported coding assistant after installing graphifyy"
