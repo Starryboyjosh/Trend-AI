@@ -294,14 +294,33 @@ async def send_message_endpoint(
     if record and record.status == "completed" and record.response_json:
         return json.loads(record.response_json)
 
-    user_msg = await add_message(
-        db,
-        conversation_id,
-        "user",
-        body.text,
-        intent=intent,
-        metadata_json={"attachment_ids": body.attachment_ids} if body.attachment_ids else None,
-    )
+    user_msg: Message | None = None
+    if idempotency_key and record:
+        prior_messages = await get_messages(db, conversation_id)
+        for prior_message in reversed(prior_messages):
+            if prior_message.role != "user" or not prior_message.metadata_json:
+                continue
+            try:
+                metadata = json.loads(prior_message.metadata_json)
+            except json.JSONDecodeError:
+                continue
+            if metadata.get("idempotency_key") == idempotency_key:
+                user_msg = prior_message
+                break
+    if user_msg is None:
+        metadata_json: dict[str, object] = {}
+        if body.attachment_ids:
+            metadata_json["attachment_ids"] = body.attachment_ids
+        if idempotency_key:
+            metadata_json["idempotency_key"] = idempotency_key
+        user_msg = await add_message(
+            db,
+            conversation_id,
+            "user",
+            body.text,
+            intent=intent,
+            metadata_json=metadata_json or None,
+        )
 
     if intent == "analyze_visual":
         try:
@@ -337,7 +356,7 @@ async def send_message_endpoint(
                     "content": analysis.summary,
                 },
                 "analysis": analysis_data,
-            }
+            },
         )
 
     biz_repo = SqlBusinessContextRepository(db)
@@ -370,7 +389,9 @@ async def send_message_endpoint(
                 tone=body.tone,
                 objective=body.objective,
             )
-            artifact = await GenerateSocialPostService(biz_repo, art_repo, provider).execute(command)
+            artifact = await GenerateSocialPostService(biz_repo, art_repo, provider).execute(
+                command
+            )
             assistant_intent = "generated_social_post"
     except Exception:
         await mark_failed(db, workspace_id=workspace_id, endpoint=endpoint, key=idempotency_key)
@@ -417,7 +438,7 @@ async def send_message_endpoint(
             },
             "artifact": artifact.model_dump(),
             "artifact_id": saved_artifact.id if saved_artifact else None,
-        }
+        },
     )
 
 

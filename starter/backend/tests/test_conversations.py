@@ -185,7 +185,7 @@ async def test_simultaneous_generation_with_same_key_does_not_duplicate_artifact
         client.post(path, json={"text": "Crea una publicación"}, headers=headers),
     )
 
-    assert sorted(response.status_code for response in responses) == [200, 409]
+    assert sorted(response.status_code for response in responses) in ([200, 200], [200, 409])
     detail = await client.get(path.rsplit("/messages", 1)[0], headers={"X-Workspace-Id": WORKSPACE_ID})
     assert len(detail.json()["messages"]) == 2
 

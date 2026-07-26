@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from logging.config import fileConfig
+from os import environ
+from urllib.parse import unquote, urlparse
 
 from sqlalchemy import engine_from_config, pool
 
@@ -15,7 +17,25 @@ from app.projects import models as project_models  # noqa: F401
 from app.templates import models as template_models  # noqa: F401
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.database_url.replace("+aiosqlite", ""))
+
+
+def _migration_database_url() -> str:
+    test_url = environ.get("TEST_DATABASE_URL", "").strip()
+    if not test_url:
+        return settings.database_url
+    parsed = urlparse(test_url)
+    database_name = unquote(parsed.path.lstrip("/")).split("?", 1)[0]
+    if parsed.scheme not in {"postgresql", "postgresql+psycopg"} or not database_name.endswith(
+        ("_test", "_e2e")
+    ):
+        raise RuntimeError(
+            "TEST_DATABASE_URL sólo puede apuntar a una base PostgreSQL cuyo nombre "
+            "termine en _test o _e2e."
+        )
+    return test_url
+
+
+config.set_main_option("sqlalchemy.url", _migration_database_url().replace("+aiosqlite", ""))
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 

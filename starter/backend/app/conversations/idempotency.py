@@ -12,9 +12,7 @@ from app.core.errors import ConflictError
 
 
 def payload_fingerprint(payload: dict) -> str:
-    return sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
+    return sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
 async def reserve(
@@ -37,7 +35,9 @@ async def reserve(
     record = existing.scalar_one_or_none()
     if record is not None:
         if record.payload_hash != payload_hash:
-            raise ConflictError("La clave de idempotencia ya se utilizó con una solicitud diferente.")
+            raise ConflictError(
+                "La clave de idempotencia ya se utilizó con una solicitud diferente."
+            )
         if record.status == "completed" and record.response_json:
             return record
         if record.status == "processing":
@@ -89,9 +89,7 @@ async def mark_failed(
         await db.commit()
 
 
-async def complete(
-    db: AsyncSession, record: IdempotencyRecord | None, response: dict
-) -> dict:
+async def complete(db: AsyncSession, record: IdempotencyRecord | None, response: dict) -> dict:
     if record:
         record.status = "completed"
         record.response_json = json.dumps(response, ensure_ascii=False)

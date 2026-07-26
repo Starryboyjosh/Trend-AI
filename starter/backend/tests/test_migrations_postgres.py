@@ -72,7 +72,7 @@ def _template_ids(engine) -> list[str]:
 def test_upgrade_empty_postgres_to_head(postgres_engine) -> None:
     _upgrade("head")
     with postgres_engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "012"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "013"
     assert set(_template_ids(postgres_engine)) == EXPECTED_TEMPLATE_IDS
 
 
