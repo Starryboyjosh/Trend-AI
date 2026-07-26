@@ -17,42 +17,127 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+export type RequestRetryCallback = (attempt: number) => void;
+
+export interface ApiRequestOptions extends RequestInit {
+  idempotencyKey?: string;
+  maxAttempts?: number;
+  onRetry?: RequestRetryCallback;
+}
+
+const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+const DEFAULT_MAX_ATTEMPTS = 3;
+const RETRY_BASE_DELAY_MS = 250;
+const MAX_RETRY_AFTER_MS = 30_000;
+
+export function createIdempotencyKey(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `hitrendy-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function isAbortError(reason: unknown): boolean {
+  return reason instanceof DOMException && reason.name === "AbortError";
+}
+
+function retryDelayMs(attempt: number, retryAfter: string | null): number {
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds)) {
+      return Math.min(Math.max(seconds * 1000, 0), MAX_RETRY_AFTER_MS);
+    }
+    const date = Date.parse(retryAfter);
+    if (!Number.isNaN(date)) {
+      return Math.min(Math.max(date - Date.now(), 0), MAX_RETRY_AFTER_MS);
+    }
+  }
+  return RETRY_BASE_DELAY_MS * 2 ** (attempt - 1);
+}
+
+function waitForRetry(delayMs: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.reject(new DOMException("Aborted", "AbortError"));
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, delayMs);
+    function onAbort() {
+      window.clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      reject(new DOMException("Aborted", "AbortError"));
+    }
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+function isRetryableError(error: ApiError): boolean {
+  return RETRYABLE_STATUSES.has(error.status) || error.retryable;
+}
+
+async function request<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
   if (isDemoModeEnabled()) {
     return demoRequest<T>(path, options);
   }
 
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(options.headers as Record<string, string>),
-  };
+  const maxAttempts = Math.max(1, options.maxAttempts || DEFAULT_MAX_ATTEMPTS);
+  const { idempotencyKey, onRetry, maxAttempts: _maxAttempts, ...fetchOptions } = options;
+  const headers = new Headers(fetchOptions.headers);
+  headers.set("Content-Type", "application/json");
+  if (idempotencyKey) headers.set("Idempotency-Key", idempotencyKey);
 
-  const res = await fetch(path, {
-    ...options,
-    headers,
-    credentials: "include",
-  });
-
-  if (!res.ok) {
-    let body: {
-      error?: { code?: string; message?: string; retryable?: boolean };
-    } = {};
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      body = await res.json();
-    } catch {
-      // ignore parse errors
+      const res = await fetch(path, {
+        ...fetchOptions,
+        headers,
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        let body: {
+          error?: { code?: string; message?: string; retryable?: boolean };
+        } = {};
+        try {
+          body = await res.json();
+        } catch {
+          // ignore parse errors
+        }
+        const error = new ApiError(
+          res.status,
+          body.error?.code || "UNKNOWN",
+          body.error?.message || "Error de conexión",
+          RETRYABLE_STATUSES.has(res.status) || (body.error?.retryable ?? false)
+        );
+        if (!idempotencyKey || !isRetryableError(error) || attempt >= maxAttempts) {
+          throw error;
+        }
+        onRetry?.(attempt + 1);
+        await waitForRetry(
+          retryDelayMs(attempt, res.headers.get("Retry-After")),
+          fetchOptions.signal ?? undefined
+        );
+        continue;
+      }
+
+      if (res.status === 204) return undefined as T;
+      return res.json();
+    } catch (reason) {
+      if (isAbortError(reason)) throw reason;
+      if (reason instanceof ApiError) throw reason;
+      const error = new ApiError(0, "NETWORK_ERROR", "Error de conexión", true);
+      if (!idempotencyKey || !isRetryableError(error) || attempt >= maxAttempts) {
+        throw error;
+      }
+      onRetry?.(attempt + 1);
+      await waitForRetry(
+        retryDelayMs(attempt, null),
+        fetchOptions.signal ?? undefined
+      );
     }
-    throw new ApiError(
-      res.status,
-      body.error?.code || "UNKNOWN",
-      body.error?.message || "Error de conexión",
-      body.error?.retryable ?? false
-    );
   }
 
-  if (res.status === 204) return undefined as T;
-
-  return res.json();
+  throw new ApiError(0, "REQUEST_FAILED", "Error de conexión", true);
 }
 
 async function requestForm<T>(path: string, body: FormData): Promise<T> {
@@ -286,12 +371,17 @@ export const api = {
       text: string,
       uiIntent?:
         "create_social_post" | "create_short_video_script" | "analyze_visual",
-      attachmentIds: string[] = []
+      attachmentIds: string[] = [],
+      options: Pick<
+        ApiRequestOptions,
+        "idempotencyKey" | "signal" | "onRetry" | "maxAttempts"
+      > = {}
     ) {
       return request<Record<string, unknown>>(
         `${BASE}/conversations/${conversationId}/messages`,
         {
           method: "POST",
+          ...options,
           body: JSON.stringify({
             text,
             ...(uiIntent ? { ui_intent: uiIntent } : {}),
@@ -302,10 +392,20 @@ export const api = {
     },
   },
   artifacts: {
-    createVariation(conversationId: string, artifactId: string, kind: string) {
+    createVariation(
+      conversationId: string,
+      artifactId: string,
+      kind: string,
+      options: Pick<ApiRequestOptions, "idempotencyKey" | "signal" | "onRetry"> = {}
+    ) {
       return request<Record<string, unknown>>(
         `${BASE}/conversations/${conversationId}/artifacts/${artifactId}/variations`,
-        { method: "POST", body: JSON.stringify({ kind }) }
+        {
+          method: "POST",
+          ...options,
+          idempotencyKey: options.idempotencyKey || createIdempotencyKey(),
+          body: JSON.stringify({ kind }),
+        }
       );
     },
     feedback(artifactId: string, rating: "useful" | "not_useful") {

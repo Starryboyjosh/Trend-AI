@@ -50,5 +50,10 @@ class ValidationError_(AppError):
         super().__init__(code="VALIDATION_ERROR", message=message, status_code=422)
 
 
+class ConflictError(AppError):
+    def __init__(self, message: str, *, retryable: bool = False) -> None:
+        super().__init__(code="CONFLICT", message=message, status_code=409, retryable=retryable)
+
+
 async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
     return JSONResponse(status_code=exc.status_code, content=exc._envelope())

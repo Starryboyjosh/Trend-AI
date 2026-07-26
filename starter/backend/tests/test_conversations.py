@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import io
 from base64 import b64decode
 
@@ -145,6 +146,48 @@ async def test_generation_reuses_a_completed_idempotency_key(
     assert first.status_code == 200
     assert second.status_code == 200
     assert second.json() == first.json()
+
+
+@pytest.mark.asyncio
+async def test_generation_rejects_same_key_with_different_payload(
+    client: AsyncClient, business_id: str
+) -> None:
+    conversation = await client.post(
+        "/api/v1/conversations",
+        json={"business_id": business_id, "title": "Conflicto de idempotencia"},
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    path = f"/api/v1/conversations/{conversation.json()['id']}/messages"
+    headers = {"X-Workspace-Id": WORKSPACE_ID, "Idempotency-Key": "same-key"}
+    first = await client.post(path, json={"text": "Crea un post"}, headers=headers)
+    second = await client.post(path, json={"text": "Crea otro post"}, headers=headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 409
+    assert second.json()["error"]["code"] == "CONFLICT"
+    assert second.json()["error"]["retryable"] is False
+
+
+@pytest.mark.asyncio
+async def test_simultaneous_generation_with_same_key_does_not_duplicate_artifact(
+    client: AsyncClient, business_id: str
+) -> None:
+    conversation = await client.post(
+        "/api/v1/conversations",
+        json={"business_id": business_id, "title": "Concurrencia"},
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+    path = f"/api/v1/conversations/{conversation.json()['id']}/messages"
+    headers = {"X-Workspace-Id": WORKSPACE_ID, "Idempotency-Key": "race-key"}
+
+    responses = await asyncio.gather(
+        client.post(path, json={"text": "Crea una publicación"}, headers=headers),
+        client.post(path, json={"text": "Crea una publicación"}, headers=headers),
+    )
+
+    assert sorted(response.status_code for response in responses) == [200, 409]
+    detail = await client.get(path.rsplit("/messages", 1)[0], headers={"X-Workspace-Id": WORKSPACE_ID})
+    assert len(detail.json()["messages"]) == 2
 
 
 @pytest.mark.asyncio

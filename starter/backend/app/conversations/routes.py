@@ -9,13 +9,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.analysis_service import analysis_to_dict, analyze_authorized_asset
+from app.conversations.idempotency import complete, mark_failed, payload_fingerprint, reserve
 from app.conversations.models import (
     ArtifactEvent,
     ArtifactFeedback,
     ArtifactVersion,
     Conversation,
     GeneratedArtifact,
-    IdempotencyRecord,
     Message,
 )
 from app.conversations.repository import (
@@ -265,33 +265,8 @@ async def send_message_endpoint(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     endpoint = f"/conversations/{conversation_id}/messages"
-    if idempotency_key:
-        existing = await db.execute(
-            select(IdempotencyRecord).where(
-                IdempotencyRecord.workspace_id == workspace_id,
-                IdempotencyRecord.endpoint == endpoint,
-                IdempotencyRecord.key == idempotency_key,
-            )
-        )
-        record = existing.scalar_one_or_none()
-        if record is not None:
-            return json.loads(record.response_json)
-
-    async def persist_response(response: dict) -> dict:
-        if idempotency_key:
-            db.add(
-                IdempotencyRecord(
-                    workspace_id=workspace_id,
-                    endpoint=endpoint,
-                    key=idempotency_key,
-                    response_json=json.dumps(response, ensure_ascii=False),
-                )
-            )
-            await db.commit()
-        return response
-
-    conv = await get_conversation(db, workspace_id, conversation_id)
-    if conv.status != "active":
+    conversation = await get_conversation(db, workspace_id, conversation_id)
+    if conversation.status != "active":
         raise ValidationError_("Restaura la conversación antes de enviar un mensaje.")
     intent: SupportedGenerationIntent
     if body.ui_intent in (None, "create_social_post"):
@@ -309,6 +284,16 @@ async def send_message_endpoint(
             "Los adjuntos sólo están disponibles al analizar una imagen en el asistente."
         )
 
+    record = await reserve(
+        db,
+        workspace_id=workspace_id,
+        endpoint=endpoint,
+        key=idempotency_key,
+        payload_hash=payload_fingerprint(body.model_dump(mode="json")),
+    )
+    if record and record.status == "completed" and record.response_json:
+        return json.loads(record.response_json)
+
     user_msg = await add_message(
         db,
         conversation_id,
@@ -319,9 +304,13 @@ async def send_message_endpoint(
     )
 
     if intent == "analyze_visual":
-        analysis_record, analysis, review_mode = await analyze_authorized_asset(
-            db, workspace_id=workspace_id, asset_id=body.attachment_ids[0]
-        )
+        try:
+            analysis_record, analysis, review_mode = await analyze_authorized_asset(
+                db, workspace_id=workspace_id, asset_id=body.attachment_ids[0]
+            )
+        except Exception:
+            await mark_failed(db, workspace_id=workspace_id, endpoint=endpoint, key=idempotency_key)
+            raise
         analysis_data = analysis_to_dict(analysis_record, analysis, review_mode)
         assistant_msg = await add_message(
             db,
@@ -336,7 +325,9 @@ async def send_message_endpoint(
         analysis_data["created_at"] = (
             analysis_record.created_at.isoformat() if analysis_record.created_at else None
         )
-        return await persist_response(
+        return await complete(
+            db,
+            record,
             {
                 "type": "visual_analysis",
                 "user_message": {"id": user_msg.id, "role": "user", "content": body.text},
@@ -354,32 +345,36 @@ async def send_message_endpoint(
     provider = get_content_provider()
     artifact: GeneratedSocialPost | GeneratedShortVideoScript
     assistant_intent: str
-    if intent == "create_short_video_script":
-        command = GenerateShortVideoScriptCommand(
-            workspace_id=workspace_id,
-            business_id=conv.business_id,
-            conversation_id=conversation_id,
-            text=body.text,
-            platform=body.platform,
-            tone=body.tone,
-            objective=body.objective,
-        )
-        artifact = await GenerateShortVideoScriptService(biz_repo, art_repo, provider).execute(
-            command
-        )
-        assistant_intent = "generated_short_video_script"
-    else:
-        command = GenerateSocialPostCommand(
-            workspace_id=workspace_id,
-            business_id=conv.business_id,
-            conversation_id=conversation_id,
-            text=body.text,
-            platform=body.platform,
-            tone=body.tone,
-            objective=body.objective,
-        )
-        artifact = await GenerateSocialPostService(biz_repo, art_repo, provider).execute(command)
-        assistant_intent = "generated_social_post"
+    try:
+        if intent == "create_short_video_script":
+            command = GenerateShortVideoScriptCommand(
+                workspace_id=workspace_id,
+                business_id=conversation.business_id,
+                conversation_id=conversation_id,
+                text=body.text,
+                platform=body.platform,
+                tone=body.tone,
+                objective=body.objective,
+            )
+            artifact = await GenerateShortVideoScriptService(biz_repo, art_repo, provider).execute(
+                command
+            )
+            assistant_intent = "generated_short_video_script"
+        else:
+            command = GenerateSocialPostCommand(
+                workspace_id=workspace_id,
+                business_id=conversation.business_id,
+                conversation_id=conversation_id,
+                text=body.text,
+                platform=body.platform,
+                tone=body.tone,
+                objective=body.objective,
+            )
+            artifact = await GenerateSocialPostService(biz_repo, art_repo, provider).execute(command)
+            assistant_intent = "generated_social_post"
+    except Exception:
+        await mark_failed(db, workspace_id=workspace_id, endpoint=endpoint, key=idempotency_key)
+        raise
 
     from sqlalchemy import desc
 
@@ -405,7 +400,9 @@ async def send_message_endpoint(
 
     await db.commit()
 
-    return await persist_response(
+    return await complete(
+        db,
+        record,
         {
             "type": "artifact",
             "user_message": {
@@ -433,6 +430,7 @@ async def create_variation_endpoint(
     conversation_id: str,
     artifact_id: str,
     body: CreateVariationRequest,
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key", max_length=160),
     workspace_id: str = Depends(require_workspace),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -449,6 +447,17 @@ async def create_variation_endpoint(
     artifact_record = art_result.scalar_one_or_none()
     if artifact_record is None:
         raise NotFoundError("Artículo")
+
+    endpoint = f"/conversations/{conversation_id}/artifacts/{artifact_id}/variations"
+    record = await reserve(
+        db,
+        workspace_id=workspace_id,
+        endpoint=endpoint,
+        key=idempotency_key,
+        payload_hash=payload_fingerprint({"artifact_id": artifact_id, "kind": body.kind}),
+    )
+    if record and record.status == "completed" and record.response_json:
+        return json.loads(record.response_json)
 
     version_result = await db.execute(
         select(ArtifactVersion)
@@ -484,16 +493,24 @@ async def create_variation_endpoint(
     biz_repo = SqlBusinessContextRepository(db)
     art_repo = SqlArtifactRepository(db)
     service = GenerateSocialPostService(biz_repo, art_repo, get_content_provider())
-    artifact = await service.execute_variation(
-        command=command,
-        artifact_id=artifact_id,
-        parent_version_id=current_version.id if current_version else None,
-    )
+    try:
+        artifact = await service.execute_variation(
+            command=command,
+            artifact_id=artifact_id,
+            parent_version_id=current_version.id if current_version else None,
+        )
+    except Exception:
+        await mark_failed(db, workspace_id=workspace_id, endpoint=endpoint, key=idempotency_key)
+        raise
     await db.commit()
 
-    return {
-        "type": "artifact",
-        "artifact": artifact.model_dump(),
-        "artifact_id": artifact_id,
-        "version_number": (current_version.version_number + 1) if current_version else 1,
-    }
+    return await complete(
+        db,
+        record,
+        {
+            "type": "artifact",
+            "artifact": artifact.model_dump(),
+            "artifact_id": artifact_id,
+            "version_number": (current_version.version_number + 1) if current_version else 1,
+        },
+    )

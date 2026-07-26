@@ -84,6 +84,22 @@ async def test_create_variation_shorter(
 
 
 @pytest.mark.asyncio
+async def test_variation_reuses_idempotency_key_without_new_version(
+    client: AsyncClient, conversation_id: str, artifact_id: str
+) -> None:
+    path = f"/api/v1/conversations/{conversation_id}/artifacts/{artifact_id}/variations"
+    headers = {"X-Workspace-Id": WORKSPACE_ID, "Idempotency-Key": "variation-once"}
+    first = await client.post(path, json={"kind": "shorter"}, headers=headers)
+    second = await client.post(path, json={"kind": "shorter"}, headers=headers)
+    conflict = await client.post(path, json={"kind": "more_youthful"}, headers=headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json() == first.json()
+    assert conflict.status_code == 409
+
+
+@pytest.mark.asyncio
 async def test_create_variation_more_youthful(
     client: AsyncClient, conversation_id: str, artifact_id: str
 ) -> None:

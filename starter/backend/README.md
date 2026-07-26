@@ -17,5 +17,7 @@ PYTHONPATH=starter/backend .venv/bin/pytest starter/backend/tests
 ```
 
 Generation requests accept an optional `Idempotency-Key` header. Reusing the
-same key for the same workspace and conversation returns the already persisted
-result instead of creating another artifact.
+same key for the same workspace, conversation, and payload returns the already
+persisted result instead of creating another artifact. Reusing it with a
+different payload returns a conflict, and concurrent requests reserve the key
+before invoking the provider.

@@ -19,6 +19,12 @@ Base path: `/api/v1`
 - `Idempotency-Key` para generación; la finalización de carga usa una sesión de
   carga de un solo uso.
 
+En `POST /conversations/{conversation_id}/messages`, la clave se limita al
+workspace, endpoint y payload. Repetirla con el mismo payload devuelve la
+respuesta persistida; repetirla con otro payload devuelve `409 CONFLICT`. Una
+solicitud concurrente con la misma clave queda reservada una sola vez y las
+repeticiones reciben un error recuperable hasta que el resultado esté listo.
+
 ## Identity
 
 ### `POST /auth/login`

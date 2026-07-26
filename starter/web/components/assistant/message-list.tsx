@@ -18,6 +18,8 @@ interface Message {
 interface Props {
   messages: Message[];
   loading: boolean;
+  loadingLabel?: string;
+  onCancel?: () => void;
   onSave?: (artifactId: string | undefined) => void;
   onVariation?: (artifactId: string | undefined, kind: string) => void;
   onFeedback?: (
@@ -30,6 +32,8 @@ interface Props {
 export function MessageList({
   messages,
   loading,
+  loadingLabel = "Preparando una propuesta para tu negocio…",
+  onCancel,
   onSave,
   onVariation,
   onFeedback,
@@ -102,7 +106,12 @@ export function MessageList({
           role="status"
           className="message-loading"
         >
-          Preparando una propuesta para tu negocio…
+          <span>{loadingLabel}</span>
+          {onCancel ? (
+            <button type="button" onClick={onCancel} className="button-secondary">
+              Cancelar
+            </button>
+          ) : null}
         </div>
       )}
 

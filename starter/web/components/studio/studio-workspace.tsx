@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { Composer } from "@/components/assistant/composer";
 import { Logo } from "@/components/brand/logo";
 import { MessageList } from "@/components/assistant/message-list";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, createIdempotencyKey } from "@/lib/api";
 import {
   peekFirstPrompt,
   takeFirstPrompt,
@@ -52,6 +52,19 @@ interface SendResult {
   analysis?: VisualAnalysis;
 }
 
+type GenerationIntent =
+  | "create_social_post"
+  | "create_short_video_script"
+  | "analyze_visual";
+
+interface GenerationOperation {
+  key: string;
+  text: string;
+  intent: GenerationIntent;
+  attachmentIds: string[];
+  token: number;
+}
+
 export function StudioWorkspace({
   conversationId,
 }: {
@@ -60,6 +73,9 @@ export function StudioWorkspace({
   const router = useRouter();
   const visualFileRef = useRef<HTMLInputElement>(null);
   const firstPromptSentRef = useRef(false);
+  const operationTokenRef = useRef(0);
+  const generationControllerRef = useRef<AbortController | null>(null);
+  const generationInFlightRef = useRef(false);
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [status, setStatus] = useState<ConversationStatus>("active");
@@ -68,11 +84,22 @@ export function StudioWorkspace({
   const [loadingThread, setLoadingThread] = useState(false);
   const [threadReady, setThreadReady] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingLabel, setLoadingLabel] = useState("Preparando una propuesta para tu negocio…");
+  const [failedOperation, setFailedOperation] = useState<GenerationOperation | null>(null);
   const [creating, setCreating] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [uploadingVisual, setUploadingVisual] = useState(false);
   const [error, setError] = useState("");
   const [firstPrompt, setFirstPrompt] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      operationTokenRef.current += 1;
+      generationControllerRef.current?.abort();
+      generationControllerRef.current = null;
+      generationInFlightRef.current = false;
+    };
+  }, [conversationId]);
 
   useEffect(() => {
     let active = true;
@@ -205,27 +232,46 @@ export function StudioWorkspace({
 
   async function send(
     text: string,
-    intent:
-      | "create_social_post"
-      | "create_short_video_script"
-      | "analyze_visual" = "create_social_post",
-    attachmentIds: string[] = []
+    intent: GenerationIntent = "create_social_post",
+    attachmentIds: string[] = [],
+    continuation?: GenerationOperation
   ) {
-    if (!conversationId || loading) return;
-    const tempId = `temp_${Date.now()}`;
-    setMessages((current) => [
-      ...current,
-      { id: tempId, role: "user", content: text },
-    ]);
+    if (!conversationId || generationInFlightRef.current) return;
+    const operation = continuation || {
+      key: createIdempotencyKey(),
+      text,
+      intent,
+      attachmentIds: [...attachmentIds],
+      token: operationTokenRef.current + 1,
+    };
+    if (!continuation) {
+      operationTokenRef.current = operation.token;
+      setMessages((current) => [
+        ...current,
+        { id: `temp_${operation.token}`, role: "user", content: text },
+      ]);
+    }
+    generationInFlightRef.current = true;
+    generationControllerRef.current?.abort();
+    const controller = new AbortController();
+    generationControllerRef.current = controller;
     setLoading(true);
+    setLoadingLabel("Preparando una propuesta para tu negocio…");
+    setFailedOperation(null);
     setError("");
     try {
       const result = (await api.conversations.sendMessage(
         conversationId,
-        text,
-        intent,
-        attachmentIds
+        operation.text,
+        operation.intent,
+        operation.attachmentIds,
+        {
+          idempotencyKey: operation.key,
+          signal: controller.signal,
+          onRetry: () => setLoadingLabel("Hubo un problema temporal. Reintentando…"),
+        }
       )) as unknown as SendResult;
+      if (operation.token !== operationTokenRef.current) return;
       if (result.type === "artifact")
         setMessages((current) => [
           ...current,
@@ -251,14 +297,46 @@ export function StudioWorkspace({
       } else if (result.type === "error")
         setError(result.message || "No pudimos generar contenido.");
     } catch (reason) {
-      setError(
-        reason instanceof ApiError
-          ? reason.message
-          : "Error de conexión. Tu mensaje sigue disponible en el borrador."
-      );
+      if (reason instanceof DOMException && reason.name === "AbortError") return;
+      if (operation.token !== operationTokenRef.current) return;
+      if (reason instanceof ApiError && reason.retryable) {
+        setFailedOperation(operation);
+        setError("No pudimos generar el contenido en este momento.");
+      } else {
+        setError(
+          reason instanceof ApiError
+            ? reason.message
+            : "Error de conexión. Tu mensaje sigue disponible en el borrador."
+        );
+      }
     } finally {
-      setLoading(false);
+      if (operation.token === operationTokenRef.current) {
+        generationInFlightRef.current = false;
+        generationControllerRef.current = null;
+        setLoading(false);
+        setLoadingLabel("Preparando una propuesta para tu negocio…");
+      }
     }
+  }
+
+  function cancelGeneration() {
+    operationTokenRef.current += 1;
+    generationControllerRef.current?.abort();
+    generationControllerRef.current = null;
+    generationInFlightRef.current = false;
+    setLoading(false);
+    setFailedOperation(null);
+    setError("Generación cancelada.");
+  }
+
+  function retryFailedGeneration() {
+    if (!failedOperation) return;
+    void send(
+      failedOperation.text,
+      failedOperation.intent,
+      failedOperation.attachmentIds,
+      failedOperation
+    );
   }
 
   useEffect(() => {
@@ -310,13 +388,21 @@ export function StudioWorkspace({
   }
 
   async function createVariation(artifactId: string | undefined, kind: string) {
-    if (!artifactId || !conversationId || loading) return;
+    if (!artifactId || !conversationId || loading || generationInFlightRef.current) return;
+    generationInFlightRef.current = true;
+    const controller = new AbortController();
+    generationControllerRef.current = controller;
     setLoading(true);
     try {
       const result = (await api.artifacts.createVariation(
         conversationId,
         artifactId,
-        kind
+        kind,
+        {
+          idempotencyKey: createIdempotencyKey(),
+          signal: controller.signal,
+          onRetry: () => setLoadingLabel("Hubo un problema temporal. Reintentando…"),
+        }
       )) as unknown as SendResult;
       if (result.type === "artifact" && result.artifact)
         setMessages((current) => [
@@ -331,13 +417,17 @@ export function StudioWorkspace({
         ]);
       else setError(result.message || "No pudimos crear la variación.");
     } catch (reason) {
+      if (reason instanceof DOMException && reason.name === "AbortError") return;
       setError(
         reason instanceof ApiError
           ? reason.message
           : "No pudimos crear la variación."
       );
     } finally {
+      generationInFlightRef.current = false;
+      generationControllerRef.current = null;
       setLoading(false);
+      setLoadingLabel("Preparando una propuesta para tu negocio…");
     }
   }
 
@@ -479,6 +569,8 @@ export function StudioWorkspace({
                 <MessageList
                   messages={messages}
                   loading={loading}
+                  loadingLabel={loadingLabel}
+                  onCancel={cancelGeneration}
                   onSave={saveArtifact}
                   onVariation={createVariation}
                   onFeedback={(artifactId, rating) =>
@@ -496,6 +588,15 @@ export function StudioWorkspace({
                       : undefined
                   }
                 />
+                {failedOperation ? (
+                  <button
+                    type="button"
+                    className="button-secondary retry-generation"
+                    onClick={retryFailedGeneration}
+                  >
+                    Intentar de nuevo
+                  </button>
+                ) : null}
                 <Composer
                   onSend={send}
                   disabled={loading}
