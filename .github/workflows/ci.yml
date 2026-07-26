@@ -12,9 +12,11 @@ jobs:
   backend-fast:
     name: Backend rápido
     runs-on: ubuntu-latest
+
     defaults:
       run:
         working-directory: starter/backend
+
     steps:
       - name: Descargar repositorio
         uses: actions/checkout@v4
@@ -40,6 +42,7 @@ jobs:
   backend-postgres-e2e:
     name: PostgreSQL, migraciones y E2E
     runs-on: ubuntu-latest
+
     services:
       postgres:
         image: postgres:17-alpine
@@ -54,11 +57,14 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
+
     defaults:
       run:
         working-directory: starter/backend
+
     env:
       TEST_DATABASE_URL: postgresql+psycopg://hitrendy:hitrendy@localhost:5432/hitrendy_test
+
     steps:
       - name: Descargar repositorio
         uses: actions/checkout@v4
@@ -83,15 +89,22 @@ jobs:
 
           import psycopg
 
-          url = os.environ["TEST_DATABASE_URL"]
+          sqlalchemy_url = os.environ["TEST_DATABASE_URL"]
+          psycopg_url = sqlalchemy_url.replace(
+              "postgresql+psycopg://",
+              "postgresql://",
+              1,
+          )
+
           for attempt in range(30):
               try:
-                  with psycopg.connect(url, connect_timeout=3):
+                  with psycopg.connect(psycopg_url, connect_timeout=3):
                       print("PostgreSQL disponible")
                       break
               except psycopg.OperationalError:
                   if attempt == 29:
                       raise
+                  print(f"Esperando PostgreSQL ({attempt + 1}/30)...")
                   time.sleep(1)
           PY
 
@@ -109,10 +122,15 @@ jobs:
           from sqlalchemy import create_engine, text
 
           engine = create_engine(os.environ["TEST_DATABASE_URL"])
+
           with engine.connect() as connection:
-              revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
+              revision = connection.scalar(
+                  text("SELECT version_num FROM alembic_version")
+              )
+
           assert revision == "013", f"Revisión inesperada: {revision!r}"
           print(f"Alembic revision: {revision}")
+
           engine.dispose()
           PY
 
@@ -134,8 +152,10 @@ jobs:
   frontend:
     name: Frontend
     runs-on: ubuntu-latest
+
     env:
       NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
+
     steps:
       - name: Descargar repositorio
         uses: actions/checkout@v4
