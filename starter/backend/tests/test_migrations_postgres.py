@@ -72,7 +72,7 @@ def _template_ids(engine) -> list[str]:
 def test_upgrade_empty_postgres_to_head(postgres_engine) -> None:
     _upgrade("head")
     with postgres_engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "014"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "015"
     assert set(_template_ids(postgres_engine)) == EXPECTED_TEMPLATE_IDS
 
 
@@ -143,3 +143,23 @@ def test_upgrade_from_013_adds_pending_signup_schema(postgres_engine) -> None:
             )
         }
     assert {"website_url", "content_locale", "onboarding_completed_at"} <= columns
+
+
+def test_upgrade_from_014_adds_google_oauth_schema(postgres_engine) -> None:
+    _upgrade("014")
+    with postgres_engine.connect() as connection:
+        assert connection.scalar(text("SELECT to_regclass('public.oauth_accounts')")) is None
+    _upgrade("head")
+    with postgres_engine.connect() as connection:
+        assert connection.scalar(text("SELECT to_regclass('public.oauth_accounts')"))
+        assert connection.scalar(text("SELECT to_regclass('public.oauth_authorization_requests')"))
+        constraints = {
+            row.conname
+            for row in connection.execute(
+                text(
+                    "SELECT conname FROM pg_constraint "
+                    "WHERE conrelid = 'pending_signups'::regclass"
+                )
+            )
+        }
+    assert "uq_pending_signup_oauth_identity" in constraints

@@ -48,7 +48,7 @@ export TEST_DATABASE_URL='postgresql+psycopg://hitrendy:hitrendy@localhost:5433/
 
 The E2E fixtures reject URLs that are not PostgreSQL or whose database name
 does not end in `_test` or `_e2e`. They reset only that explicitly named test
-database, apply all Alembic migrations from an empty schema through `013`,
+database, apply all Alembic migrations from an empty schema through `015`,
 and run the migration command twice to verify repeatability. The schema is
 cleaned again after the E2E session.
 
@@ -85,3 +85,21 @@ permanent, and delayed failures. The suite covers health/readiness, migrated
 templates, identity and workspace authorization, complete generation and
 persistence, idempotency, concurrent requests, variations, normalized errors,
 cross-workspace isolation, and replay from a new HTTP session.
+
+## Google Sign-In
+
+Google Sign-In is disabled by default. To enable the backend-controlled OIDC
+Authorization Code Flow, configure these server-side variables:
+
+```bash
+GOOGLE_SIGN_IN_ENABLED=1
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_REDIRECT_URI=https://api.example.com/api/v1/auth/google/callback
+FRONTEND_URL=https://app.example.com
+```
+
+The redirect URI must match Google Console exactly. The API uses PKCE, an
+HttpOnly temporary OAuth cookie with `SameSite=Lax`, and a database-backed
+one-time state. Session and pending-signup cookies stay `SameSite=Strict`; no
+Google token or client secret is returned to the browser.

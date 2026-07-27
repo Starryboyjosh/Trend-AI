@@ -5,6 +5,7 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { PublicAuthRoute } from "@/components/auth/public-auth-route";
+import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { Logo } from "@/components/brand/logo";
 import { api, ApiError } from "@/lib/api";
 import { routes } from "@/lib/routes";
@@ -57,6 +58,10 @@ export default function RegisterPage() {
           Primero creemos tu cuenta. Después conoceremos tu negocio para
           preparar tu espacio en HiTrendy.
         </p>
+        <GoogleSignInButton />
+        <div className="auth-divider" aria-hidden="true">
+          <span>o</span>
+        </div>
         <form onSubmit={submit} className="auth-form">
           <label htmlFor="name">
             Tu nombre

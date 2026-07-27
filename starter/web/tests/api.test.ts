@@ -174,6 +174,37 @@ describe("cliente HTTP", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/auth/signup/complete");
   });
 
+  test("consulta Google y usa el inicio OAuth controlado por backend", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ configured: true }), { status: 200 })
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ authorization_url: "https://accounts.google.com/o/oauth2/v2/auth" }),
+          { status: 200 }
+        )
+      );
+    global.fetch = fetchMock;
+
+    await expect(api.auth.google.status()).resolves.toEqual({ configured: true });
+    await expect(api.auth.google.start()).resolves.toEqual({
+      authorization_url: "https://accounts.google.com/o/oauth2/v2/auth",
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/v1/auth/google/status",
+      expect.objectContaining({ credentials: "include" })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/auth/google/start",
+      expect.objectContaining({ credentials: "include" })
+    );
+  });
+
   test("propaga conflictos de versión sin reintentar a ciegas", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(

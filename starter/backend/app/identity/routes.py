@@ -7,8 +7,10 @@ import os
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Literal
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Cookie, Depends, Header, Response
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field, ValidationError, model_validator
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
@@ -24,8 +26,16 @@ from app.core.config import settings
 from app.core.errors import AppError, ForbiddenError
 from app.dependencies import CurrentPrincipal, get_current_principal, get_db
 from app.domain.models import Category, Objective, Platform, Tone
+from app.identity.google_oauth import (
+    GoogleIdentity,
+    GoogleOIDCClient,
+    GoogleOIDCError,
+    create_code_challenge,
+)
 from app.identity.models import (
     AuthSession,
+    OAuthAccount,
+    OAuthAuthorizationRequest,
     PendingSignup,
     User,
     UserPreference,
@@ -36,6 +46,8 @@ from app.identity.models import (
 router = APIRouter(prefix="/auth", tags=["identity"])
 
 SIGNUP_COOKIE_NAME = "hitrendy_signup"
+GOOGLE_OAUTH_COOKIE_NAME = "hitrendy_google_oauth"
+GOOGLE_PROVIDER = "google"
 SIGNUP_TTL = timedelta(hours=24)
 SignupStep = Literal["business", "channels", "brand", "review"]
 InterfaceLocale = Literal["es", "en", "pt"]
@@ -138,6 +150,63 @@ def _clear_signup_cookie(response: Response) -> None:
     response.delete_cookie(SIGNUP_COOKIE_NAME, path="/")
 
 
+def _google_oauth_cookie_path() -> str:
+    return f"{settings.api_prefix}/auth/google"
+
+
+def _google_oauth_cookie_value(state: str, code_verifier: str) -> str:
+    payload = f"{state}.{code_verifier}"
+    signature = hmac.new(
+        settings.jwt_secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+    return f"{payload}.{signature}"
+
+
+def _read_google_oauth_cookie(value: str | None) -> tuple[str, str] | None:
+    if not value:
+        return None
+    try:
+        state, code_verifier, signature = value.split(".", 2)
+    except ValueError:
+        return None
+    expected = _google_oauth_cookie_value(state, code_verifier).rsplit(".", 1)[1]
+    if not hmac.compare_digest(signature, expected):
+        return None
+    return state, code_verifier
+
+
+def _set_google_oauth_cookie(response: Response, *, state: str, code_verifier: str) -> None:
+    response.set_cookie(
+        key=GOOGLE_OAUTH_COOKIE_NAME,
+        value=_google_oauth_cookie_value(state, code_verifier),
+        httponly=True,
+        secure=settings.app_env == "production",
+        samesite="lax",
+        max_age=settings.google_oauth_state_ttl_seconds,
+        path=_google_oauth_cookie_path(),
+    )
+
+
+def _clear_google_oauth_cookie(response: Response) -> None:
+    response.delete_cookie(GOOGLE_OAUTH_COOKIE_NAME, path=_google_oauth_cookie_path())
+
+
+def get_google_oidc_client() -> GoogleOIDCClient:
+    return GoogleOIDCClient(settings)
+
+
+def _google_callback_redirect(path: str, *, outcome: str | None = None) -> RedirectResponse:
+    query = f"?{urlencode({'oauth': outcome})}" if outcome else ""
+    response = RedirectResponse(f"{settings.frontend_url}{path}{query}", status_code=303)
+    response.headers["Cache-Control"] = "no-store"
+    _clear_google_oauth_cookie(response)
+    return response
+
+
+def _google_callback_error(outcome: str) -> RedirectResponse:
+    return _google_callback_redirect("/login", outcome=outcome)
+
+
 async def _get_pending_signup(
     db: AsyncSession,
     token: str | None,
@@ -229,6 +298,98 @@ class SignupDraftRequest(BaseModel):
         return self
 
 
+async def _consume_google_authorization_request(
+    db: AsyncSession, *, state: str
+) -> tuple[OAuthAuthorizationRequest | None, str | None]:
+    request = (
+        await db.execute(
+            select(OAuthAuthorizationRequest)
+            .where(
+                OAuthAuthorizationRequest.provider == GOOGLE_PROVIDER,
+                OAuthAuthorizationRequest.state_hash == _token_hash(state),
+            )
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if request is None:
+        return None, "invalid_state"
+    if _datetime_is_expired(request.expires_at):
+        return None, "expired_state"
+    if request.consumed_at is not None:
+        return None, "used_state"
+    request.consumed_at = datetime.now(UTC)
+    await db.commit()
+    return request, None
+
+
+async def _create_or_resume_google_signup(
+    db: AsyncSession, identity: GoogleIdentity
+) -> str | None:
+    now = datetime.now(UTC)
+    existing = (
+        await db.execute(
+            select(PendingSignup)
+            .where(
+                PendingSignup.oauth_provider == GOOGLE_PROVIDER,
+                PendingSignup.oauth_subject == identity.subject,
+            )
+            .with_for_update()
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        if existing.completed_at is not None:
+            return None
+        if _datetime_is_expired(existing.expires_at):
+            await db.delete(existing)
+            await db.flush()
+        else:
+            token = secrets.token_urlsafe(32)
+            existing.token_hash = _token_hash(token)
+            existing.expires_at = now + SIGNUP_TTL
+            await db.commit()
+            return token
+
+    if (
+        await db.execute(select(User).where(User.email == identity.email))
+    ).scalar_one_or_none() is not None:
+        return None
+    if (
+        await db.execute(select(PendingSignup).where(PendingSignup.email_normalized == identity.email))
+    ).scalar_one_or_none() is not None:
+        return None
+
+    token = secrets.token_urlsafe(32)
+    pending = PendingSignup(
+        email_normalized=identity.email,
+        name=identity.name,
+        oauth_provider=GOOGLE_PROVIDER,
+        oauth_subject=identity.subject,
+        interface_locale="es",
+        token_hash=_token_hash(token),
+        expires_at=now + SIGNUP_TTL,
+    )
+    db.add(pending)
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        existing = (
+            await db.execute(
+                select(PendingSignup).where(
+                    PendingSignup.oauth_provider == GOOGLE_PROVIDER,
+                    PendingSignup.oauth_subject == identity.subject,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is None or existing.completed_at is not None or _datetime_is_expired(existing.expires_at):
+            return None
+        token = secrets.token_urlsafe(32)
+        existing.token_hash = _token_hash(token)
+        existing.expires_at = datetime.now(UTC) + SIGNUP_TTL
+        await db.commit()
+    return token
+
+
 @router.post("/register", status_code=201, deprecated=True)
 async def register(
     body: RegisterRequest, response: Response, db: AsyncSession = Depends(get_db)
@@ -249,6 +410,109 @@ async def register(
         "user": {"id": user.id, "name": user.name, "email": user.email},
         "workspace": {"id": workspace.id, "name": workspace.name, "role": "owner"},
     }
+
+
+@router.get("/google/status")
+async def google_sign_in_status() -> dict[str, bool]:
+    return {"configured": settings.google_sign_in_configured}
+
+
+@router.get("/google/start")
+async def start_google_sign_in(
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    if not settings.google_sign_in_configured:
+        raise AppError(
+            "GOOGLE_SIGN_IN_UNAVAILABLE",
+            "El acceso con Google no está disponible en este momento.",
+            status_code=503,
+        )
+    now = datetime.now(UTC)
+    await db.execute(delete(OAuthAuthorizationRequest).where(OAuthAuthorizationRequest.expires_at <= now))
+    state = secrets.token_urlsafe(32)
+    code_verifier = secrets.token_urlsafe(64)
+    nonce = secrets.token_urlsafe(32)
+    db.add(
+        OAuthAuthorizationRequest(
+            provider=GOOGLE_PROVIDER,
+            state_hash=_token_hash(state),
+            nonce=nonce,
+            expires_at=now + timedelta(seconds=settings.google_oauth_state_ttl_seconds),
+        )
+    )
+    await db.commit()
+    _set_google_oauth_cookie(response, state=state, code_verifier=code_verifier)
+    response.headers["Cache-Control"] = "no-store"
+    return {
+        "authorization_url": get_google_oidc_client().authorization_url(
+            state=state,
+            code_challenge=create_code_challenge(code_verifier),
+            nonce=nonce,
+        )
+    }
+
+
+@router.get("/google/callback")
+async def google_callback(
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+    oauth_cookie: str | None = Cookie(None, alias=GOOGLE_OAUTH_COOKIE_NAME),
+    db: AsyncSession = Depends(get_db),
+) -> RedirectResponse:
+    if not settings.google_sign_in_configured:
+        return _google_callback_error("unavailable")
+    cookie_state = _read_google_oauth_cookie(oauth_cookie)
+    if state is None or cookie_state is None or not hmac.compare_digest(state, cookie_state[0]):
+        return _google_callback_error("invalid_state")
+    authorization_request, state_error = await _consume_google_authorization_request(db, state=state)
+    if authorization_request is None:
+        return _google_callback_error(state_error or "invalid_state")
+    if error:
+        return _google_callback_error("cancelled")
+    if not code:
+        return _google_callback_error("failed")
+
+    try:
+        oidc_client = get_google_oidc_client()
+        id_token = await oidc_client.exchange_code(code=code, code_verifier=cookie_state[1])
+        identity = await oidc_client.validate_id_token(
+            id_token=id_token, nonce=authorization_request.nonce
+        )
+    except GoogleOIDCError as exc:
+        outcome = "unavailable" if exc.code == "GOOGLE_OAUTH_UNAVAILABLE" else "failed"
+        return _google_callback_error(outcome)
+
+    linked = (
+        await db.execute(
+            select(OAuthAccount, User)
+            .join(User, User.id == OAuthAccount.user_id)
+            .where(
+                OAuthAccount.provider == GOOGLE_PROVIDER,
+                OAuthAccount.provider_subject == identity.subject,
+            )
+            .with_for_update()
+        )
+    ).one_or_none()
+    if linked is not None:
+        account, user = linked
+        if user.status != "active":
+            return _google_callback_error("unavailable")
+        account.last_login_at = datetime.now(UTC)
+        token = await _create_session(db, user.id)
+        await db.commit()
+        response = _google_callback_redirect("/dashboard")
+        _set_session_cookie(response, token)
+        _clear_signup_cookie(response)
+        return response
+
+    signup_token = await _create_or_resume_google_signup(db, identity)
+    if signup_token is None:
+        return _google_callback_error("account_exists")
+    response = _google_callback_redirect("/onboarding")
+    _set_signup_cookie(response, signup_token)
+    return response
 
 
 @router.post("/signup/start", status_code=201)
@@ -383,6 +647,23 @@ async def complete_signup(
         workspace = Workspace(name=business_draft.name)
         db.add_all([user, workspace])
         await db.flush()
+        if pending.oauth_provider or pending.oauth_subject:
+            if not pending.oauth_provider or not pending.oauth_subject:
+                raise AppError(
+                    "SIGNUP_CONFLICT",
+                    "No se pudo completar el registro.",
+                    status_code=409,
+                )
+            db.add(
+                OAuthAccount(
+                    user_id=user.id,
+                    provider=pending.oauth_provider,
+                    provider_subject=pending.oauth_subject,
+                    email_at_link_time=pending.email_normalized,
+                    last_login_at=datetime.now(UTC),
+                )
+            )
+            await db.flush()
         db.add(WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role="owner"))
         business_data = business_draft.model_dump(exclude_none=True) | channels_draft.model_dump()
         business_data["content_locale"] = brand_draft.content_locale

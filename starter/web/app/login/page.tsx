@@ -6,6 +6,7 @@ import { FormEvent, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { Logo } from "@/components/brand/logo";
+import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { PublicAuthRoute } from "@/components/auth/public-auth-route";
 import { api, ApiError } from "@/lib/api";
 import { resolveNextPath, routes } from "@/lib/routes";
@@ -18,6 +19,16 @@ function LoginForm() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const next = resolveNextPath(searchParams.get("next"));
+  const oauthError = {
+    cancelled: "Cancelaste el acceso con Google. Puedes intentarlo de nuevo.",
+    invalid_state: "La verificación con Google no pudo completarse. Inténtalo de nuevo.",
+    expired_state: "La verificación con Google expiró. Inténtalo de nuevo.",
+    used_state: "Este acceso con Google ya fue utilizado. Inténtalo de nuevo.",
+    unavailable: "Google no está disponible en este momento.",
+    account_exists:
+      "Ya existe una cuenta con este correo. Inicia sesión con tu método habitual.",
+    failed: "No pudimos completar el acceso con Google. Inténtalo de nuevo.",
+  }[searchParams.get("oauth") || ""];
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -75,6 +86,15 @@ function LoginForm() {
           <p className="auth-description">
             Ingresa tus datos para seguir creando.
           </p>
+          {oauthError ? (
+            <p role="alert" className="auth-error">
+              {oauthError}
+            </p>
+          ) : null}
+          <GoogleSignInButton />
+          <div className="auth-divider" aria-hidden="true">
+            <span>o</span>
+          </div>
           <form onSubmit={submit} className="auth-form">
             <label htmlFor="email">
               Correo electrónico

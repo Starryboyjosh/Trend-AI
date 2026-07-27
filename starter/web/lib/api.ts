@@ -77,6 +77,14 @@ export type SignupDraftPayload =
   | { step: "brand"; brand: SignupBrandDraft }
   | { step: "review"; review: { confirmed: boolean } };
 
+export interface GoogleSignInStatus {
+  configured: boolean;
+}
+
+export interface GoogleAuthorizationStart {
+  authorization_url: string;
+}
+
 const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 const DEFAULT_MAX_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 250;
@@ -627,6 +635,14 @@ export const api = {
         method: "POST",
         body: JSON.stringify(data),
       });
+    },
+    google: {
+      status() {
+        return request<GoogleSignInStatus>(`${BASE}/auth/google/status`);
+      },
+      start() {
+        return request<GoogleAuthorizationStart>(`${BASE}/auth/google/start`);
+      },
     },
     signup: {
       start(data: {

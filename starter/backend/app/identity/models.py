@@ -63,6 +63,38 @@ class AuthSession(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class OAuthAccount(Base):
+    __tablename__ = "oauth_accounts"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider_subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    email_at_link_time: Mapped[str] = mapped_column(String(255), nullable=False)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("provider", "provider_subject", name="uq_oauth_account_provider_subject"),
+    )
+
+
+class OAuthAuthorizationRequest(Base):
+    __tablename__ = "oauth_authorization_requests"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_uuid)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    state_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    nonce: Mapped[str] = mapped_column(String(255), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class PendingSignup(Base):
     __tablename__ = "pending_signups"
 
@@ -84,6 +116,14 @@ class PendingSignup(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "oauth_provider",
+            "oauth_subject",
+            name="uq_pending_signup_oauth_identity",
+        ),
     )
 
 

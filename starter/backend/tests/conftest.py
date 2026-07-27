@@ -19,6 +19,8 @@ from app.db.base import Base
 from app.dependencies import get_db
 from app.identity.models import (
     AuthSession,
+    OAuthAccount,
+    OAuthAuthorizationRequest,
     PendingSignup,
     User,
     UserPreference,
@@ -60,7 +62,16 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         token = "test-session-token"
         async with _TestingSessionFactory() as session:
-            for model in (AuthSession, PendingSignup, WorkspaceMember, UserPreference, User, Workspace):
+            for model in (
+                AuthSession,
+                OAuthAuthorizationRequest,
+                OAuthAccount,
+                PendingSignup,
+                WorkspaceMember,
+                UserPreference,
+                User,
+                Workspace,
+            ):
                 await session.execute(delete(model))
             user = User(
                 id="usr_test_001",

@@ -108,6 +108,19 @@ class Settings:
             name="SESSION_TTL_HOURS",
         )
         self.allowed_origins: str = values.get("ALLOWED_ORIGINS", "http://localhost:3000").strip()
+        self.frontend_url: str = values.get("FRONTEND_URL", "http://localhost:3000").strip().rstrip("/")
+        self.google_sign_in_enabled: bool = _as_bool(
+            values.get("GOOGLE_SIGN_IN_ENABLED", "0"),
+            name="GOOGLE_SIGN_IN_ENABLED",
+        )
+        self.google_client_id: str = values.get("GOOGLE_CLIENT_ID", "").strip()
+        self.google_client_secret: str = values.get("GOOGLE_CLIENT_SECRET", "").strip()
+        self.google_redirect_uri: str = values.get("GOOGLE_REDIRECT_URI", "").strip()
+        self.google_oauth_state_ttl_seconds: int = _positive_int(
+            values.get("GOOGLE_OAUTH_STATE_TTL_SECONDS", "600"),
+            name="GOOGLE_OAUTH_STATE_TTL_SECONDS",
+            minimum=60,
+        )
 
         self.max_upload_mb: int = _positive_int(
             values.get("MAX_UPLOAD_MB", "10"), name="MAX_UPLOAD_MB"
@@ -145,6 +158,12 @@ class Settings:
     def allowed_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.allowed_origins.split(",") if origin.strip()]
 
+    @property
+    def google_sign_in_configured(self) -> bool:
+        return self.google_sign_in_enabled and all(
+            [self.google_client_id, self.google_client_secret, self.google_redirect_uri]
+        )
+
     def validate_runtime_configuration(self) -> None:
         if self.app_env not in {"development", "test", "production"}:
             raise RuntimeError("APP_ENV debe ser development, test o production.")
@@ -160,6 +179,19 @@ class Settings:
             raise RuntimeError("SESSION_COOKIE_NAME es obligatoria.")
         if not self.allowed_origin_list:
             raise RuntimeError("ALLOWED_ORIGINS debe contener al menos un origen.")
+        if self.google_sign_in_configured:
+            _validate_http_url(
+                self.frontend_url,
+                name="FRONTEND_URL",
+                require_https=self.app_env == "production",
+            )
+            if self.frontend_url not in self.allowed_origin_list:
+                raise RuntimeError("FRONTEND_URL debe estar incluida en ALLOWED_ORIGINS para Google.")
+            _validate_http_url(
+                self.google_redirect_uri,
+                name="GOOGLE_REDIRECT_URI",
+                require_https=self.app_env == "production",
+            )
 
         if self.ai_provider == "openai-compatible":
             if not self.ai_base_url or not self.ai_api_key or not self.ai_model:

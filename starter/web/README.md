@@ -33,6 +33,11 @@ Los helpers fake permanecen disponibles únicamente para pruebas o para un
 entorno local explícito con `NEXT_PUBLIC_ENABLE_DEMO=true`; esa bandera no se
 activa en producción.
 
+Cuando el backend tiene Google configurado, las pantallas de registro e inicio
+de sesión muestran **Continuar con Google**. El navegador recibe únicamente la
+URL de autorización generada por el backend; el callback vuelve al onboarding
+para una cuenta nueva o al dashboard para una identidad ya vinculada.
+
 La configuración (`/settings`) sigue siendo la implementación existente del
 repositorio. Las rutas antiguas (`/assistant`, `/conversations`, `/projects`)
 se mantienen como alias de compatibilidad hacia el App Shell actual.
