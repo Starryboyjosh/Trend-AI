@@ -19,4 +19,4 @@ async def test_health_and_migrated_postgres_are_ready(
     assert ready.status_code == 200
     assert ready.json() == {"status": "ok", "checks": {"database": "ok"}}
     with migrated_database.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "013"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "014"

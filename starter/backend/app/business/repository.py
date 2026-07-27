@@ -37,10 +37,13 @@ async def create_business(
         country=data["country"],
         city=data["city"],
         description=data.get("description"),
+        website_url=data.get("website_url"),
         primary_product=data["primary_product"],
         target_audience=data["target_audience"],
         preferred_platforms=_serialize_platforms(data["preferred_platforms"]),
         primary_objective=data["primary_objective"],
+        content_locale=data.get("content_locale", "es"),
+        onboarding_completed_at=data.get("onboarding_completed_at"),
     )
     db.add(business)
     await db.flush()
@@ -84,10 +87,17 @@ def business_to_dict(business: Business) -> dict:
         "country": business.country,
         "city": business.city,
         "description": business.description,
+        "website_url": business.website_url,
         "primary_product": business.primary_product,
         "target_audience": business.target_audience,
         "preferred_platforms": _deserialize_platforms(business.preferred_platforms),
         "primary_objective": business.primary_objective,
+        "content_locale": business.content_locale,
+        "onboarding_completed_at": (
+            business.onboarding_completed_at.isoformat()
+            if business.onboarding_completed_at
+            else None
+        ),
         "created_at": business.created_at.isoformat() if business.created_at else None,
         "updated_at": business.updated_at.isoformat() if business.updated_at else None,
     }

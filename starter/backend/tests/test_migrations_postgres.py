@@ -72,7 +72,7 @@ def _template_ids(engine) -> list[str]:
 def test_upgrade_empty_postgres_to_head(postgres_engine) -> None:
     _upgrade("head")
     with postgres_engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "013"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "014"
     assert set(_template_ids(postgres_engine)) == EXPECTED_TEMPLATE_IDS
 
 
@@ -123,3 +123,23 @@ def test_downgrade_preserves_seeded_templates(postgres_engine) -> None:
     _upgrade("head")
     command.downgrade(_alembic_config(), "011")
     assert set(_template_ids(postgres_engine)) == EXPECTED_TEMPLATE_IDS
+
+
+def test_upgrade_from_013_adds_pending_signup_schema(postgres_engine) -> None:
+    _upgrade("013")
+    with postgres_engine.connect() as connection:
+        assert connection.scalar(text("SELECT to_regclass('public.pending_signups')")) is None
+    _upgrade("head")
+    with postgres_engine.connect() as connection:
+        assert connection.scalar(text("SELECT to_regclass('public.pending_signups')"))
+        assert connection.scalar(text("SELECT to_regclass('public.user_preferences')"))
+        columns = {
+            row.column_name
+            for row in connection.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'businesses'"
+                )
+            )
+        }
+    assert {"website_url", "content_locale", "onboarding_completed_at"} <= columns

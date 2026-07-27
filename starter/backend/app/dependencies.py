@@ -38,7 +38,10 @@ async def get_current_principal(
     result = await db.execute(
         select(AuthSession, User)
         .join(User, User.id == AuthSession.user_id)
-        .where(AuthSession.token_hash == sha256(session_token.encode("utf-8")).hexdigest())
+        .where(
+            AuthSession.token_hash == sha256(session_token.encode("utf-8")).hexdigest(),
+            User.status == "active",
+        )
     )
     row = result.one_or_none()
     if row is None or row.AuthSession.expires_at.replace(tzinfo=UTC) <= datetime.now(UTC):

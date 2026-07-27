@@ -59,7 +59,12 @@ app.add_middleware(
 
 app.add_exception_handler(AppError, app_error_handler)
 
-_RATE_LIMITED_PATHS = {"/api/v1/auth/login", "/api/v1/auth/register"}
+_RATE_LIMITED_PATHS = {
+    "/api/v1/auth/login",
+    "/api/v1/auth/register",
+    "/api/v1/auth/signup/start",
+    "/api/v1/auth/signup/complete",
+}
 _local_rate_limiter = LocalRateLimiter()
 # Kept as a test-only inspection point while development uses the local adapter.
 _rate_windows = _local_rate_limiter.windows

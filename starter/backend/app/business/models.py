@@ -23,10 +23,15 @@ class Business(Base):
     country: Mapped[str] = mapped_column(String(80), nullable=False)
     city: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    website_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     primary_product: Mapped[str] = mapped_column(String(240), nullable=False)
     target_audience: Mapped[str] = mapped_column(String(500), nullable=False)
     preferred_platforms: Mapped[str] = mapped_column(String(500), nullable=False)
     primary_objective: Mapped[str] = mapped_column(String(40), nullable=False)
+    content_locale: Mapped[str] = mapped_column(String(16), nullable=False, default="es")
+    onboarding_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

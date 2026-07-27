@@ -17,7 +17,14 @@ import app.projects.models  # noqa: F401
 import app.templates.models  # noqa: F401
 from app.db.base import Base
 from app.dependencies import get_db
-from app.identity.models import AuthSession, User, Workspace, WorkspaceMember
+from app.identity.models import (
+    AuthSession,
+    PendingSignup,
+    User,
+    UserPreference,
+    Workspace,
+    WorkspaceMember,
+)
 from app.main import app
 from app.templates.repository import seed_templates
 
@@ -53,7 +60,7 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         token = "test-session-token"
         async with _TestingSessionFactory() as session:
-            for model in (AuthSession, WorkspaceMember, User, Workspace):
+            for model in (AuthSession, PendingSignup, WorkspaceMember, UserPreference, User, Workspace):
                 await session.execute(delete(model))
             user = User(
                 id="usr_test_001",
