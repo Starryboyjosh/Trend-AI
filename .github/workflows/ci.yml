@@ -104,6 +104,7 @@ jobs:
               except psycopg.OperationalError:
                   if attempt == 29:
                       raise
+
                   print(f"Esperando PostgreSQL ({attempt + 1}/30)...")
                   time.sleep(1)
           PY
@@ -114,7 +115,7 @@ jobs:
           PYTHONPATH=. python -m alembic upgrade head
           PYTHONPATH=. python -m alembic current
 
-      - name: Confirmar revisión 013
+      - name: Confirmar revisión 014
         run: |
           python - <<'PY'
           import os
@@ -128,9 +129,11 @@ jobs:
                   text("SELECT version_num FROM alembic_version")
               )
 
-          assert revision == "013", f"Revisión inesperada: {revision!r}"
-          print(f"Alembic revision: {revision}")
+          assert revision == "014", (
+              f"Revisión inesperada: {revision!r}. Se esperaba '014'."
+          )
 
+          print(f"Alembic revision: {revision}")
           engine.dispose()
           PY
 
