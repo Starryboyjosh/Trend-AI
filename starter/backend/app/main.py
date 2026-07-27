@@ -15,7 +15,9 @@ from app.assets.routes import router as asset_router
 from app.business.routes import router as business_router
 from app.conversations.routes import router as conversation_router
 from app.core.config import settings
+from app.core.ephemeral_store import get_ephemeral_store
 from app.core.errors import AppError, app_error_handler
+from app.core.infrastructure import get_infrastructure_capabilities
 from app.core.rate_limit import LocalRateLimiter, RateLimiter, RedisRateLimiter
 from app.db.session import get_session_factory
 from app.identity.routes import router as identity_router
@@ -28,8 +30,8 @@ logger = logging.getLogger("hitrendy.http")
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings.validate_runtime_configuration()
-    if settings.app_env == "production":
-        await get_rate_limiter().ensure_available()
+    if settings.redis_required:
+        await get_ephemeral_store().ensure_available()
     if settings.is_demo:
         await _seed_templates()
     yield
@@ -84,7 +86,7 @@ def _requires_rate_limit(path: str) -> bool:
 
 def get_rate_limiter() -> RateLimiter:
     global _rate_limiter, _rate_limiter_url
-    if settings.app_env != "production":
+    if settings.redis_provider != "redis" or not settings.redis_url:
         return _local_rate_limiter
     if _rate_limiter is None or _rate_limiter_url != settings.redis_url:
         _rate_limiter = RedisRateLimiter.from_url(settings.redis_url)
@@ -202,7 +204,7 @@ def live() -> dict[str, str]:
 
 @app.get("/health/ready", response_model=None)
 async def ready() -> dict[str, object] | JSONResponse:
-    """Report readiness only when the application can use its database."""
+    """Report database readiness plus safe states for optional infrastructure."""
 
     try:
         factory = get_session_factory()
@@ -216,4 +218,13 @@ async def ready() -> dict[str, object] | JSONResponse:
                 "checks": {"database": "unavailable"},
             },
         )
-    return {"status": "ok", "checks": {"database": "ok"}}
+    capabilities = await get_infrastructure_capabilities()
+    if settings.redis_required and capabilities["redis"] != "available":
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "not_ready",
+                "checks": {"database": "ok", **capabilities},
+            },
+        )
+    return {"status": "ok", "checks": {"database": "ok", **capabilities}}

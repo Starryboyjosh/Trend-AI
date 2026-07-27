@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from app.core.config import Settings
+from app.db.session import get_database_engine_options
 from app.providers.content import DemoContentModelProvider, OpenAICompatibleContentModelProvider
 from app.providers.factory import get_content_provider, get_vision_provider
 from app.providers.vision import DemoVisionReviewProvider
@@ -150,3 +151,86 @@ def test_factory_keeps_demo_vision_available_in_production(monkeypatch) -> None:
     monkeypatch.setattr("app.providers.factory.settings", Settings(_production_values()))
 
     assert isinstance(get_vision_provider(), DemoVisionReviewProvider)
+
+
+def test_postgres_remote_configuration_uses_ssl_and_bounded_pool() -> None:
+    settings = Settings(
+        {
+            "DATABASE_URL": "postgresql://app:password@db.example.com:6543/postgres",
+            "DATABASE_SSL_MODE": "require",
+            "DATABASE_POOL_SIZE": "4",
+            "DATABASE_MAX_OVERFLOW": "6",
+            "DATABASE_POOL_TIMEOUT": "20",
+            "DATABASE_POOL_RECYCLE": "900",
+        }
+    )
+
+    settings.validate_runtime_configuration()
+
+    assert settings.database_url.startswith("postgresql+psycopg://")
+    assert settings.database_ssl_mode == "require"
+    assert settings.database_pool_size == 4
+    assert settings.database_max_overflow == 6
+
+
+def test_postgres_engine_options_include_ssl_and_pool(monkeypatch: pytest.MonkeyPatch) -> None:
+    remote_settings = Settings(
+        {
+            "DATABASE_URL": "postgresql+psycopg://app:password@db.example.com/postgres",
+            "DATABASE_SSL_MODE": "require",
+            "DATABASE_POOL_SIZE": "4",
+            "DATABASE_MAX_OVERFLOW": "6",
+            "DATABASE_POOL_TIMEOUT": "20",
+            "DATABASE_POOL_RECYCLE": "900",
+        }
+    )
+    monkeypatch.setattr("app.db.session.settings", remote_settings)
+
+    assert get_database_engine_options() == {
+        "pool_size": 4,
+        "max_overflow": 6,
+        "pool_timeout": 20,
+        "pool_recycle": 900,
+        "pool_pre_ping": True,
+        "connect_args": {"sslmode": "require"},
+    }
+
+
+def test_remote_postgres_in_production_requires_ssl() -> None:
+    values = _production_values()
+    values["DATABASE_URL"] = "postgresql+psycopg://app:password@db.example.com/postgres"
+    values["DATABASE_SSL_MODE"] = "disable"
+
+    with pytest.raises(RuntimeError, match="DATABASE_SSL_MODE"):
+        Settings(values).validate_runtime_configuration()
+
+
+@pytest.mark.parametrize(
+    "values, message",
+    [
+        ({"STORAGE_PROVIDER": "supabase"}, "Supabase Storage"),
+        ({"STORAGE_PROVIDER": "unknown"}, "OBJECT_STORAGE_PROVIDER"),
+        ({"REDIS_PROVIDER": "redis"}, "REDIS_URL"),
+        ({"REDIS_PROVIDER": "memory", "REDIS_REQUIRED": "1"}, "REDIS_REQUIRED"),
+    ],
+)
+def test_cloud_configuration_fails_closed_when_incomplete(
+    values: dict[str, str], message: str
+) -> None:
+    with pytest.raises(RuntimeError, match=message):
+        Settings(values).validate_runtime_configuration()
+
+
+def test_disabled_storage_and_memory_redis_are_valid_for_local_work() -> None:
+    settings = Settings(
+        {
+            "APP_ENV": "development",
+            "STORAGE_PROVIDER": "disabled",
+            "REDIS_PROVIDER": "memory",
+        }
+    )
+
+    settings.validate_runtime_configuration()
+
+    assert settings.object_storage_provider == "disabled"
+    assert settings.redis_provider == "memory"

@@ -137,6 +137,15 @@ PostgreSQL/migraciones/E2E y frontend. Usa provider demo o falso, por lo que
 no requiere `OPENAI_API_KEY`, `OPENROUTER_API_KEY` ni otros secretos. Los
 smoke tests de providers externos permanecen opcionales.
 
+## Datos locales y remotos
+
+El perfil local usa PostgreSQL Docker, almacenamiento local y Redis en memoria
+por defecto. Para staging/beta, el backend puede usar PostgreSQL remoto
+compatible con SQLAlchemy, Supabase Storage privado y Redis/Upstash sin cambiar
+la lógica de negocio. Consulta la sección “PostgreSQL, Storage y Redis remotos”
+del [README backend](starter/backend/README.md); las credenciales permanecen
+solo en el entorno del backend.
+
 ## Recommended implementation order
 
 1. Read `docs/INDEX.md`.

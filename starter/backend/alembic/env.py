@@ -12,6 +12,7 @@ from app.business import models as business_models  # noqa: F401
 from app.conversations import models as conversation_models  # noqa: F401
 from app.core.config import settings
 from app.db.base import Base
+from app.db.session import get_database_engine_options
 from app.identity import models as identity_models  # noqa: F401
 from app.projects import models as project_models  # noqa: F401
 from app.templates import models as template_models  # noqa: F401
@@ -50,10 +51,12 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
+    engine_options = get_database_engine_options()
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=engine_options.get("connect_args", {}),
     )
     with connectable.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)

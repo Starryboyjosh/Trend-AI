@@ -15,6 +15,22 @@ def _build_url() -> str:
     return url
 
 
+def get_database_engine_options() -> dict[str, Any]:
+    """Return only driver-supported options for the configured database type."""
+
+    url = _build_url()
+    if url.startswith("sqlite"):
+        return {}
+    return {
+        "pool_size": settings.database_pool_size,
+        "max_overflow": settings.database_max_overflow,
+        "pool_timeout": settings.database_pool_timeout,
+        "pool_recycle": settings.database_pool_recycle,
+        "pool_pre_ping": True,
+        "connect_args": {"sslmode": settings.database_ssl_mode},
+    }
+
+
 _engine: Any = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
 
@@ -25,6 +41,7 @@ def ensure_engine():
         _engine = create_async_engine(
             _build_url(),
             echo=settings.app_env == "development",
+            **get_database_engine_options(),
         )
         _session_factory = async_sessionmaker(
             _engine,

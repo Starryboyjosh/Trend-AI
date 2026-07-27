@@ -70,6 +70,28 @@ async def test_upload_rejects_invalid_mime(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_upload_rejects_content_over_the_configured_size_limit(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.assets import routes as asset_routes
+
+    monkeypatch.setattr(asset_routes.settings, "max_upload_mb", 1)
+    init_resp = await client.post(
+        "/api/v1/assets/uploads",
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+
+    response = await client.post(
+        f"/api/v1/assets/uploads/{init_resp.json()['upload_id']}/complete",
+        files={"file": ("large.png", io.BytesIO(b"x" * (1024 * 1024 + 1)), "image/png")},
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+@pytest.mark.asyncio
 async def test_get_asset(client: AsyncClient) -> None:
     file_content = io.BytesIO(PNG_1X1)
     files = {"file": ("photo.png", file_content, "image/png")}

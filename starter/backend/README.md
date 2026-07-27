@@ -103,3 +103,54 @@ The redirect URI must match Google Console exactly. The API uses PKCE, an
 HttpOnly temporary OAuth cookie with `SameSite=Lax`, and a database-backed
 one-time state. Session and pending-signup cookies stay `SameSite=Strict`; no
 Google token or client secret is returned to the browser.
+
+## PostgreSQL, Storage y Redis remotos
+
+HiTrendy conserva SQLAlchemy y Alembic como la única capa de persistencia. Una
+URL directa de Supabase o una URL del pooler debe usar el dialecto SQLAlchemy
+`postgresql+psycopg://`. Para una base remota, configura SSL explícitamente y
+limita el pool por proceso:
+
+```bash
+DATABASE_URL='postgresql+psycopg://usuario:contraseña@host:5432/postgres'
+DATABASE_SSL_MODE=require
+DATABASE_POOL_SIZE=5
+DATABASE_MAX_OVERFLOW=10
+DATABASE_POOL_TIMEOUT=30
+DATABASE_POOL_RECYCLE=1800
+```
+
+Las URLs `postgres://` y `postgresql://` se normalizan a `psycopg`. Para el
+pooler de Supabase usa la URL y puerto publicados por el proyecto, conserva
+`DATABASE_SSL_MODE=require` y reduce el pool según los límites de conexión del
+plan. Alembic usa la misma URL; ejecuta una sola réplica de migración por
+release. Las bases de CI/E2E siguen siendo locales y aisladas.
+
+El almacenamiento se selecciona con `STORAGE_PROVIDER`:
+
+- `local`: desarrollo y pruebas; `OBJECT_STORAGE_LOCAL_DIR` no se expone por API.
+- `s3`: compatibilidad existente con MinIO/S3 mediante `OBJECT_STORAGE_*`.
+- `supabase`: bucket privado mediante REST con `SUPABASE_URL`,
+  `SUPABASE_SERVICE_ROLE_KEY` y `SUPABASE_STORAGE_BUCKET`.
+- `disabled`: las cargas devuelven un error normalizado sin escribir archivos.
+
+El service-role key solo se lee en FastAPI. Nunca uses un prefijo
+`NEXT_PUBLIC_`, ni hagas público el bucket. Los objetos se guardan bajo
+`workspaces/<workspace_id>/assets/...`; el backend autoriza cada lectura y
+proxy el contenido, por lo que aún no emite URLs firmadas. Si se añaden en una
+wave posterior, deben tener TTL corto y seguir validando workspace en backend.
+Crear el bucket privado es una operación administrativa previa al despliegue;
+esta aplicación no lo crea automáticamente.
+
+Redis se selecciona con `REDIS_PROVIDER=disabled|memory|redis`:
+
+- `disabled`: no hay caché/estado efímero remoto.
+- `memory`: TTL local para desarrollo y tests; no es distribuido.
+- `redis`: `REDIS_URL` (`redis://` o `rediss://`, incluido Upstash TCP) o
+  `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`.
+
+`REDIS_PREFIX` evita colisiones entre entornos y todas las entradas efímeras
+tienen TTL. Define `REDIS_REQUIRED=1` solo cuando una indisponibilidad de Redis
+deba bloquear el arranque/readiness; en caso contrario readiness informa
+`degraded` sin declarar caída la API. Los estados de health nunca incluyen URLs,
+tokens, buckets ni claves.

@@ -36,7 +36,10 @@ async def test_readiness_checks_database(client: AsyncClient) -> None:
     response = await client.get("/health/ready")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "checks": {"database": "ok"}}
+    assert response.json() == {
+        "status": "ok",
+        "checks": {"database": "ok", "storage": "available", "redis": "available"},
+    }
 
 
 @pytest.mark.asyncio
