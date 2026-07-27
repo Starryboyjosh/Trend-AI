@@ -10,8 +10,10 @@ interface Props {
     forbidden_words: string;
     primary_color: string;
     secondary_color: string;
+    content_locale?: "es" | "en" | "pt";
   };
   onChange: (field: string, value: unknown) => void;
+  showContentLocale?: boolean;
 }
 
 const TONES: { value: Tone; label: string }[] = [
@@ -24,7 +26,7 @@ const TONES: { value: Tone; label: string }[] = [
   { value: "inspiring", label: "Inspirador" },
 ];
 
-export function StepBrand({ data, onChange }: Props) {
+export function StepBrand({ data, onChange, showContentLocale = false }: Props) {
   function toggleTone(t: Tone) {
     const current = data.voice_tones;
     const next = current.includes(t)
@@ -135,6 +137,21 @@ export function StepBrand({ data, onChange }: Props) {
             />
           </div>
         </div>
+        {showContentLocale ? (
+          <label htmlFor="brand-content-locale">
+            Idioma predeterminado del contenido
+            <select
+              id="brand-content-locale"
+              value={data.content_locale || "es"}
+              onChange={(e) => onChange("content_locale", e.target.value)}
+              style={{ display: "block", width: "100%", marginTop: 4 }}
+            >
+              <option value="es">Español</option>
+              <option value="en">English</option>
+              <option value="pt">Português</option>
+            </select>
+          </label>
+        ) : null}
       </div>
     </section>
   );

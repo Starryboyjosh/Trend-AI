@@ -4,17 +4,20 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { LogoPlaceholder } from "@/components/placeholders/widget-placeholder";
+import { PublicAuthRoute } from "@/components/auth/public-auth-route";
+import { Logo } from "@/components/brand/logo";
 import { api, ApiError } from "@/lib/api";
 import { routes } from "@/lib/routes";
+
+type InterfaceLocale = "es" | "en" | "pt";
 
 export default function RegisterPage() {
   const router = useRouter();
   const [form, setForm] = useState({
     name: "",
-    workspaceName: "",
     email: "",
     password: "",
+    interfaceLocale: "es" as InterfaceLocale,
   });
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -24,13 +27,13 @@ export default function RegisterPage() {
     setSubmitting(true);
     setError("");
     try {
-      await api.auth.register({
-        email: form.email,
+      await api.auth.signup.start({
+        email: form.email.trim(),
         password: form.password,
-        name: form.name,
-        workspace_name: form.workspaceName,
+        name: form.name.trim(),
+        interface_locale: form.interfaceLocale,
       });
-      router.replace("/onboarding");
+      router.replace(routes.onboarding);
     } catch (reason) {
       setError(
         reason instanceof ApiError
@@ -43,15 +46,16 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="auth-page auth-page--single">
-      <section className="auth-card" aria-labelledby="register-title">
+    <PublicAuthRoute>
+      <main className="auth-page auth-page--single">
+        <section className="auth-card" aria-labelledby="register-title">
         <div className="auth-brand">
-          <LogoPlaceholder />
-          <span>HiTrendy</span>
+          <Logo />
         </div>
-        <h1 id="register-title">Crea tu espacio de trabajo</h1>
+        <h1 id="register-title">Crea tu cuenta</h1>
         <p className="auth-description">
-          Tus perfiles y proyectos quedarán organizados en un solo lugar.
+          Primero creemos tu cuenta. Después conoceremos tu negocio para
+          preparar tu espacio en HiTrendy.
         </p>
         <form onSubmit={submit} className="auth-form">
           <label htmlFor="name">
@@ -64,17 +68,6 @@ export default function RegisterPage() {
               }
               required
               autoComplete="name"
-            />
-          </label>
-          <label htmlFor="workspace">
-            Nombre del espacio de trabajo
-            <input
-              id="workspace"
-              value={form.workspaceName}
-              onChange={(event) =>
-                setForm({ ...form, workspaceName: event.target.value })
-              }
-              required
             />
           </label>
           <label htmlFor="register-email">
@@ -104,6 +97,23 @@ export default function RegisterPage() {
               autoComplete="new-password"
             />
           </label>
+          <label htmlFor="interface-locale">
+            Idioma de la interfaz
+            <select
+              id="interface-locale"
+              value={form.interfaceLocale}
+              onChange={(event) =>
+                setForm({
+                  ...form,
+                  interfaceLocale: event.target.value as InterfaceLocale,
+                })
+              }
+            >
+              <option value="es">Español</option>
+              <option value="en">English</option>
+              <option value="pt">Português</option>
+            </select>
+          </label>
           {error ? (
             <p role="alert" className="auth-error">
               {error}
@@ -116,7 +126,8 @@ export default function RegisterPage() {
         <p className="auth-register-prompt">
           ¿Ya tienes cuenta? <Link href={routes.login}>Inicia sesión</Link>
         </p>
-      </section>
-    </main>
+        </section>
+      </main>
+    </PublicAuthRoute>
   );
 }

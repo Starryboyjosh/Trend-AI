@@ -20,12 +20,18 @@ npm run test -w starter/web
 npm run build -w starter/web
 ```
 
-El frontend conserva dos modos:
+El alta pública usa siempre el backend real:
 
-- **API real:** usa el proxy `/api/v1` de Next.js, configurado mediante
-  `NEXT_PUBLIC_API_URL`, y la autenticación del backend.
-- **Demo local:** permite recorrer el flujo sin credenciales externas y guarda
-  el estado demo en el navegador.
+1. `/register` inicia un Pending Signup.
+2. `/onboarding` recupera y guarda el borrador con la cookie temporal del
+   backend.
+3. La confirmación llama a `/api/v1/auth/signup/complete` con una clave
+   idempotente estable y solo después dirige al dashboard.
+
+El demo local ya no tiene una entrada pública ni puede saltarse autenticación.
+Los helpers fake permanecen disponibles únicamente para pruebas o para un
+entorno local explícito con `NEXT_PUBLIC_ENABLE_DEMO=true`; esa bandera no se
+activa en producción.
 
 La configuración (`/settings`) sigue siendo la implementación existente del
 repositorio. Las rutas antiguas (`/assistant`, `/conversations`, `/projects`)

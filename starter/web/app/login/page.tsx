@@ -6,8 +6,8 @@ import { FormEvent, Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { Logo } from "@/components/brand/logo";
+import { PublicAuthRoute } from "@/components/auth/public-auth-route";
 import { api, ApiError } from "@/lib/api";
-import { enableDemoMode } from "@/lib/demo-mode";
 import { resolveNextPath, routes } from "@/lib/routes";
 
 function LoginForm() {
@@ -36,12 +36,6 @@ function LoginForm() {
     } finally {
       setSubmitting(false);
     }
-  }
-
-  function enterDemoMode() {
-    enableDemoMode();
-    router.replace(next);
-    router.refresh();
   }
 
   return (
@@ -113,13 +107,6 @@ function LoginForm() {
               {submitting ? "Iniciando sesión…" : "Iniciar sesión"}
             </button>
           </form>
-          <button
-            type="button"
-            className="button-secondary auth-demo-button"
-            onClick={enterDemoMode}
-          >
-            Entrar en modo demo
-          </button>
           <p className="auth-register-prompt">
             ¿No tienes cuenta? <Link href={routes.register}>Regístrate</Link>
           </p>
@@ -131,12 +118,14 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <Suspense
-      fallback={
-        <main className="route-status">Preparando inicio de sesión…</main>
-      }
-    >
-      <LoginForm />
-    </Suspense>
+    <PublicAuthRoute>
+      <Suspense
+        fallback={
+          <main className="route-status">Preparando inicio de sesión…</main>
+        }
+      >
+        <LoginForm />
+      </Suspense>
+    </PublicAuthRoute>
   );
 }

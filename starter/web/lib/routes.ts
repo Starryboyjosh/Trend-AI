@@ -2,6 +2,7 @@ export const routes = {
   home: "/",
   login: "/login",
   register: "/register",
+  onboarding: "/onboarding",
   dashboard: "/dashboard",
   templates: "/templates",
   studioNew: "/studio/new",

@@ -21,12 +21,21 @@ describe("StepBusiness", () => {
   test("renders form fields", async () => {
     const { StepBusiness } =
       await import("@/components/onboarding/step-business");
-    const data = { name: "", category: "" as const, description: "" };
+    const data = {
+      name: "",
+      category: "" as const,
+      country: "",
+      city: "",
+      description: "",
+      primary_product: "",
+      target_audience: "",
+      website_url: "",
+    };
     const onChange = () => {};
 
     render(<StepBusiness data={data} onChange={onChange} />);
-    expect(screen.getByLabelText("Nombre del negocio *")).toBeInTheDocument();
-    expect(screen.getByLabelText("Categoría *")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Nombre comercial/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Categoría/)).toBeInTheDocument();
   });
 });
 

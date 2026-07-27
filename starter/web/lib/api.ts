@@ -4,6 +4,8 @@ import {
   readDemoProjects,
   saveDemoProjects,
 } from "@/lib/demo-mode";
+import type { Category, Objective, Platform } from "@/types/business";
+import type { Tone } from "@/types/brand";
 
 export class ApiError extends Error {
   constructor(
@@ -24,6 +26,56 @@ export interface ApiRequestOptions extends RequestInit {
   maxAttempts?: number;
   onRetry?: RequestRetryCallback;
 }
+
+export type SignupStep = "business" | "channels" | "brand" | "review";
+
+export interface SignupBusinessDraft {
+  name: string;
+  category: Category;
+  country: string;
+  city: string;
+  description?: string;
+  primary_product: string;
+  target_audience: string;
+  website_url?: string;
+}
+
+export interface SignupChannelsDraft {
+  preferred_platforms: Platform[];
+  primary_objective: Objective;
+}
+
+export interface SignupBrandDraft {
+  voice_tones: Tone[];
+  value_proposition: string;
+  preferred_words: string[];
+  forbidden_words: string[];
+  primary_color?: string;
+  secondary_color?: string;
+  content_locale: "es" | "en" | "pt";
+}
+
+export interface SignupProgress {
+  signup: {
+    status: "pending" | "completed";
+    current_step: SignupStep | "completed";
+    expires_at: string;
+    updated_at: string | null;
+    version: number;
+    draft: {
+      business?: SignupBusinessDraft;
+      channels?: SignupChannelsDraft;
+      brand?: SignupBrandDraft;
+      review?: { confirmed: boolean };
+    };
+  };
+}
+
+export type SignupDraftPayload =
+  | { step: "business"; business: SignupBusinessDraft }
+  | { step: "channels"; channels: SignupChannelsDraft }
+  | { step: "brand"; brand: SignupBrandDraft }
+  | { step: "review"; review: { confirmed: boolean } };
 
 const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 const DEFAULT_MAX_ATTEMPTS = 3;
@@ -575,6 +627,38 @@ export const api = {
         method: "POST",
         body: JSON.stringify(data),
       });
+    },
+    signup: {
+      start(data: {
+        email: string;
+        name: string;
+        password: string;
+        interface_locale: "es" | "en" | "pt";
+      }) {
+        return request<SignupProgress>(`${BASE}/auth/signup/start`, {
+          method: "POST",
+          body: JSON.stringify(data),
+        });
+      },
+      get() {
+        return request<SignupProgress>(`${BASE}/auth/signup`);
+      },
+      saveDraft(payload: SignupDraftPayload, expectedVersion: number) {
+        return request<SignupProgress>(`${BASE}/auth/signup`, {
+          method: "PATCH",
+          body: JSON.stringify({ ...payload, expected_version: expectedVersion }),
+        });
+      },
+      cancel() {
+        return request<void>(`${BASE}/auth/signup`, { method: "DELETE" });
+      },
+      complete(options: Pick<ApiRequestOptions, "idempotencyKey" | "signal" | "onRetry"> = {}) {
+        return request<Record<string, unknown>>(`${BASE}/auth/signup/complete`, {
+          method: "POST",
+          ...options,
+          idempotencyKey: options.idempotencyKey,
+        });
+      },
     },
     logout() {
       return request<void>(`${BASE}/auth/logout`, { method: "POST" });

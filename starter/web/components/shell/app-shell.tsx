@@ -7,10 +7,9 @@ import { useState, type ReactNode } from "react";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { Logo } from "@/components/brand/logo";
 import { api } from "@/lib/api";
-import { disableDemoMode, isDemoModeEnabled } from "@/lib/demo-mode";
 import { routes } from "@/lib/routes";
 
-type IconName = "studio" | "dashboard" | "templates" | "settings" | "business" | "logout" | "bell";
+type IconName = "studio" | "dashboard" | "templates" | "settings" | "logout" | "bell";
 type NavItem = { href: string; label: string; icon: IconName };
 
 const navigation: NavItem[] = [
@@ -26,7 +25,6 @@ function AppIcon({ name }: { name: IconName }) {
   if (name === "dashboard") return <svg {...common}><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>;
   if (name === "templates") return <svg {...common}><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 3v18M3 9h18"/></svg>;
   if (name === "settings") return <svg {...common}><circle cx="12" cy="12" r="3.5"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34A1.7 1.7 0 0 0 14 20.92V21h-4v-.08a1.7 1.7 0 0 0-1.03-1.52 1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.52-1.03H3v-4h.08A1.7 1.7 0 0 0 4.6 8.94a1.7 1.7 0 0 0-.34-1.88L4.2 7l2.83-2.83.06.06a1.7 1.7 0 0 0 1.88.34A1.7 1.7 0 0 0 10 3.08V3h4v.08a1.7 1.7 0 0 0 1.03 1.52 1.7 1.7 0 0 0 1.88-.34l.06-.06L19.8 7l-.06.06a1.7 1.7 0 0 0-.34 1.88A1.7 1.7 0 0 0 20.92 10H21v4h-.08A1.7 1.7 0 0 0 19.4 15Z"/></svg>;
-  if (name === "business") return <svg {...common}><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>;
   if (name === "bell") return <svg {...common}><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>;
   return <svg {...common}><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5"/></svg>;
 }
@@ -55,7 +53,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     setLoggingOut(true);
     try { await api.auth.logout(); }
     finally {
-      disableDemoMode();
       router.replace(routes.home);
       router.refresh();
     }
@@ -77,11 +74,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               );
             })}
           </nav>
-          {isDemoModeEnabled() ? <p className="demo-banner" role="status">Modo demo activo</p> : null}
           <div className="sidebar-footer">
-            <Link href="/onboarding" className="nav-link" data-label="Mi negocio" aria-current={pathname === "/onboarding" ? "page" : undefined}>
-              <span className="nav-mark"><AppIcon name="business" /></span><span className="nav-label">Mi negocio</span>
-            </Link>
             <button type="button" className="nav-link nav-link-button" data-label="Cerrar sesión" onClick={logout} disabled={loggingOut}>
               <span className="nav-mark"><AppIcon name="logout" /></span><span className="nav-label">{loggingOut ? "Saliendo…" : "Cerrar sesión"}</span>
             </button>

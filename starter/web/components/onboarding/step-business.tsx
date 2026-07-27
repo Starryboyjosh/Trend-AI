@@ -2,9 +2,20 @@
 
 import type { Category } from "@/types/business";
 
+export interface BusinessFormData {
+  name: string;
+  category: Category | "";
+  country: string;
+  city: string;
+  description: string;
+  primary_product: string;
+  target_audience: string;
+  website_url: string;
+}
+
 interface Props {
-  data: { name: string; category: Category | ""; description: string };
-  onChange: (field: string, value: string) => void;
+  data: BusinessFormData;
+  onChange: (field: keyof BusinessFormData, value: string) => void;
 }
 
 const CATEGORIES: { value: Category; label: string }[] = [
@@ -21,51 +32,112 @@ const CATEGORIES: { value: Category; label: string }[] = [
 
 export function StepBusiness({ data, onChange }: Props) {
   return (
-    <section>
-      <h2 style={{ fontFamily: "var(--font-heading)", marginTop: 0 }}>
-        Información del negocio
-      </h2>
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <div>
-          <label htmlFor="biz-name">Nombre del negocio *</label>
+    <section aria-labelledby="business-step-title">
+      <h2 id="business-step-title">Cuéntanos sobre tu negocio</h2>
+      <p className="onboarding-step-description">
+        Usaremos este contexto para que tus primeras recomendaciones sean útiles
+        desde el inicio.
+      </p>
+      <div className="onboarding-fields">
+        <label>
+          Nombre comercial <span aria-hidden="true">*</span>
           <input
-            id="biz-name"
+            name="business-name"
             type="text"
             value={data.name}
-            onChange={(e) => onChange("name", e.target.value)}
+            onChange={(event) => onChange("name", event.target.value)}
             required
             maxLength={120}
-            style={{ display: "block", width: "100%", marginTop: 4 }}
+            autoComplete="organization"
           />
-        </div>
-        <div>
-          <label htmlFor="biz-category">Categoría *</label>
+        </label>
+        <label>
+          Categoría <span aria-hidden="true">*</span>
           <select
-            id="biz-category"
+            name="business-category"
             value={data.category}
-            onChange={(e) => onChange("category", e.target.value)}
+            onChange={(event) => onChange("category", event.target.value)}
             required
-            style={{ display: "block", width: "100%", marginTop: 4 }}
           >
-            <option value="">Seleccionar...</option>
-            {CATEGORIES.map((c) => (
-              <option key={c.value} value={c.value}>
-                {c.label}
+            <option value="">Seleccionar…</option>
+            {CATEGORIES.map((category) => (
+              <option key={category.value} value={category.value}>
+                {category.label}
               </option>
             ))}
           </select>
+        </label>
+        <div className="onboarding-field-grid">
+          <label>
+            País <span aria-hidden="true">*</span>
+            <input
+              name="business-country"
+              type="text"
+              value={data.country}
+              onChange={(event) => onChange("country", event.target.value)}
+              required
+              maxLength={80}
+              autoComplete="country-name"
+            />
+          </label>
+          <label>
+            Ciudad <span aria-hidden="true">*</span>
+            <input
+              name="business-city"
+              type="text"
+              value={data.city}
+              onChange={(event) => onChange("city", event.target.value)}
+              required
+              maxLength={100}
+              autoComplete="address-level2"
+            />
+          </label>
         </div>
-        <div>
-          <label htmlFor="biz-desc">Descripción</label>
+        <label>
+          Producto o servicio principal <span aria-hidden="true">*</span>
+          <input
+            name="business-product"
+            type="text"
+            value={data.primary_product}
+            onChange={(event) => onChange("primary_product", event.target.value)}
+            required
+            maxLength={240}
+          />
+        </label>
+        <label>
+          ¿A quién ayudas? <span aria-hidden="true">*</span>
           <textarea
-            id="biz-desc"
+            name="business-audience"
+            value={data.target_audience}
+            onChange={(event) => onChange("target_audience", event.target.value)}
+            required
+            maxLength={500}
+            rows={3}
+            placeholder="Ej: Personas que buscan una pausa cercana y de calidad"
+          />
+        </label>
+        <label>
+          Descripción del negocio
+          <textarea
+            name="business-description"
             value={data.description}
-            onChange={(e) => onChange("description", e.target.value)}
+            onChange={(event) => onChange("description", event.target.value)}
             maxLength={1000}
             rows={3}
-            style={{ display: "block", width: "100%", marginTop: 4 }}
           />
-        </div>
+        </label>
+        <label>
+          Sitio web <span className="onboarding-optional">Opcional</span>
+          <input
+            name="business-website"
+            type="url"
+            value={data.website_url}
+            onChange={(event) => onChange("website_url", event.target.value)}
+            maxLength={500}
+            placeholder="https://tu-negocio.com"
+            autoComplete="url"
+          />
+        </label>
       </div>
     </section>
   );

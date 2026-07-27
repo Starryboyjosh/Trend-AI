@@ -9,6 +9,7 @@ afterEach(() => {
   global.fetch = originalFetch;
   window.localStorage.clear();
   window.sessionStorage.clear();
+  vi.unstubAllEnvs();
 });
 
 describe("cliente HTTP", () => {
@@ -111,7 +112,96 @@ describe("cliente HTTP", () => {
     );
   });
 
+  test("usa el contrato de Pending Signup y conserva expected_version", async () => {
+    const progress = {
+      signup: {
+        status: "pending",
+        current_step: "business",
+        expires_at: "2099-01-01T00:00:00Z",
+        updated_at: null,
+        version: 1,
+        draft: {},
+      },
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(progress), { status: 201 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(progress), { status: 200 }));
+    global.fetch = fetchMock;
+
+    await api.auth.signup.start({
+      email: "ana@example.com",
+      name: "Ana",
+      password: "una-clave-segura-123",
+      interface_locale: "es",
+    });
+    await api.auth.signup.saveDraft(
+      {
+        step: "business",
+        business: {
+          name: "Café Central",
+          category: "gastronomy",
+          country: "Honduras",
+          city: "Tegucigalpa",
+          primary_product: "Café artesanal",
+          target_audience: "Personas que trabajan cerca",
+        },
+      },
+      7
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/v1/auth/signup/start",
+      expect.objectContaining({ method: "POST", credentials: "include" })
+    );
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body as string)).toMatchObject({
+      step: "business",
+      expected_version: 7,
+    });
+  });
+
+  test("envía una Idempotency-Key estable al completar signup", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), { status: 200 })
+    );
+    global.fetch = fetchMock;
+
+    await api.auth.signup.complete({ idempotencyKey: "signup-completion-1" });
+
+    const headers = fetchMock.mock.calls[0][1].headers as Headers;
+    expect(headers.get("Idempotency-Key")).toBe("signup-completion-1");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/auth/signup/complete");
+  });
+
+  test("propaga conflictos de versión sin reintentar a ciegas", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "SIGNUP_CONFLICT",
+            message: "El borrador fue actualizado en otra sesión.",
+          },
+        }),
+        { status: 409 }
+      )
+    );
+    global.fetch = fetchMock;
+
+    await expect(
+      api.auth.signup.saveDraft(
+        {
+          step: "review",
+          review: { confirmed: true },
+        },
+        2
+      )
+    ).rejects.toMatchObject({ status: 409, code: "SIGNUP_CONFLICT" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   test("modo demo conserva un proyecto iniciado desde plantilla", async () => {
+    vi.stubEnv("NEXT_PUBLIC_ENABLE_DEMO", "true");
     enableDemoMode();
 
     const project = await api.projects.create({

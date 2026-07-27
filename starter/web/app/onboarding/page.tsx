@@ -1,364 +1,451 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { SignupRoute } from "@/components/auth/signup-route";
+import { Logo } from "@/components/brand/logo";
 import { ProgressBar } from "@/components/onboarding/progress-bar";
-import { StepBusiness } from "@/components/onboarding/step-business";
-import { StepAudience } from "@/components/onboarding/step-audience";
+import {
+  StepBusiness,
+  type BusinessFormData,
+} from "@/components/onboarding/step-business";
 import { StepChannels } from "@/components/onboarding/step-channels";
 import { StepBrand } from "@/components/onboarding/step-brand";
 import { StepReview } from "@/components/onboarding/step-review";
-import { ProtectedRoute } from "@/components/auth/protected-route";
-import { api, ApiError } from "@/lib/api";
+import {
+  api,
+  ApiError,
+  createIdempotencyKey,
+  type SignupBrandDraft,
+  type SignupBusinessDraft,
+  type SignupChannelsDraft,
+  type SignupProgress,
+  type SignupStep,
+} from "@/lib/api";
+import { routes } from "@/lib/routes";
 import type { Category, Objective, Platform } from "@/types/business";
 import type { Tone } from "@/types/brand";
 
 const STEPS = [
-  "Datos del negocio",
-  "Audiencia y ubicación",
-  "Canales y objetivos",
+  "Tu negocio",
+  "Canales y objetivo",
   "Identidad de marca",
-  "Revisar y guardar",
+  "Confirmación",
 ];
 
-const STORAGE_KEY = "hitrendy_onboarding_draft";
+type InterfaceLocale = "es" | "en" | "pt";
 
 interface OnboardingData {
-  name: string;
-  category: Category | "";
-  description: string;
-  country: string;
-  city: string;
-  primary_product: string;
-  target_audience: string;
-  preferred_platforms: Platform[];
-  primary_objective: Objective | "";
-  voice_tones: Tone[];
-  value_proposition: string;
-  preferred_words: string;
-  forbidden_words: string;
-  primary_color: string;
-  secondary_color: string;
+  business: BusinessFormData;
+  channels: {
+    preferred_platforms: Platform[];
+    primary_objective: Objective | "";
+  };
+  brand: {
+    voice_tones: Tone[];
+    value_proposition: string;
+    preferred_words: string;
+    forbidden_words: string;
+    primary_color: string;
+    secondary_color: string;
+    content_locale: InterfaceLocale;
+  };
+  confirmed: boolean;
 }
 
 const INITIAL: OnboardingData = {
-  name: "",
-  category: "",
-  description: "",
-  country: "",
-  city: "",
-  primary_product: "",
-  target_audience: "",
-  preferred_platforms: [],
-  primary_objective: "",
-  voice_tones: [],
-  value_proposition: "",
-  preferred_words: "",
-  forbidden_words: "",
-  primary_color: "#541787",
-  secondary_color: "#B79CFA",
+  business: {
+    name: "",
+    category: "",
+    country: "",
+    city: "",
+    description: "",
+    primary_product: "",
+    target_audience: "",
+    website_url: "",
+  },
+  channels: {
+    preferred_platforms: [],
+    primary_objective: "",
+  },
+  brand: {
+    voice_tones: [],
+    value_proposition: "",
+    preferred_words: "",
+    forbidden_words: "",
+    primary_color: "#541787",
+    secondary_color: "#B79CFA",
+    content_locale: "es",
+  },
+  confirmed: false,
 };
 
-function loadDraft(): { step: number; data: OnboardingData } | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed.step === "number" && parsed.data) {
-      return { step: parsed.step, data: { ...INITIAL, ...parsed.data } };
-    }
-  } catch {
-    // corrupted storage, ignore
-  }
-  return null;
+const STEP_INDEX: Record<SignupStep | "completed", number> = {
+  business: 0,
+  channels: 1,
+  brand: 2,
+  review: 3,
+  completed: 3,
+};
+
+function wordsToList(value: string) {
+  return value
+    .split(",")
+    .map((word) => word.trim())
+    .filter(Boolean);
 }
 
-function saveDraft(step: number, data: OnboardingData) {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ step, data }));
-  } catch {
-    // storage full or unavailable
-  }
+function listToWords(value: string[] | undefined) {
+  return value?.join(", ") || "";
 }
 
-function clearDraft() {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // ignore
-  }
+function progressToData(progress: SignupProgress, current: OnboardingData) {
+  const draft = progress.signup.draft;
+  return {
+    ...current,
+    business: {
+      ...current.business,
+      ...(draft.business || {}),
+      description: draft.business?.description || "",
+      website_url: draft.business?.website_url || "",
+    },
+    channels: {
+      ...current.channels,
+      ...(draft.channels || {}),
+    },
+    brand: {
+      ...current.brand,
+      ...(draft.brand || {}),
+      preferred_words: listToWords(draft.brand?.preferred_words),
+      forbidden_words: listToWords(draft.brand?.forbidden_words),
+      content_locale: draft.brand?.content_locale || current.brand.content_locale,
+    },
+    confirmed: draft.review?.confirmed || false,
+  };
+}
+
+function isMissingSignup(error: unknown) {
+  return error instanceof ApiError && [404, 410].includes(error.status);
 }
 
 export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [data, setData] = useState<OnboardingData>(INITIAL);
+  const [version, setVersion] = useState(1);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const completionKey = useRef<string | null>(null);
+  const operationInFlight = useRef(false);
 
-  useEffect(() => {
-    const draft = loadDraft();
-    if (draft) {
-      setStep(draft.step);
-      setData(draft.data);
-    }
-    setHydrated(true);
+  const applyProgress = useCallback((progress: SignupProgress) => {
+    setData((current) => progressToData(progress, current));
+    setVersion(progress.signup.version);
+    setStep(STEP_INDEX[progress.signup.current_step]);
   }, []);
 
   useEffect(() => {
-    if (hydrated) saveDraft(step, data);
-  }, [step, data, hydrated]);
+    let active = true;
+
+    void api.auth.signup
+      .get()
+      .then((progress) => {
+        if (!active) return;
+        applyProgress(progress);
+        setLoaded(true);
+      })
+      .catch((reason) => {
+        if (!active) return;
+        if (isMissingSignup(reason)) {
+          router.replace(routes.register);
+          return;
+        }
+        setError(
+          reason instanceof ApiError
+            ? reason.message
+            : "No pudimos recuperar tu registro."
+        );
+        setLoaded(true);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [applyProgress, router]);
+
+  const updateBusiness = useCallback(
+    (field: keyof BusinessFormData, value: string) => {
+      completionKey.current = null;
+      setData((current) => ({
+        ...current,
+        business: { ...current.business, [field]: value },
+      }));
+    },
+    []
+  );
 
   const update = useCallback((field: string, value: unknown) => {
-    setData((prev) => ({ ...prev, [field]: value }));
+    completionKey.current = null;
+    setData((current) => ({
+      ...current,
+      ...(field in current.channels
+        ? { channels: { ...current.channels, [field]: value } }
+        : field in current.brand
+          ? { brand: { ...current.brand, [field]: value } }
+          : {}),
+    }));
   }, []);
 
-  function canProceed(): boolean {
-    switch (step) {
-      case 0:
-        return !!data.name && !!data.category;
-      case 1:
-        return (
-          !!data.country &&
-          !!data.city &&
-          !!data.primary_product &&
-          !!data.target_audience
+  function canProceed() {
+    if (step === 0) {
+      return Boolean(
+        data.business.name.trim() &&
+          data.business.category &&
+          data.business.country.trim() &&
+          data.business.city.trim() &&
+          data.business.primary_product.trim() &&
+          data.business.target_audience.trim()
+      );
+    }
+    if (step === 1) {
+      return (
+        data.channels.preferred_platforms.length > 0 &&
+        Boolean(data.channels.primary_objective)
+      );
+    }
+    if (step === 2) {
+      return (
+        data.brand.voice_tones.length > 0 &&
+        Boolean(data.brand.value_proposition.trim())
+      );
+    }
+    return data.confirmed;
+  }
+
+  function businessPayload(): SignupBusinessDraft {
+    const { description, website_url, category, ...required } = data.business;
+    return {
+      ...required,
+      category: category as Category,
+      ...(description.trim() ? { description: description.trim() } : {}),
+      ...(website_url.trim() ? { website_url: website_url.trim() } : {}),
+    };
+  }
+
+  function channelsPayload(): SignupChannelsDraft {
+    return {
+      preferred_platforms: data.channels.preferred_platforms,
+      primary_objective: data.channels.primary_objective as Objective,
+    };
+  }
+
+  function brandPayload(): SignupBrandDraft {
+    return {
+      voice_tones: data.brand.voice_tones,
+      value_proposition: data.brand.value_proposition.trim(),
+      preferred_words: wordsToList(data.brand.preferred_words),
+      forbidden_words: wordsToList(data.brand.forbidden_words),
+      ...(data.brand.primary_color ? { primary_color: data.brand.primary_color } : {}),
+      ...(data.brand.secondary_color
+        ? { secondary_color: data.brand.secondary_color }
+        : {}),
+      content_locale: data.brand.content_locale,
+    };
+  }
+
+  async function refreshFromServer() {
+    const progress = await api.auth.signup.get();
+    applyProgress(progress);
+  }
+
+  async function saveCurrentStep(nextStep: SignupStep) {
+    const payload =
+      nextStep === "business"
+        ? { step: nextStep, business: businessPayload() }
+        : nextStep === "channels"
+          ? { step: nextStep, channels: channelsPayload() }
+          : nextStep === "brand"
+            ? { step: nextStep, brand: brandPayload() }
+            : { step: nextStep, review: { confirmed: data.confirmed } };
+    const progress = await api.auth.signup.saveDraft(payload, version);
+    applyProgress(progress);
+    return progress;
+  }
+
+  async function advance() {
+    if (operationInFlight.current || saving || submitting || !canProceed()) return;
+    operationInFlight.current = true;
+    setSaving(true);
+    setError("");
+    try {
+      await saveCurrentStep(step === 0 ? "business" : step === 1 ? "channels" : "brand");
+    } catch (reason) {
+      if (reason instanceof ApiError && reason.code === "SIGNUP_CONFLICT") {
+        try {
+          await refreshFromServer();
+          setError("Tu registro cambió en otra pestaña. Cargamos la versión más reciente.");
+        } catch {
+          setError("Tu registro cambió. Actualiza la página para continuar.");
+        }
+      } else if (isMissingSignup(reason)) {
+        router.replace(routes.register);
+      } else {
+        setError(
+          reason instanceof ApiError
+            ? reason.message
+            : "No pudimos guardar este paso. Intenta de nuevo."
         );
-      case 2:
-        return data.preferred_platforms.length > 0 && !!data.primary_objective;
-      case 3:
-        return data.voice_tones.length > 0 && !!data.value_proposition;
-      default:
-        return true;
+      }
+    } finally {
+      setSaving(false);
+      operationInFlight.current = false;
     }
   }
 
-  function next() {
-    if (step < STEPS.length - 1) setStep((s) => s + 1);
+  async function finish() {
+    if (operationInFlight.current || submitting || saving || !canProceed()) return;
+    operationInFlight.current = true;
+    setSubmitting(true);
+    setRetrying(false);
+    setError("");
+    try {
+      await saveCurrentStep("review");
+      if (!completionKey.current) completionKey.current = createIdempotencyKey();
+      await api.auth.signup.complete({
+        idempotencyKey: completionKey.current,
+        onRetry: () => setRetrying(true),
+      });
+      await api.auth.me();
+      router.replace(routes.dashboard);
+      router.refresh();
+    } catch (reason) {
+      if (isMissingSignup(reason)) {
+        router.replace(routes.register);
+      } else if (reason instanceof ApiError && reason.code === "SIGNUP_CONFLICT") {
+        setError("El registro cambió o ya fue completado. Actualiza para continuar.");
+      } else {
+        setError(
+          reason instanceof ApiError
+            ? reason.message
+            : "No pudimos finalizar tu cuenta. Intenta de nuevo."
+        );
+      }
+    } finally {
+      setRetrying(false);
+      setSubmitting(false);
+      operationInFlight.current = false;
+    }
+  }
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (step < 3) {
+      await advance();
+    } else {
+      await finish();
+    }
   }
 
   function back() {
-    if (step > 0) setStep((s) => s - 1);
+    if (!saving && !submitting && step > 0) setStep((current) => current - 1);
   }
 
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (
-      e.key === "Enter" &&
-      !e.shiftKey &&
-      canProceed() &&
-      step < STEPS.length - 1
-    ) {
-      e.preventDefault();
-      next();
-    }
-    if (e.key === "Escape" && step > 0) {
-      e.preventDefault();
-      back();
-    }
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (submitting) return;
-    setSubmitting(true);
-    setError("");
-
+  async function cancel() {
+    if (operationInFlight.current || saving || submitting) return;
+    operationInFlight.current = true;
+    setSaving(true);
     try {
-      const business = await api.businesses.create({
-        name: data.name,
-        category: data.category,
-        country: data.country,
-        city: data.city,
-        description: data.description || undefined,
-        primary_product: data.primary_product,
-        target_audience: data.target_audience,
-        preferred_platforms: data.preferred_platforms,
-        primary_objective: data.primary_objective,
-      });
-
-      const preferred = data.preferred_words
-        .split(",")
-        .map((w) => w.trim())
-        .filter(Boolean);
-      const forbidden = data.forbidden_words
-        .split(",")
-        .map((w) => w.trim())
-        .filter(Boolean);
-
-      await api.businesses.brandProfile.upsert(business.id as string, {
-        voice_tones: data.voice_tones,
-        value_proposition: data.value_proposition,
-        preferred_words: preferred,
-        forbidden_words: forbidden,
-        primary_color: data.primary_color,
-        secondary_color: data.secondary_color,
-      });
-
-      clearDraft();
-      router.push("/dashboard");
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError("Ocurrió un error al guardar. Intenta de nuevo.");
-      }
+      await api.auth.signup.cancel();
+      router.replace(routes.register);
+    } catch (reason) {
+      setError(
+        reason instanceof ApiError
+          ? reason.message
+          : "No pudimos cancelar este registro."
+      );
     } finally {
-      setSubmitting(false);
+      setSaving(false);
+      operationInFlight.current = false;
     }
   }
 
-  if (!hydrated) return null;
+  if (!loaded) {
+    return <main className="route-status">Recuperando tu registro…</main>;
+  }
 
   return (
-    <ProtectedRoute>
-      <main
-        className="onboarding-page"
-        style={{
-          maxWidth: 640,
-          margin: "0 auto",
-          padding: "48px 24px",
-          minHeight: "100vh",
-        }}
-        onKeyDown={handleKeyDown}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            marginBottom: 32,
-          }}
-        >
-          <div
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: "var(--radius-sm)",
-              background: "var(--primary)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontWeight: "bold",
-              color: "var(--primary-foreground)",
-            }}
-          >
-            H
+    <SignupRoute>
+      <main className="onboarding-page">
+        <header className="onboarding-header">
+          <Logo />
+          <div>
+            <p className="eyebrow">PRIMEROS PASOS</p>
+            <h1>Configura tu negocio</h1>
           </div>
-          <span
-            style={{
-              fontFamily: "var(--font-heading)",
-              fontWeight: 700,
-              fontSize: "1.2rem",
-            }}
-          >
-            Configura tu negocio
-          </span>
-          <span
-            style={{
-              marginLeft: "auto",
-              fontSize: "0.75rem",
-              color: "var(--muted-foreground)",
-            }}
-          >
-            {hydrated && "Guardado automáticamente"}
-          </span>
-        </div>
+          <button type="button" className="onboarding-cancel" onClick={() => void cancel()} disabled={saving || submitting}>
+            Salir
+          </button>
+        </header>
 
-        <ProgressBar steps={STEPS} current={step} />
-
-        {error && (
-          <div
-            role="alert"
-            style={{
-              padding: "12px 16px",
-              background: "#fef2f2",
-              color: "#b91c1c",
-              borderRadius: "var(--radius-md)",
-              marginBottom: 16,
-              border: "1px solid #fecaca",
-            }}
-          >
-            {error}
+        <section className="onboarding-card" aria-label="Configuración inicial">
+          <ProgressBar steps={STEPS} current={step} />
+          <div className="onboarding-status" aria-live="polite">
+            {retrying
+              ? "Hubo un problema temporal. Reintentando…"
+              : saving
+                ? "Guardando este paso…"
+                : submitting
+                  ? "Creando tu cuenta…"
+                  : "Tus datos se guardan en tu cuenta."}
           </div>
-        )}
+          {error ? (
+            <div className="onboarding-error" role="alert">
+              {error}
+            </div>
+          ) : null}
 
-        <form onSubmit={handleSubmit}>
-          {step === 0 && <StepBusiness data={data} onChange={update} />}
-          {step === 1 && <StepAudience data={data} onChange={update} />}
-          {step === 2 && <StepChannels data={data} onChange={update} />}
-          {step === 3 && <StepBrand data={data} onChange={update} />}
-          {step === 4 && (
-            <StepReview
-              business={data as unknown as Record<string, unknown>}
-              brand={data as unknown as Record<string, unknown>}
-              submitting={submitting}
-            />
-          )}
-
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              marginTop: 32,
-            }}
-          >
-            <button
-              type="button"
-              onClick={back}
-              disabled={step === 0}
-              style={{
-                padding: "10px 20px",
-                border: "1px solid var(--border)",
-                borderRadius: "var(--radius-sm)",
-                background: "var(--surface)",
-                cursor: step === 0 ? "not-allowed" : "pointer",
-                opacity: step === 0 ? 0.5 : 1,
-              }}
-            >
-              Anterior
-            </button>
-
-            {step < STEPS.length - 1 ? (
-              <button
-                type="button"
-                onClick={next}
-                disabled={!canProceed()}
-                style={{
-                  padding: "10px 24px",
-                  border: 0,
-                  borderRadius: "var(--radius-sm)",
-                  background: canProceed()
-                    ? "var(--gradient-primary)"
-                    : "var(--border)",
-                  color: canProceed()
-                    ? "var(--primary-foreground)"
-                    : "var(--muted-foreground)",
-                  cursor: canProceed() ? "pointer" : "not-allowed",
-                  fontWeight: 600,
-                }}
-              >
-                Siguiente{" "}
-                <kbd style={{ marginLeft: 8, opacity: 0.7 }}>Enter</kbd>
-              </button>
+          <form onSubmit={(event) => void submit(event)}>
+            {step === 0 ? (
+              <StepBusiness data={data.business} onChange={updateBusiness} />
             ) : null}
-          </div>
+            {step === 1 ? (
+              <StepChannels data={data.channels} onChange={update} />
+            ) : null}
+            {step === 2 ? (
+              <StepBrand data={data.brand} onChange={update} showContentLocale />
+            ) : null}
+            {step === 3 ? (
+              <StepReview
+                business={data.business}
+                channels={data.channels}
+                brand={data.brand}
+                confirmed={data.confirmed}
+                onConfirm={(confirmed) => setData((current) => ({ ...current, confirmed }))}
+                submitting={submitting || saving}
+              />
+            ) : null}
 
-          <p
-            style={{
-              fontSize: "0.75rem",
-              color: "var(--muted-foreground)",
-              marginTop: 16,
-            }}
-          >
-            Usa <kbd>Enter</kbd> para avanzar · <kbd>Esc</kbd> para retroceder
+            <div className="onboarding-actions">
+              <button type="button" className="button-secondary" onClick={back} disabled={step === 0 || saving || submitting}>
+                Anterior
+              </button>
+              {step < 3 ? (
+                <button type="submit" className="button-primary" disabled={!canProceed() || saving || submitting}>
+                  {saving ? "Guardando…" : "Siguiente"}
+                </button>
+              ) : null}
+            </div>
+          </form>
+          <p className="onboarding-keyboard-help">
+            Puedes usar <kbd>Enter</kbd> para avanzar y <kbd>Tab</kbd> para recorrer los campos.
           </p>
-        </form>
+          <p className="onboarding-version">Versión guardada: {version}</p>
+        </section>
       </main>
-    </ProtectedRoute>
+    </SignupRoute>
   );
 }

@@ -1,17 +1,16 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 import { api, ApiError } from "@/lib/api";
-import { loginPath, routes } from "@/lib/routes";
+import { routes } from "@/lib/routes";
 
-export function ProtectedRoute({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
+type RouteState = "checking" | "ready" | "error";
+
+export function SignupRoute({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const [state, setState] = useState<"checking" | "ready" | "error">(
-    "checking"
-  );
+  const [state, setState] = useState<RouteState>("checking");
 
   useEffect(() => {
     let active = true;
@@ -19,7 +18,7 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
     async function check() {
       try {
         await api.auth.me();
-        if (active) setState("ready");
+        if (active) router.replace(routes.dashboard);
         return;
       } catch (error) {
         if (!(error instanceof ApiError && error.status === 401)) {
@@ -30,11 +29,11 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
 
       try {
         await api.auth.signup.get();
-        if (active) router.replace(routes.onboarding);
+        if (active) setState("ready");
       } catch (error) {
         if (!active) return;
         if (error instanceof ApiError && [404, 410].includes(error.status)) {
-          router.replace(loginPath(pathname));
+          router.replace(routes.register);
         } else {
           setState("error");
         }
@@ -42,21 +41,20 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
     }
 
     void check();
-
     return () => {
       active = false;
     };
-  }, [pathname, router]);
+  }, [router]);
 
   if (state === "checking") {
-    return <main className="route-status">Comprobando tu sesión…</main>;
+    return <main className="route-status">Recuperando tu registro…</main>;
   }
 
   if (state === "error") {
     return (
       <main className="route-status" role="alert">
-        No pudimos comprobar tu sesión. Actualiza la página para intentarlo de
-        nuevo.
+        No pudimos recuperar tu registro. Actualiza la página para intentarlo
+        de nuevo.
       </main>
     );
   }

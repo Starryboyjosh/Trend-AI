@@ -125,7 +125,20 @@ async function mockPrivateApi(page: Page, projects: unknown[] = []) {
 test("el Home público conserva el prompt antes de ir al login", async ({
   page,
 }) => {
-  await mockPrivateApi(page);
+  await page.route("**/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { code: "UNAUTHENTICATED", message: "Sesión requerida" } }),
+    });
+  });
+  await page.route("**/api/v1/auth/signup**", async (route) => {
+    await route.fulfill({
+      status: 404,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { code: "SIGNUP_NOT_FOUND", message: "No hay registro pendiente." } }),
+    });
+  });
   await page.goto("/");
   await expect(
     page.getByRole("heading", { name: /Comienza a crear/ })
@@ -240,6 +253,29 @@ test("Studio reúne el estado vacío y la creación de conversaciones", async ({
 
 test("Login conserva un destino interno seguro", async ({ page }) => {
   await mockPrivateApi(page);
+  let authenticated = false;
+  await page.route("**/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      status: authenticated ? 200 : 401,
+      contentType: "application/json",
+      body: JSON.stringify(
+        authenticated
+          ? { user: { id: "user-1", name: "Ana", email: "ana@example.com" }, workspaces: [] }
+          : { error: { code: "UNAUTHENTICATED", message: "Sesión requerida" } }
+      ),
+    });
+  });
+  await page.route("**/api/v1/auth/signup", async (route) => {
+    await route.fulfill({
+      status: 404,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { code: "SIGNUP_NOT_FOUND", message: "No hay registro pendiente." } }),
+    });
+  });
+  await page.route("**/api/v1/auth/login", async (route) => {
+    authenticated = true;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+  });
   await page.goto("/login?next=/templates");
   await page.getByLabel("Correo electrónico").fill("ana@example.com");
   await page.getByLabel("Contraseña").fill("demostracion");
@@ -247,10 +283,24 @@ test("Login conserva un destino interno seguro", async ({ page }) => {
   await expect(page).toHaveURL(/\/templates$/);
 });
 
-test("Login permite entrar en modo demo sin credenciales", async ({ page }) => {
-  await page.goto("/login?next=/dashboard");
-  await page.getByRole("button", { name: "Entrar en modo demo" }).click();
-  await expect(page).toHaveURL(/\/dashboard$/);
+test("Login no expone una entrada demo pública", async ({ page }) => {
+  await page.route("**/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { code: "UNAUTHENTICATED", message: "Sesión requerida" } }),
+    });
+  });
+  await page.route("**/api/v1/auth/signup", async (route) => {
+    await route.fulfill({
+      status: 404,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { code: "SIGNUP_NOT_FOUND", message: "No hay registro pendiente." } }),
+    });
+  });
+  await page.goto("/login");
+  await expect(page.getByRole("heading", { name: "Bienvenido de vuelta" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /modo demo/i })).toHaveCount(0);
 });
 
 test("logout invalida la sesión y bloquea de nuevo las rutas privadas", async ({
@@ -281,6 +331,14 @@ test("logout invalida la sesión y bloquea de nuevo las rutas privadas", async (
       });
       return;
     }
+    if (path.includes("/auth/signup")) {
+      await route.fulfill({
+        status: 404,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { code: "SIGNUP_NOT_FOUND", message: "No hay registro pendiente." } }),
+      });
+      return;
+    }
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -308,12 +366,38 @@ test("una ruta protegida conserva el destino al pedir inicio de sesión", async 
       }),
     });
   });
+  await page.route("**/api/v1/auth/signup**", async (route) => {
+    await route.fulfill({
+      status: 404,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { code: "SIGNUP_NOT_FOUND" } }),
+    });
+  });
   await page.goto("/templates");
   await expect(page).toHaveURL(/\/login\?next=%2Ftemplates$/);
 });
 
 test("Login rechaza un destino externo", async ({ page }) => {
   await mockPrivateApi(page);
+  let authenticated = false;
+  await page.route("**/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      status: authenticated ? 200 : 401,
+      contentType: "application/json",
+      body: JSON.stringify(
+        authenticated
+          ? { user: { id: "user-1", name: "Ana", email: "ana@example.com" }, workspaces: [] }
+          : { error: { code: "UNAUTHENTICATED", message: "Sesión requerida" } }
+      ),
+    });
+  });
+  await page.route("**/api/v1/auth/signup", async (route) => {
+    await route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: { code: "SIGNUP_NOT_FOUND" } }) });
+  });
+  await page.route("**/api/v1/auth/login", async (route) => {
+    authenticated = true;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+  });
   await page.goto("/login?next=https://example.com");
   await page.getByLabel("Correo electrónico").fill("ana@example.com");
   await page.getByLabel("Contraseña").fill("demostracion");

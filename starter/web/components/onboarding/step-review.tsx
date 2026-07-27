@@ -1,114 +1,100 @@
 "use client";
 
+import type { BusinessFormData } from "@/components/onboarding/step-business";
+import type { Objective, Platform } from "@/types/business";
+import type { Tone } from "@/types/brand";
+
 interface Props {
-  business: Record<string, unknown>;
-  brand: Record<string, unknown>;
+  business: BusinessFormData;
+  channels: {
+    preferred_platforms: Platform[];
+    primary_objective: Objective | "";
+  };
+  brand: {
+    voice_tones: Tone[];
+    value_proposition: string;
+    preferred_words: string;
+    forbidden_words: string;
+    primary_color: string;
+    secondary_color: string;
+    content_locale: "es" | "en" | "pt";
+  };
+  confirmed: boolean;
+  onConfirm: (confirmed: boolean) => void;
   submitting: boolean;
 }
 
-export function StepReview({ business, brand, submitting }: Props) {
+export function StepReview({
+  business,
+  channels,
+  brand,
+  confirmed,
+  onConfirm,
+  submitting,
+}: Props) {
   return (
-    <section>
-      <h2 style={{ fontFamily: "var(--font-heading)", marginTop: 0 }}>
-        Revisa tu información
-      </h2>
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <Card label="Negocio">
-          <Row label="Nombre" value={business.name as string} />
-          <Row label="Categoría" value={business.category as string} />
-          <Row label="País" value={business.country as string} />
-          <Row label="Ciudad" value={business.city as string} />
-          <Row
-            label="Producto principal"
-            value={business.primary_product as string}
+    <section aria-labelledby="review-step-title">
+      <h2 id="review-step-title">Revisa tu información</h2>
+      <p className="onboarding-step-description">
+        Esto es lo que entendimos de tu negocio. Podrás editarlo después desde
+        Configuración.
+      </p>
+      <div className="onboarding-review-grid">
+        <ReviewCard title="Negocio">
+          <ReviewRow label="Nombre" value={business.name} />
+          <ReviewRow label="Categoría" value={business.category} />
+          <ReviewRow
+            label="Ubicación"
+            value={[business.city, business.country].filter(Boolean).join(", ")}
           />
-          <Row
-            label="Audiencia objetivo"
-            value={business.target_audience as string}
+          <ReviewRow label="Producto o servicio" value={business.primary_product} />
+          <ReviewRow label="Audiencia" value={business.target_audience} />
+          <ReviewRow label="Sitio web" value={business.website_url || "—"} />
+        </ReviewCard>
+        <ReviewCard title="Canales y objetivo">
+          <ReviewRow
+            label="Canales"
+            value={channels.preferred_platforms.join(", ")}
           />
-          <Row
-            label="Plataformas"
-            value={(business.preferred_platforms as string[])?.join(", ")}
-          />
-          <Row label="Objetivo" value={business.primary_objective as string} />
-        </Card>
-        <Card label="Marca">
-          <Row
-            label="Tonos de voz"
-            value={(brand.voice_tones as string[])?.join(", ")}
-          />
-          <Row
-            label="Propuesta de valor"
-            value={brand.value_proposition as string}
-          />
-          <Row
-            label="Palabras preferidas"
-            value={(brand.preferred_words as string) || "—"}
-          />
-          <Row
-            label="Palabras prohibidas"
-            value={(brand.forbidden_words as string) || "—"}
-          />
-        </Card>
-        <button
-          type="submit"
-          disabled={submitting}
-          style={{
-            padding: "14px 24px",
-            background: "var(--gradient-primary)",
-            color: "var(--primary-foreground)",
-            border: 0,
-            borderRadius: "var(--radius-md)",
-            fontWeight: 600,
-            fontSize: "1rem",
-            cursor: submitting ? "not-allowed" : "pointer",
-            opacity: submitting ? 0.6 : 1,
-          }}
-        >
-          {submitting ? "Guardando..." : "Guardar y continuar"}
-        </button>
+          <ReviewRow label="Objetivo" value={channels.primary_objective} />
+        </ReviewCard>
+        <ReviewCard title="Marca">
+          <ReviewRow label="Tonos" value={brand.voice_tones.join(", ")} />
+          <ReviewRow label="Propuesta" value={brand.value_proposition} />
+          <ReviewRow label="Idioma del contenido" value={brand.content_locale} />
+          <ReviewRow label="Palabras preferidas" value={brand.preferred_words || "—"} />
+          <ReviewRow label="Palabras prohibidas" value={brand.forbidden_words || "—"} />
+        </ReviewCard>
       </div>
+      <label className="onboarding-confirmation">
+        <input
+          type="checkbox"
+          checked={confirmed}
+          onChange={(event) => onConfirm(event.target.checked)}
+        />
+        Confirmo que la información es correcta.
+      </label>
+      <button type="submit" disabled={submitting || !confirmed}>
+        {submitting ? "Finalizando…" : "Finalizar y entrar a HiTrendy"}
+      </button>
     </section>
   );
 }
 
-function Card({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+function ReviewCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div
-      style={{
-        background: "var(--surface)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius-md)",
-        padding: 16,
-      }}
-    >
-      <h3 style={{ margin: "0 0 12px", fontFamily: "var(--font-heading)" }}>
-        {label}
-      </h3>
+    <article className="onboarding-review-card">
+      <h3>{title}</h3>
       {children}
-    </div>
+    </article>
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function ReviewRow({ label, value }: { label: string; value: string }) {
   return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        padding: "6px 0",
-        borderBottom: "1px solid var(--border)",
-        fontSize: "0.9rem",
-      }}
-    >
+    <div className="onboarding-review-row">
       <strong>{label}</strong>
-      <span style={{ color: "var(--muted-foreground)" }}>{value}</span>
+      <span>{value || "—"}</span>
     </div>
   );
 }
