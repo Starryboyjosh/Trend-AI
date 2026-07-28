@@ -39,14 +39,16 @@ async def test_seed_templates_is_idempotent(seeded_client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_list_templates_filter_by_platform(seeded_client: AsyncClient) -> None:
     resp = await seeded_client.get(
-        "/api/v1/templates?platform=tiktok",
+        "/api/v1/templates?platform=instagram",
         headers={"X-Workspace-Id": WORKSPACE_ID},
     )
     assert resp.status_code == 200
     data = resp.json()
     assert len(data) >= 1
     for t in data:
-        assert "tiktok" in t["platforms"]
+        assert t["platforms"] == ["instagram"]
+        assert t["aspect_ratio"] == "4:5"
+        assert t["canva_url"].startswith("https://canva.link/")
 
 
 @pytest.mark.asyncio
@@ -65,27 +67,28 @@ async def test_list_templates_filter_by_category(seeded_client: AsyncClient) -> 
 @pytest.mark.asyncio
 async def test_list_templates_search(seeded_client: AsyncClient) -> None:
     resp = await seeded_client.get(
-        "/api/v1/templates?search=reel",
+        "/api/v1/templates?search=producto",
         headers={"X-Workspace-Id": WORKSPACE_ID},
     )
     assert resp.status_code == 200
     data = resp.json()
     assert len(data) >= 1
-    assert any("Reel" in t["title"] for t in data)
+    assert any("Producto" in t["title"] for t in data)
 
 
 @pytest.mark.asyncio
 async def test_get_template(seeded_client: AsyncClient) -> None:
     resp = await seeded_client.get(
-        "/api/v1/templates/tpl_reel_01",
+        "/api/v1/templates/tpl_instagram_01",
         headers={"X-Workspace-Id": WORKSPACE_ID},
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert data["id"] == "tpl_reel_01"
-    assert data["title"] == "Reel promocional"
-    assert "instagram" in data["platforms"]
-    assert "reel" in data["formats"]
+    assert data["id"] == "tpl_instagram_01"
+    assert data["title"] == "Producto destacado"
+    assert data["platforms"] == ["instagram"]
+    assert data["formats"] == ["static_post"]
+    assert data["aspect_ratio"] == "4:5"
 
 
 @pytest.mark.asyncio
@@ -130,16 +133,16 @@ async def test_create_project_from_template(seeded_client: AsyncClient) -> None:
     business_id = business_response.json()["id"]
     resp = await seeded_client.post(
         "/api/v1/projects",
-        json={"template_id": "tpl_reel_01", "business_id": business_id},
+        json={"template_id": "tpl_instagram_01", "business_id": business_id},
         headers={"X-Workspace-Id": WORKSPACE_ID},
     )
     assert resp.status_code == 201
     data = resp.json()
-    assert data["name"] == "Reel promocional"
+    assert data["name"] == "Producto destacado"
     assert data["platform"] == "instagram"
     assert data["status"] == "active"
     assert data["artifact_snapshot"] is not None
-    assert data["source_template_id"] == "tpl_reel_01"
+    assert data["source_template_id"] == "tpl_instagram_01"
     assert data["artifact_id"] is not None
 
     reopened = await seeded_client.get(
@@ -147,7 +150,7 @@ async def test_create_project_from_template(seeded_client: AsyncClient) -> None:
     )
     assert reopened.status_code == 200
     snapshot = reopened.json()["artifact_snapshot"]
-    assert snapshot["hook"] == "Reel promocional"
+    assert snapshot["hook"] == "Producto destacado"
 
     edited = await seeded_client.put(
         f"/api/v1/projects/{data['id']}/artifact-version",

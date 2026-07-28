@@ -2817,3 +2817,27 @@ img { display: block; max-width: 100%; }
   .dashboard-hero { min-height: auto; }
   .template-count { align-self: flex-start; }
 }
+
+/* WAVE-008C: compact, responsive controls layered on the existing Studio shell. */
+.instagram-flow { width: min(100% - 2rem, 70rem); margin: 0 auto; padding: 2rem 0 4rem; display: grid; gap: 1.25rem; }
+.instagram-flow > header, .flow-context, .flow-controls, .flow-result, .instagram-flow > section { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); padding: 1.25rem; }
+.instagram-flow > header { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }
+.instagram-flow h1, .instagram-flow h2, .instagram-flow p { margin-top: 0; }
+.instagram-flow label { display: grid; gap: .45rem; font-weight: 600; }
+.instagram-flow input, .instagram-flow textarea, .instagram-flow select { width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--background); color: var(--foreground); padding: .7rem; font: inherit; }
+.instagram-flow textarea { min-height: 5.5rem; resize: vertical; }
+.instagram-template-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .75rem; }
+.instagram-template-grid article { display: grid; gap: .4rem; }
+.instagram-template-grid article > button:first-child { display: grid; width: 100%; gap: .4rem; padding: .45rem; border: 2px solid var(--border); border-radius: var(--radius-md); background: var(--background); color: inherit; text-align: left; cursor: pointer; }
+.instagram-template-grid article[data-selected="true"] > button:first-child { border-color: var(--primary); outline: 2px solid color-mix(in srgb, var(--primary) 22%, transparent); }
+.instagram-template-grid img { width: 100%; height: auto; aspect-ratio: 4 / 5; object-fit: cover; border-radius: .4rem; }
+.button-link { justify-self: start; border: 0; background: none; color: var(--primary); text-decoration: underline; cursor: pointer; font: inherit; padding: .15rem; }
+.flow-context { background: var(--surface-elevated) !important; }
+.flow-controls { display: grid; grid-template-columns: minmax(0, 2fr) repeat(2, minmax(9rem, 1fr)); align-items: end; gap: 1rem; }
+.flow-controls .button-primary { min-height: 2.8rem; }
+.flow-result { display: grid; gap: 1rem; }
+.flow-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
+.flow-actions button { min-height: 2.65rem; }
+.flow-notice { padding: .75rem 1rem; border-radius: var(--radius-sm); background: var(--surface-elevated); color: var(--foreground); }
+@media (max-width: 900px) { .instagram-template-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .flow-controls { grid-template-columns: 1fr 1fr; } .flow-controls > label:first-child { grid-column: 1 / -1; } }
+@media (max-width: 600px) { .instagram-flow { width: min(100% - 1rem, 70rem); padding-top: 1rem; } .instagram-flow > header { display: grid; } .instagram-template-grid, .flow-controls { grid-template-columns: 1fr; } .flow-controls > label:first-child { grid-column: auto; } .flow-actions { display: grid; } .flow-actions button { width: 100%; } }

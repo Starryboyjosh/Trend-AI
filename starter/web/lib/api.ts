@@ -697,11 +697,15 @@ export const api = {
   },
 
   conversations: {
-    create(data: Record<string, unknown>) {
+    create(
+      data: Record<string, unknown>,
+      options: Pick<ApiRequestOptions, "idempotencyKey"> = {}
+    ) {
       return request<Record<string, unknown>>(
         `${BASE}/conversations`,
         {
           method: "POST",
+          idempotencyKey: options.idempotencyKey,
           body: JSON.stringify(data),
         }
       );
@@ -750,7 +754,13 @@ export const api = {
       options: Pick<
         ApiRequestOptions,
         "idempotencyKey" | "signal" | "onRetry" | "maxAttempts"
-      > = {}
+      > = {},
+      generation?: {
+        platform?: string;
+        objective?: string;
+        qualityLevel?: "fast" | "balanced" | "quality";
+        locale?: "es" | "en" | "pt";
+      }
     ) {
       return request<Record<string, unknown>>(
         `${BASE}/conversations/${conversationId}/messages`,
@@ -765,6 +775,10 @@ export const api = {
             ...(attachmentIds.length
               ? { attachment_ids: attachmentIds }
               : {}),
+            ...(generation?.platform ? { platform: generation.platform } : {}),
+            ...(generation?.objective ? { objective: generation.objective } : {}),
+            ...(generation?.qualityLevel ? { quality_level: generation.qualityLevel } : {}),
+            ...(generation?.locale ? { locale: generation.locale } : {}),
           }),
         }
       );
@@ -824,11 +838,15 @@ export const api = {
   },
 
   projects: {
-    create(data: Record<string, unknown>) {
+    create(
+      data: Record<string, unknown>,
+      options: Pick<ApiRequestOptions, "idempotencyKey"> = {}
+    ) {
       return request<Record<string, unknown>>(
         `${BASE}/projects`,
         {
           method: "POST",
+          idempotencyKey: options.idempotencyKey,
           body: JSON.stringify(data),
         }
       );
@@ -863,11 +881,12 @@ export const api = {
       );
     },
 
-    duplicate(id: string) {
+    duplicate(id: string, options: Pick<ApiRequestOptions, "idempotencyKey"> = {}) {
       return request<Record<string, unknown>>(
         `${BASE}/projects/${id}/duplicate`,
         {
           method: "POST",
+          idempotencyKey: options.idempotencyKey || createIdempotencyKey(),
         }
       );
     },
@@ -906,6 +925,24 @@ export const api = {
           method: "PUT",
           body: JSON.stringify(data),
         }
+      );
+    },
+    startCreationFlow(
+      businessId: string,
+      options: Pick<ApiRequestOptions, "idempotencyKey"> = {}
+    ) {
+      return request<{ id: string; flow_started_at: string }>(
+        `${BASE}/projects/flow-events`,
+        { method: "POST", idempotencyKey: options.idempotencyKey, body: JSON.stringify({ business_id: businessId }) }
+      );
+    },
+    completeCreationFlow(
+      eventId: string,
+      status: "generation_completed" | "completed" | "failed"
+    ) {
+      return request<Record<string, unknown>>(
+        `${BASE}/projects/flow-events/${eventId}`,
+        { method: "PATCH", body: JSON.stringify({ status }) }
       );
     },
   },

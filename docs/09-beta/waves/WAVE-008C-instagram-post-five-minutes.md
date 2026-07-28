@@ -106,3 +106,38 @@ Formato inicial 4:5. No requiere imagen real.
 
 
 No hacer commit ni push. Dejar el working tree revisable.
+
+## Operación del flujo
+
+El flujo vive en `/studio/new` y reutiliza conversaciones, artifacts
+versionados y proyectos existentes. Sólo muestra templates Instagram 4:5 del
+catálogo aprobado; las cinco URLs de Canva se allowlistean en backend y
+frontend. Abrir Canva siempre usa una pestaña nueva con `noopener,noreferrer`.
+
+El resultado contiene caption, CTA, hashtags y un `visual_direction` mostrado
+como **visual brief 4:5**. Es una indicación para Canva o un diseñador, no una
+imagen generada. El frontend consulta `copywriter.quality_levels` en Capability
+Registry, por lo que no anuncia rutas balanced/quality no configuradas ni envía
+un ID de modelo.
+
+La edición crea una versión de artifact sólo al guardar y conserva los cambios
+locales si falla el guardado. El proyecto conserva `source_template_id`, el
+artifact, plataforma y su formato. Duplicar usa la misma relación padre de
+versiones; variar reutiliza el endpoint versionado de artifacts.
+
+La creación y el duplicado aceptan `Idempotency-Key`: un replay devuelve el
+mismo proyecto y un artifact ya asociado no se reasigna. Al guardar, el studio
+reemplaza la URL por `/studio/new?project=<id>` y reconstruye el resultado desde
+el proyecto y su última versión; las ediciones pendientes activan protección de
+salida.
+
+## Tiempo hasta valor y prueba manual
+
+`creation_flow_events` guarda solamente `workspace_id`, `business_id`,
+`flow_started_at`, `first_generation_completed_at`, `elapsed_seconds` y
+`completion_status`; no guarda tema, prompts ni contenido. Para la prueba
+manual: inicia sesión con una cuenta configurada, abre **Crear con HiTrendy**,
+selecciona un template, escribe un tema, genera, revisa el visual brief y
+guarda. Compara los timestamps del evento para verificar que termina en menos
+de cinco minutos. El E2E reproduce el recorrido completo con provider fake;
+el smoke real sigue siendo opt-in y requiere credenciales OpenRouter.

@@ -111,6 +111,16 @@ describe("API client", () => {
     expect(requestInitAt(1).credentials).toBe("include");
   });
 
+  test("envía la clave estable de idempotencia al guardar un proyecto", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ token: "csrf-one" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "project-1" }));
+
+    await api.projects.create({ artifact_id: "artifact-1" }, { idempotencyKey: "save-once" });
+
+    expect(requestHeadersAt(1).get("Idempotency-Key")).toBe("save-once");
+  });
+
   test("mantiene el token CSRF únicamente en memoria", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ token: "csrf-memory" }))

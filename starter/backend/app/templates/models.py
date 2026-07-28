@@ -16,5 +16,8 @@ class Template(Base):
     category: Mapped[str] = mapped_column(String(40), nullable=False)
     objective: Mapped[str] = mapped_column(String(40), nullable=False, default="reach")
     thumbnail_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    canva_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    aspect_ratio: Mapped[str] = mapped_column(String(16), nullable=False, default="4:5")
+    is_public: Mapped[bool] = mapped_column(default=True, nullable=False)
     editable_slots: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     description: Mapped[str | None] = mapped_column(Text, nullable=True)

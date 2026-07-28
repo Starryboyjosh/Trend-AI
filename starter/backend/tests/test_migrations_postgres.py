@@ -28,14 +28,11 @@ pytestmark = pytest.mark.skipif(
 )
 
 EXPECTED_TEMPLATE_IDS = {
-    "tpl_reel_01",
-    "tpl_static_01",
-    "tpl_story_01",
-    "tpl_video_01",
-    "tpl_carousel_01",
-    "tpl_whatsapp_01",
-    "tpl_launch_01",
-    "tpl_event_01",
+    "tpl_instagram_01",
+    "tpl_instagram_02",
+    "tpl_instagram_03",
+    "tpl_instagram_04",
+    "tpl_instagram_05",
 }
 
 
@@ -69,25 +66,32 @@ def _template_ids(engine) -> list[str]:
         return list(connection.scalars(text("SELECT id FROM templates ORDER BY id")))
 
 
+def _public_template_ids(engine) -> list[str]:
+    with engine.connect() as connection:
+        return list(
+            connection.scalars(text("SELECT id FROM templates WHERE is_public = true ORDER BY id"))
+        )
+
+
 def test_upgrade_empty_postgres_to_head(postgres_engine) -> None:
     _upgrade("head")
     with postgres_engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "016"
-    assert set(_template_ids(postgres_engine)) == EXPECTED_TEMPLATE_IDS
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "017"
+    assert set(_public_template_ids(postgres_engine)) == EXPECTED_TEMPLATE_IDS
 
 
 def test_phase1_templates_are_seeded_once_and_upgrade_is_repeatable(postgres_engine) -> None:
     _upgrade("head")
-    before = _template_ids(postgres_engine)
+    before = _public_template_ids(postgres_engine)
     command.downgrade(_alembic_config(), "011")
     _upgrade("head")
-    after = _template_ids(postgres_engine)
+    after = _public_template_ids(postgres_engine)
     assert before == after
     assert len(after) == len(EXPECTED_TEMPLATE_IDS)
     assert len(after) == len(set(after))
 
 
-def test_existing_template_is_not_overwritten(postgres_engine) -> None:
+def test_upgrade_hides_unapproved_templates_without_breaking_historical_rows(postgres_engine) -> None:
     _upgrade("011")
     with postgres_engine.begin() as connection:
         connection.execute(
@@ -99,7 +103,7 @@ def test_existing_template_is_not_overwritten(postgres_engine) -> None:
                 ":editable_slots, :description)"
             ),
             {
-                "id": "tpl_reel_01",
+                "id": "tpl_unapproved",
                 "title": "Título personalizado",
                 "platforms": "[]",
                 "formats": "[]",
@@ -112,17 +116,22 @@ def test_existing_template_is_not_overwritten(postgres_engine) -> None:
         )
     _upgrade("head")
     with postgres_engine.connect() as connection:
-        row = connection.execute(
-            text("SELECT title, description FROM templates WHERE id = 'tpl_reel_01'")
-        ).one()
-    assert row.title == "Título personalizado"
-    assert row.description == "Contenido personalizado."
+        ids = set(connection.scalars(text("SELECT id FROM templates")))
+        columns = {
+            row.column_name
+            for row in connection.execute(
+                text("SELECT column_name FROM information_schema.columns WHERE table_name = 'templates'")
+            )
+        }
+    assert "tpl_unapproved" in ids
+    assert set(_public_template_ids(postgres_engine)) == EXPECTED_TEMPLATE_IDS
+    assert {"canva_url", "aspect_ratio", "is_public"} <= columns
 
 
-def test_downgrade_preserves_seeded_templates(postgres_engine) -> None:
+def test_downgrade_restores_a_016_compatible_template_catalog(postgres_engine) -> None:
     _upgrade("head")
     command.downgrade(_alembic_config(), "011")
-    assert set(_template_ids(postgres_engine)) == EXPECTED_TEMPLATE_IDS
+    assert EXPECTED_TEMPLATE_IDS.isdisjoint(set(_template_ids(postgres_engine)))
 
 
 def test_upgrade_from_013_adds_pending_signup_schema(postgres_engine) -> None:
@@ -197,4 +206,21 @@ def test_upgrade_from_015_adds_ai_usage_events(postgres_engine) -> None:
     } <= indexes
     assert len(foreign_keys) == 2
     command.downgrade(_alembic_config(), "015")
+    _upgrade("head")
+
+
+def test_upgrade_from_016_adds_instagram_flow_timing(postgres_engine) -> None:
+    _upgrade("016")
+    with postgres_engine.connect() as connection:
+        assert connection.scalar(text("SELECT to_regclass('public.creation_flow_events')")) is None
+    _upgrade("head")
+    with postgres_engine.connect() as connection:
+        columns = {
+            row.column_name
+            for row in connection.execute(
+                text("SELECT column_name FROM information_schema.columns WHERE table_name = 'creation_flow_events'")
+            )
+        }
+    assert {"flow_started_at", "first_generation_completed_at", "elapsed_seconds", "completion_status", "flow_key"} <= columns
+    command.downgrade(_alembic_config(), "016")
     _upgrade("head")

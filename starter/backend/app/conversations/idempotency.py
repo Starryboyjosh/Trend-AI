@@ -22,6 +22,7 @@ async def reserve(
     endpoint: str,
     key: str | None,
     payload_hash: str,
+    commit: bool = True,
 ) -> IdempotencyRecord | None:
     if not key:
         return None
@@ -47,7 +48,8 @@ async def reserve(
             )
         record.status = "processing"
         record.response_json = None
-        await db.commit()
+        if commit:
+            await db.commit()
         return record
     record = IdempotencyRecord(
         workspace_id=workspace_id,
@@ -58,7 +60,8 @@ async def reserve(
     )
     db.add(record)
     try:
-        await db.commit()
+        if commit:
+            await db.commit()
     except IntegrityError:
         await db.rollback()
         return await reserve(
@@ -67,12 +70,19 @@ async def reserve(
             endpoint=endpoint,
             key=key,
             payload_hash=payload_hash,
+            commit=commit,
         )
     return record
 
 
 async def mark_failed(
-    db: AsyncSession, *, workspace_id: str, endpoint: str, key: str | None, commit: bool = True
+    db: AsyncSession,
+    *,
+    workspace_id: str,
+    endpoint: str,
+    key: str | None,
+    payload_hash: str | None = None,
+    commit: bool = True,
 ) -> None:
     if not key:
         return
@@ -84,10 +94,20 @@ async def mark_failed(
         )
     )
     record = result.scalar_one_or_none()
-    if record:
+    if record is None and payload_hash is not None:
+        record = IdempotencyRecord(
+            workspace_id=workspace_id,
+            endpoint=endpoint,
+            key=key,
+            payload_hash=payload_hash,
+            status="failed",
+        )
+        db.add(record)
+    elif record:
         record.status = "failed"
-        if commit:
-            await db.commit()
+        record.response_json = None
+    if record and commit:
+        await db.commit()
 
 
 async def recover_failed(
@@ -96,6 +116,7 @@ async def recover_failed(
     workspace_id: str,
     endpoint: str,
     key: str | None,
+    payload_hash: str | None = None,
 ) -> None:
     """Leave a reserved request retryable even after later work rolls back."""
     if not key:
@@ -107,6 +128,7 @@ async def recover_failed(
         workspace_id=workspace_id,
         endpoint=endpoint,
         key=key,
+        payload_hash=payload_hash,
         commit=True,
     )
 

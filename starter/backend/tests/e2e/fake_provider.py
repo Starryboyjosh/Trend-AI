@@ -14,12 +14,14 @@ class DeterministicE2EProvider:
 
     def __init__(self) -> None:
         self.calls = 0
+        self.last_social_request: SocialPostModelRequest | None = None
         self.transient_failures = 0
         self.permanent_failure = False
         self.delay_seconds = 0.0
 
     async def generate_social_post(self, *, request: SocialPostModelRequest) -> dict:
         self.calls += 1
+        self.last_social_request = request
         await self._before_response()
         return {
             "artifact_type": "social_post",
@@ -28,7 +30,7 @@ class DeterministicE2EProvider:
             "caption": f"Contenido E2E para {request.business.name}.",
             "call_to_action": "Escríbenos para conocer más.",
             "hashtags": ["#E2E", "#HiTrendy"],
-            "visual_direction": "Producto centrado con texto claro.",
+            "visual_direction": "Brief visual 4:5: producto centrado, estilo limpio, texto sugerido y guía para Canva.",
             "format_recommendation": "static_post",
             "assumptions": ["Provider determinista de pruebas."],
         }

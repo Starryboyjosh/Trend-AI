@@ -1,10 +1,10 @@
 import { AppShell } from "@/components/shell/app-shell";
-import { StudioWorkspace } from "@/components/studio/studio-workspace";
+import { InstagramPostFlow } from "@/components/studio/instagram-post-flow";
 
 export default function NewStudioPage() {
   return (
     <AppShell>
-      <StudioWorkspace />
+      <InstagramPostFlow />
     </AppShell>
   );
 }

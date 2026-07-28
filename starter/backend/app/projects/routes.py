@@ -1,22 +1,24 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from difflib import SequenceMatcher
 from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header
 from pydantic import BaseModel, Field
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.business.models import Business
+from app.conversations.idempotency import complete, payload_fingerprint, recover_failed, reserve
 from app.conversations.models import ArtifactEvent, ArtifactVersion, Conversation, GeneratedArtifact
 from app.conversations.repository import SqlArtifactRepository
-from app.core.errors import AppError, NotFoundError, ValidationError_
+from app.core.errors import AppError, ConflictError, NotFoundError, ValidationError_
 from app.dependencies import get_db, require_workspace
 from app.domain.models import GeneratedShortVideoScript, GeneratedSocialPost, VideoScene
-from app.projects.models import Project
+from app.projects.models import CreationFlowEvent, Project
 from app.templates.repository import get_template
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -32,6 +34,14 @@ class CreateProjectRequest(BaseModel):
 class UpdateProjectRequest(BaseModel):
     name: str | None = Field(None, max_length=240)
     status: Literal["active", "archived"] | None = None
+
+
+class StartCreationFlowRequest(BaseModel):
+    business_id: str = Field(min_length=1)
+
+
+class CompleteCreationFlowRequest(BaseModel):
+    status: Literal["generation_completed", "completed", "failed"]
 
 
 def project_to_dict(p: Project) -> dict:
@@ -67,119 +77,183 @@ def _edit_magnitude_percent(previous_content: str | None, updated_content: str) 
 @router.post("", status_code=201)
 async def create_project_endpoint(
     body: CreateProjectRequest,
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key", max_length=160),
     workspace_id: str = Depends(require_workspace),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
+    endpoint = "/projects"
+    request_payload = body.model_dump(mode="json")
+    request_hash = payload_fingerprint(request_payload)
+    record = await reserve(
+        db,
+        workspace_id=workspace_id,
+        endpoint=endpoint,
+        key=idempotency_key,
+        payload_hash=request_hash,
+        commit=False,
+    )
+    if record and record.status == "completed" and record.response_json:
+        return json.loads(record.response_json)
+
     content: dict | GeneratedSocialPost | None = None
     artifact_id: str | None = None
     platform: str = "instagram"
     business_id: str | None = body.business_id
 
-    if body.template_id:
-        if business_id is None:
-            raise ValidationError_("Selecciona el negocio para el proyecto.")
-        business_result = await db.execute(
-            select(Business.id).where(
-                Business.id == business_id, Business.workspace_id == workspace_id
+    try:
+        template_data: dict | None = None
+        if body.template_id:
+            template_data = await get_template(db, body.template_id)
+
+        if body.template_id and not body.artifact_id:
+            if business_id is None:
+                raise ValidationError_("Selecciona el negocio para el proyecto.")
+            business_result = await db.execute(
+                select(Business.id).where(
+                    Business.id == business_id, Business.workspace_id == workspace_id
+                )
             )
-        )
-        if business_result.scalar_one_or_none() is None:
-            raise NotFoundError("Negocio")
-        template_data = await get_template(db, body.template_id)
-        platform = template_data["platforms"][0] if template_data["platforms"] else "instagram"
-        title = body.name or template_data["title"]
-        content = GeneratedSocialPost(
-            platform=platform,
-            hook=title,
-            caption="Escribe aquí el texto principal de tu publicación.",
-            call_to_action="",
-            hashtags=[],
-            visual_direction="Añade una indicación visual para esta plantilla.",
-            format_recommendation=template_data["formats"][0]
-            if template_data["formats"]
-            else "static_post",
-            assumptions=[f"Proyecto iniciado desde la plantilla {template_data['title']}."],
-        )
-        template_artifact = GeneratedArtifact(
-            artifact_type=content.artifact_type,
-            platform=platform,
-            objective=template_data["objective"],
-            model_provider="template",
-            model_name="template-v1",
-            prompt_version=None,
-            business_profile_version=1,
-        )
-        db.add(template_artifact)
-        await db.flush()
-        version = ArtifactVersion(
-            artifact_id=template_artifact.id,
-            version_number=1,
-            content_json=content.model_dump_json(),
-            user_edited=False,
-        )
-        db.add(version)
-        await db.flush()
-        template_artifact.active_version_id = version.id
-        artifact_id = template_artifact.id
-    elif body.artifact_id:
-        artifact_result = await db.execute(
-            select(GeneratedArtifact, Conversation)
-            .join(Conversation, Conversation.id == GeneratedArtifact.conversation_id)
-            .where(
-                GeneratedArtifact.id == body.artifact_id,
-                Conversation.workspace_id == workspace_id,
+            if business_result.scalar_one_or_none() is None:
+                raise NotFoundError("Negocio")
+            assert template_data is not None
+            platform = template_data["platforms"][0] if template_data["platforms"] else "instagram"
+            title = body.name or template_data["title"]
+            content = GeneratedSocialPost(
+                platform=platform,
+                hook=title,
+                caption="Escribe aquí el texto principal de tu publicación.",
+                call_to_action="",
+                hashtags=[],
+                visual_direction="Añade una indicación visual para esta plantilla.",
+                format_recommendation=template_data["formats"][0] if template_data["formats"] else "static_post",
+                assumptions=[f"Proyecto iniciado desde la plantilla {template_data['title']}."],
             )
-        )
-        row = artifact_result.one_or_none()
-        if row is None:
-            raise NotFoundError("Artículo")
-        artifact, conv = row
-        business_id = conv.business_id
-        platform = artifact.platform
+            template_artifact = GeneratedArtifact(artifact_type=content.artifact_type, platform=platform, objective=template_data["objective"], model_provider="template", model_name="template-v1", prompt_version=None, business_profile_version=1)
+            db.add(template_artifact)
+            await db.flush()
+            version = ArtifactVersion(artifact_id=template_artifact.id, version_number=1, content_json=content.model_dump_json(), user_edited=False)
+            db.add(version)
+            await db.flush()
+            template_artifact.active_version_id = version.id
+            artifact_id = template_artifact.id
+        elif body.artifact_id:
+            artifact_result = await db.execute(select(GeneratedArtifact, Conversation).join(Conversation, Conversation.id == GeneratedArtifact.conversation_id).where(GeneratedArtifact.id == body.artifact_id, Conversation.workspace_id == workspace_id))
+            row = artifact_result.one_or_none()
+            if row is None:
+                raise NotFoundError("Artículo")
+            artifact, conv = row
+            if artifact.project_id:
+                raise ConflictError("El artículo ya está asociado a otro proyecto.")
+            business_id, platform, artifact_id = conv.business_id, artifact.platform, artifact.id
+            version = await db.scalar(select(ArtifactVersion).where(ArtifactVersion.artifact_id == artifact.id).order_by(ArtifactVersion.version_number.desc()).limit(1))
+            content = json.loads(version.content_json) if version else None
+            title = body.name or (content.get("hook", "")[:100] if isinstance(content, dict) else "")
+            if template_data:
+                if template_data["platforms"] != ["instagram"] or template_data["aspect_ratio"] != "4:5":
+                    raise ValidationError_("La plantilla no es compatible con el post de Instagram 4:5.")
+                platform = "instagram"
+        else:
+            raise NotFoundError("Artículo o plantilla")
 
-        version_result = await db.execute(
-            select(ArtifactVersion)
-            .where(ArtifactVersion.artifact_id == artifact.id)
-            .order_by(ArtifactVersion.version_number.desc())
-            .limit(1)
-        )
-        version = version_result.scalar_one_or_none()
-        content = json.loads(version.content_json) if version else None
-        artifact_id = artifact.id
-        title = body.name or (content.get("hook", "")[:100] if isinstance(content, dict) else "")
-    else:
-        raise NotFoundError("Artículo o plantilla")
+        if not title:
+            title = "Proyecto sin título"
+        project = Project(workspace_id=workspace_id, business_id=business_id, name=title, artifact_id=artifact_id, source_template_id=body.template_id, platform=platform)
+        db.add(project)
+        await db.flush()
+        if artifact_id:
+            art = await db.scalar(select(GeneratedArtifact).where(GeneratedArtifact.id == artifact_id))
+            if art is not None:
+                art.project_id = project.id
+        await db.refresh(project)
+        response = project_to_dict(project)
+        response["artifact_snapshot"] = content.model_dump() if isinstance(content, GeneratedSocialPost) else content
+        await complete(db, record, response, commit=False)
+        await db.commit()
+        return response
+    except Exception:
+        await recover_failed(db, workspace_id=workspace_id, endpoint=endpoint, key=idempotency_key, payload_hash=request_hash)
+        raise
 
-    if not title:
-        title = "Proyecto sin título"
 
-    project = Project(
-        workspace_id=workspace_id,
-        business_id=business_id,
-        name=title,
-        artifact_id=artifact_id,
-        source_template_id=body.template_id,
-        platform=platform,
+@router.post("/flow-events", status_code=201)
+async def start_creation_flow_endpoint(
+    body: StartCreationFlowRequest,
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key", max_length=160),
+    workspace_id: str = Depends(require_workspace),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    exists = await db.scalar(
+        select(Business.id).where(Business.id == body.business_id, Business.workspace_id == workspace_id)
     )
-    db.add(project)
-    await db.flush()
-    await db.refresh(project)
-
-    if artifact_id:
-        artifact_result = await db.execute(
-            select(GeneratedArtifact).where(GeneratedArtifact.id == artifact_id)
+    if exists is None:
+        raise NotFoundError("Negocio")
+    event = await db.scalar(
+        select(CreationFlowEvent)
+        .where(
+            CreationFlowEvent.workspace_id == workspace_id,
+            CreationFlowEvent.business_id == body.business_id,
+            CreationFlowEvent.flow_key == idempotency_key,
         )
-        art = artifact_result.scalar_one_or_none()
-        if art:
-            art.project_id = project.id
-
+        .limit(1)
+    ) if idempotency_key else None
+    if event is None:
+        event = await db.scalar(
+        select(CreationFlowEvent)
+        .where(
+            CreationFlowEvent.workspace_id == workspace_id,
+            CreationFlowEvent.business_id == body.business_id,
+            CreationFlowEvent.completion_status.in_(["started", "generation_completed"]),
+        )
+        .order_by(CreationFlowEvent.flow_started_at.desc())
+        .limit(1)
+        )
+    if event is not None:
+        return {"id": event.id, "flow_started_at": event.flow_started_at.isoformat()}
+    event = CreationFlowEvent(
+        workspace_id=workspace_id, business_id=body.business_id, flow_key=idempotency_key
+    )
+    db.add(event)
     await db.commit()
+    await db.refresh(event)
+    return {"id": event.id, "flow_started_at": event.flow_started_at.isoformat()}
 
-    result = project_to_dict(project)
-    result["artifact_snapshot"] = (
-        content.model_dump() if isinstance(content, GeneratedSocialPost) else content
+
+@router.patch("/flow-events/{event_id}")
+async def complete_creation_flow_endpoint(
+    event_id: str,
+    body: CompleteCreationFlowRequest,
+    workspace_id: str = Depends(require_workspace),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    event = await db.scalar(
+        select(CreationFlowEvent).where(
+            CreationFlowEvent.id == event_id, CreationFlowEvent.workspace_id == workspace_id
+        )
     )
-    return result
+    if event is None:
+        raise NotFoundError("Flujo de creación")
+    if event.completion_status not in {"completed", "failed"}:
+        now = datetime.now(UTC)
+        if body.status == "generation_completed":
+            if event.first_generation_completed_at is None:
+                event.first_generation_completed_at = now
+            event.completion_status = "generation_completed"
+        elif body.status in {"completed", "failed"}:
+            if body.status == "completed" and event.first_generation_completed_at is None:
+                event.first_generation_completed_at = now
+            event.completion_status = body.status
+            if event.elapsed_seconds is None:
+                event.elapsed_seconds = max(0, int((now - event.flow_started_at).total_seconds()))
+        await db.commit()
+    return {
+        "id": event.id,
+        "flow_started_at": event.flow_started_at.isoformat(),
+        "first_generation_completed_at": event.first_generation_completed_at.isoformat()
+        if event.first_generation_completed_at
+        else None,
+        "elapsed_seconds": event.elapsed_seconds,
+        "completion_status": event.completion_status,
+    }
 
 
 @router.get("")
@@ -268,37 +342,51 @@ async def update_project_endpoint(
 @router.post("/{project_id}/duplicate", status_code=201)
 async def duplicate_project_endpoint(
     project_id: str,
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key", max_length=160),
     workspace_id: str = Depends(require_workspace),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    result = await db.execute(
-        select(Project).where(Project.id == project_id, Project.workspace_id == workspace_id)
+    endpoint = f"/projects/{project_id}/duplicate"
+    request_hash = payload_fingerprint({"project_id": project_id})
+    record = await reserve(
+        db,
+        workspace_id=workspace_id,
+        endpoint=endpoint,
+        key=idempotency_key,
+        payload_hash=request_hash,
+        commit=False,
     )
-    project = result.scalar_one_or_none()
-    if project is None:
-        raise NotFoundError("Proyecto")
+    if record and record.status == "completed" and record.response_json:
+        return json.loads(record.response_json)
+    try:
+        result = await db.execute(
+            select(Project).where(Project.id == project_id, Project.workspace_id == workspace_id)
+        )
+        project = result.scalar_one_or_none()
+        if project is None:
+            raise NotFoundError("Proyecto")
 
-    duplicated_artifact_id: str | None = None
-    duplicated_artifact: GeneratedArtifact | None = None
-    if project.artifact_id:
-        source_artifact = (
+        duplicated_artifact_id: str | None = None
+        duplicated_artifact: GeneratedArtifact | None = None
+        if project.artifact_id:
+            source_artifact = (
             await db.execute(
                 select(GeneratedArtifact).where(GeneratedArtifact.id == project.artifact_id)
             )
-        ).scalar_one_or_none()
-        if source_artifact is None:
-            raise NotFoundError("Artículo")
-        source_version = (
+            ).scalar_one_or_none()
+            if source_artifact is None:
+                raise NotFoundError("Artículo")
+            source_version = (
             await db.execute(
                 select(ArtifactVersion)
                 .where(ArtifactVersion.artifact_id == source_artifact.id)
                 .order_by(ArtifactVersion.version_number.desc())
                 .limit(1)
             )
-        ).scalar_one_or_none()
-        if source_version is None:
-            raise NotFoundError("Versión")
-        duplicated_artifact = GeneratedArtifact(
+            ).scalar_one_or_none()
+            if source_version is None:
+                raise NotFoundError("Versión")
+            duplicated_artifact = GeneratedArtifact(
             conversation_id=source_artifact.conversation_id,
             artifact_type=source_artifact.artifact_type,
             platform=source_artifact.platform,
@@ -307,22 +395,22 @@ async def duplicate_project_endpoint(
             model_name=source_artifact.model_name,
             prompt_version=source_artifact.prompt_version,
             business_profile_version=source_artifact.business_profile_version,
-        )
-        db.add(duplicated_artifact)
-        await db.flush()
-        duplicated_version = ArtifactVersion(
+            )
+            db.add(duplicated_artifact)
+            await db.flush()
+            duplicated_version = ArtifactVersion(
             artifact_id=duplicated_artifact.id,
             version_number=1,
             content_json=source_version.content_json,
             user_edited=source_version.user_edited,
             parent_version_id=source_version.id,
-        )
-        db.add(duplicated_version)
-        await db.flush()
-        duplicated_artifact.active_version_id = duplicated_version.id
-        duplicated_artifact_id = duplicated_artifact.id
+            )
+            db.add(duplicated_version)
+            await db.flush()
+            duplicated_artifact.active_version_id = duplicated_version.id
+            duplicated_artifact_id = duplicated_artifact.id
 
-    duplicate = Project(
+        duplicate = Project(
         workspace_id=workspace_id,
         business_id=project.business_id,
         name=f"{project.name} (copia)",
@@ -330,14 +418,19 @@ async def duplicate_project_endpoint(
         source_template_id=project.source_template_id,
         platform=project.platform,
         status="active",
-    )
-    db.add(duplicate)
-    await db.flush()
-    if duplicated_artifact:
-        duplicated_artifact.project_id = duplicate.id
-    await db.commit()
-    await db.refresh(duplicate)
-    return project_to_dict(duplicate)
+        )
+        db.add(duplicate)
+        await db.flush()
+        if duplicated_artifact:
+            duplicated_artifact.project_id = duplicate.id
+        await db.refresh(duplicate)
+        response = project_to_dict(duplicate)
+        await complete(db, record, response, commit=False)
+        await db.commit()
+        return response
+    except Exception:
+        await recover_failed(db, workspace_id=workspace_id, endpoint=endpoint, key=idempotency_key, payload_hash=request_hash)
+        raise
 
 
 @router.get("/{project_id}/export")

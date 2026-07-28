@@ -218,6 +218,12 @@ class DemoContentModelProvider:
             else:
                 hook = "¡Tenemos algo especial para ti! 🎉"
                 caption = f"¡Hola! En {context.name} tenemos {context.primary_product} que te encantará. Está pensado para {context.target_audience.lower()} como tú. {cta} Te esperamos."
+        if platform == "instagram":
+            visual = {
+                "en": f"4:5 vertical visual brief for Canva: centered {context.primary_product}, clean editorial style, suggested text ‘{context.name}’, generous margins and one clear action.",
+                "pt": f"Brief visual vertical 4:5 para Canva: {context.primary_product} centralizado, estilo editorial limpo, texto sugerido ‘{context.name}’, margens generosas e uma ação clara.",
+                "es": f"Brief visual vertical 4:5 para Canva: {context.primary_product} centrado, estilo editorial limpio, texto sugerido ‘{context.name}’, márgenes amplios y una acción clara.",
+            }[request.locale]
         localized = {
             "en": ("#HiTrendy", "#BusinessContent", f"The {tone} tone from the profile or request was used."),
             "pt": ("#HiTrendy", "#ConteudoParaNegocios", f"Foi usado o tom {tone} do perfil ou da solicitação."),

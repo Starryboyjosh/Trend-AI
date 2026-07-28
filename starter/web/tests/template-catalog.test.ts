@@ -7,13 +7,15 @@ import {
 import type { Template } from "@/types/template";
 
 const template: Template = {
-  id: "template-demo-4",
+  id: "tpl_instagram_01",
   title: "Oferta de temporada",
   platforms: ["instagram"],
   formats: ["static_post"],
   category: "Anuncios",
   objective: "sales",
   thumbnail_url: "/templates/amor.png",
+  canva_url: "https://canva.link/jxr6r3xdtdx3p18",
+  aspect_ratio: "4:5",
   editable_slots: ["titulo"],
   description: null,
 };
@@ -25,24 +27,24 @@ describe("catálogo de plantillas", () => {
     expect(matchesTemplate(presentation, "temporada", "all")).toBe(true);
     expect(matchesTemplate(presentation, "anuncios", "all")).toBe(true);
     expect(matchesTemplate(presentation, "static post", "all")).toBe(true);
-    expect(matchesTemplate(presentation, "FLORES", "all")).toBe(true);
-    expect(matchesTemplate(presentation, "flores", "ads")).toBe(true);
-    expect(matchesTemplate(presentation, "flores", "reels")).toBe(false);
+    expect(matchesTemplate(presentation, "ANUNCIOS", "all")).toBe(true);
+    expect(matchesTemplate(presentation, "anuncios", "ads")).toBe(true);
+    expect(matchesTemplate(presentation, "anuncios", "reels")).toBe(false);
   });
 
   test("mantiene la proporción vertical apropiada para anuncios", () => {
     expect(toTemplatePresentation(template).aspectRatio).toBe("4 / 5");
   });
 
-  test("usa un asset local para las miniaturas del seed backend", () => {
+  test("conserva el asset local y formato del catálogo Instagram aprobado", () => {
     const seededTemplate: Template = {
       ...template,
-      id: "tpl_reel_01",
-      thumbnail_url: "/static/thumbnails/reel-promo.svg",
+      thumbnail_url: "/templates/flores.png",
     };
 
     expect(toTemplatePresentation(seededTemplate).thumbnail_url).toBe(
-      "/templates/video-mar.png"
+      "/templates/flores.png"
     );
+    expect(seededTemplate.aspect_ratio).toBe("4:5");
   });
 });

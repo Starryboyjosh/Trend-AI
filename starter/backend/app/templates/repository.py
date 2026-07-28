@@ -19,92 +19,69 @@ def _deserialize(raw: str) -> list[str]:
 
 SEED_TEMPLATES: list[dict] = [
     {
-        "id": "tpl_reel_01",
-        "title": "Reel promocional",
-        "platforms": ["instagram", "tiktok"],
-        "formats": ["reel", "short_video"],
-        "category": "promotion",
-        "objective": "sales",
-        "thumbnail_url": "/static/thumbnails/reel-promo.svg",
-        "editable_slots": ["title_text", "caption", "cta"],
-        "description": "Video corto presentando un producto nuevo.",
-    },
-    {
-        "id": "tpl_static_01",
-        "title": "Publicación estática",
-        "platforms": ["instagram", "facebook"],
-        "formats": ["static_post", "carousel"],
-        "category": "promotion",
-        "objective": "engagement",
-        "thumbnail_url": "/static/thumbnails/static-post.svg",
-        "editable_slots": ["headline", "body", "cta", "hashtags"],
-        "description": "Publicación con imagen principal y texto descriptivo.",
-    },
-    {
-        "id": "tpl_story_01",
-        "title": "Historia de producto",
-        "platforms": ["instagram", "facebook"],
-        "formats": ["story"],
-        "category": "awareness",
-        "objective": "brand_awareness",
-        "thumbnail_url": "/static/thumbnails/story-product.svg",
-        "editable_slots": ["caption", "cta"],
-        "description": "Historia efímera destacando un producto o servicio.",
-    },
-    {
-        "id": "tpl_video_01",
-        "title": "Video testimonial",
-        "platforms": ["tiktok", "instagram", "youtube"],
-        "formats": ["short_video", "reel"],
-        "category": "social_proof",
-        "objective": "community",
-        "thumbnail_url": "/static/thumbnails/video-testimonial.svg",
-        "editable_slots": ["intro", "question", "cta"],
-        "description": "Formato de entrevista rápida con un cliente satisfecho.",
-    },
-    {
-        "id": "tpl_carousel_01",
-        "title": "Carrusel educativo",
-        "platforms": ["instagram", "linkedin", "facebook"],
-        "formats": ["carousel"],
-        "category": "education",
-        "objective": "engagement",
-        "thumbnail_url": "/static/thumbnails/carousel-edu.svg",
-        "editable_slots": ["slide_1", "slide_2", "slide_3", "cta"],
-        "description": "Carrusel de 3 diapositivas explicando un concepto.",
-    },
-    {
-        "id": "tpl_whatsapp_01",
-        "title": "Oferta por WhatsApp",
-        "platforms": ["whatsapp"],
+        "id": "tpl_instagram_01",
+        "title": "Producto destacado",
+        "platforms": ["instagram"],
         "formats": ["static_post"],
         "category": "promotion",
         "objective": "sales",
-        "thumbnail_url": "/static/thumbnails/whatsapp-offer.svg",
-        "editable_slots": ["greeting", "offer", "cta"],
-        "description": "Mensaje promocional optimizado para WhatsApp.",
+        "thumbnail_url": "/templates/flores.png",
+        "canva_url": "https://canva.link/jxr6r3xdtdx3p18",
+        "aspect_ratio": "4:5",
+        "editable_slots": ["headline", "caption", "cta", "hashtags"],
+        "description": "Post vertical 4:5 para destacar un producto.",
     },
     {
-        "id": "tpl_launch_01",
-        "title": "Lanzamiento de producto",
-        "platforms": ["instagram", "tiktok", "facebook"],
-        "formats": ["reel", "static_post", "story"],
+        "id": "tpl_instagram_02",
+        "title": "Oferta cercana",
+        "platforms": ["instagram"],
+        "formats": ["static_post"],
+        "category": "promotion",
+        "objective": "engagement",
+        "thumbnail_url": "/templates/coffee.png",
+        "canva_url": "https://canva.link/d5gnf0tsot7t70m",
+        "aspect_ratio": "4:5",
+        "editable_slots": ["headline", "body", "cta", "hashtags"],
+        "description": "Post vertical 4:5 para una oferta clara y editable.",
+    },
+    {
+        "id": "tpl_instagram_03",
+        "title": "Historia de marca",
+        "platforms": ["instagram"],
+        "formats": ["static_post"],
+        "category": "brand_awareness",
+        "objective": "brand_awareness",
+        "thumbnail_url": "/templates/amor.png",
+        "canva_url": "https://canva.link/2hk1wscap0jikce",
+        "aspect_ratio": "4:5",
+        "editable_slots": ["headline", "caption", "cta"],
+        "description": "Post vertical 4:5 para comunicar el valor de marca.",
+    },
+    {
+        "id": "tpl_instagram_04",
+        "title": "Novedad del negocio",
+        "platforms": ["instagram"],
+        "formats": ["static_post"],
         "category": "launch",
         "objective": "launch",
-        "thumbnail_url": "/static/thumbnails/launch-product.svg",
-        "editable_slots": ["announcement", "details", "cta"],
-        "description": "Anuncio de lanzamiento con entusiasmo y detalles clave.",
+        "thumbnail_url": "/templates/summer.png",
+        "canva_url": "https://canva.link/9667338l5l4mgwg",
+        "aspect_ratio": "4:5",
+        "editable_slots": ["headline", "details", "caption", "cta"],
+        "description": "Post vertical 4:5 para un lanzamiento o novedad.",
     },
     {
-        "id": "tpl_event_01",
-        "title": "Invitación a evento",
-        "platforms": ["instagram", "facebook"],
-        "formats": ["static_post", "story"],
-        "category": "events",
+        "id": "tpl_instagram_05",
+        "title": "Invitación local",
+        "platforms": ["instagram"],
+        "formats": ["static_post"],
+        "category": "community",
         "objective": "store_visits",
-        "thumbnail_url": "/static/thumbnails/event-invite.svg",
-        "editable_slots": ["title", "date", "location", "cta"],
-        "description": "Invitación visual para un evento presencial o virtual.",
+        "thumbnail_url": "/templates/comida.png",
+        "canva_url": "https://canva.link/7ped4en1xal5yk7",
+        "aspect_ratio": "4:5",
+        "editable_slots": ["headline", "date", "location", "cta"],
+        "description": "Post vertical 4:5 para invitar a visitar el negocio.",
     },
 ]
 
@@ -118,28 +95,32 @@ def template_to_dict(t: Template) -> dict:
         "category": t.category,
         "objective": t.objective,
         "thumbnail_url": t.thumbnail_url,
+        "canva_url": t.canva_url,
+        "aspect_ratio": t.aspect_ratio,
         "editable_slots": _deserialize(t.editable_slots),
         "description": t.description,
     }
 
 
 async def seed_templates(db: AsyncSession) -> None:
-    result = await db.execute(select(Template).limit(1))
-    if result.scalar_one_or_none() is not None:
-        return
+    existing = (await db.execute(select(Template))).scalars().all()
+    for template in existing:
+        if template.id not in {item["id"] for item in SEED_TEMPLATES}:
+            template.is_public = False
     for data in SEED_TEMPLATES:
-        template = Template(
-            id=data["id"],
-            title=data["title"],
-            platforms=_serialize(data["platforms"]),
-            formats=_serialize(data["formats"]),
-            category=data["category"],
-            objective=data["objective"],
-            thumbnail_url=data["thumbnail_url"],
-            editable_slots=_serialize(data["editable_slots"]),
-            description=data.get("description"),
-        )
-        db.add(template)
+        template = await db.get(Template, data["id"])
+        values = {
+            **data,
+            "platforms": _serialize(data["platforms"]),
+            "formats": _serialize(data["formats"]),
+            "editable_slots": _serialize(data["editable_slots"]),
+            "is_public": True,
+        }
+        if template is None:
+            db.add(Template(**values))
+        else:
+            for key, value in values.items():
+                setattr(template, key, value)
     await db.commit()
 
 
@@ -152,7 +133,7 @@ async def list_templates(
     objective: str | None = None,
     search: str | None = None,
 ) -> list[dict]:
-    query = select(Template)
+    query = select(Template).where(Template.is_public.is_(True))
     if platform:
         query = query.where(Template.platforms.contains(platform))
     if format:
@@ -168,7 +149,9 @@ async def list_templates(
 
 
 async def get_template(db: AsyncSession, template_id: str) -> dict:
-    result = await db.execute(select(Template).where(Template.id == template_id))
+    result = await db.execute(
+        select(Template).where(Template.id == template_id, Template.is_public.is_(True))
+    )
     template = result.scalar_one_or_none()
     if template is None:
         raise NotFoundError("Plantilla")

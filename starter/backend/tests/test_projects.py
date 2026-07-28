@@ -82,6 +82,39 @@ async def test_create_project(client: AsyncClient, artifact_id: str) -> None:
 
 
 @pytest.mark.asyncio
+async def test_create_project_from_artifact_is_idempotent_and_does_not_reassign(
+    client: AsyncClient, artifact_id: str
+) -> None:
+    headers = {"X-Workspace-Id": WORKSPACE_ID, "Idempotency-Key": "project-save-once"}
+    payload = {"artifact_id": artifact_id}
+    first = await client.post("/api/v1/projects", json=payload, headers=headers)
+    replay = await client.post("/api/v1/projects", json=payload, headers=headers)
+    assert first.status_code == replay.status_code == 201
+    assert first.json() == replay.json()
+    projects = await client.get("/api/v1/projects", headers={"X-Workspace-Id": WORKSPACE_ID})
+    assert len([item for item in projects.json() if item["artifact_id"] == artifact_id]) == 1
+
+    conflict = await client.post(
+        "/api/v1/projects", json={"artifact_id": artifact_id, "name": "Otro"}, headers=headers
+    )
+    assert conflict.status_code == 409
+    reassignment = await client.post(
+        "/api/v1/projects",
+        json=payload,
+        headers={"X-Workspace-Id": WORKSPACE_ID, "Idempotency-Key": "project-save-other-key"},
+    )
+    assert reassignment.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_failed_project_save_is_retryable_and_does_not_leave_processing(client: AsyncClient) -> None:
+    headers = {"X-Workspace-Id": WORKSPACE_ID, "Idempotency-Key": "failed-project-save"}
+    first = await client.post("/api/v1/projects", json={"artifact_id": "missing"}, headers=headers)
+    retry = await client.post("/api/v1/projects", json={"artifact_id": "missing"}, headers=headers)
+    assert first.status_code == retry.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_video_script_project_can_be_edited_and_versioned(
     client: AsyncClient, conversation_id: str
 ) -> None:
@@ -238,6 +271,14 @@ async def test_duplicate_project_is_workspace_scoped(client: AsyncClient, artifa
         f"/api/v1/projects/{project_id}/duplicate", headers={"X-Workspace-Id": "ws_other"}
     )
     assert forbidden.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_failed_duplicate_is_retryable_without_a_partial_project(client: AsyncClient) -> None:
+    headers = {"X-Workspace-Id": WORKSPACE_ID, "Idempotency-Key": "failed-duplicate"}
+    first = await client.post("/api/v1/projects/missing/duplicate", headers=headers)
+    replay = await client.post("/api/v1/projects/missing/duplicate", headers=headers)
+    assert first.status_code == replay.status_code == 404
 
 
 @pytest.mark.asyncio
