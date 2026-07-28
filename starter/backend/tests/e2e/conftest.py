@@ -170,7 +170,7 @@ async def authenticated_client(client_factory):
 @pytest.fixture
 def fake_provider(monkeypatch: pytest.MonkeyPatch) -> DeterministicE2EProvider:
     provider = DeterministicE2EProvider()
-    monkeypatch.setattr("app.conversations.routes.get_content_provider", lambda: provider)
+    monkeypatch.setattr("app.conversations.routes.get_content_provider", lambda **kwargs: provider)
     return provider
 
 

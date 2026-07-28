@@ -13,7 +13,11 @@ from app.domain.models import (
     GeneratedShortVideoScript,
     GeneratedSocialPost,
 )
-from app.generation.contracts import ShortVideoScriptModelRequest, SocialPostModelRequest
+from app.generation.contracts import (
+    AdvisorModelRequest,
+    ShortVideoScriptModelRequest,
+    SocialPostModelRequest,
+)
 from app.providers.content import DemoContentModelProvider, OpenAICompatibleContentModelProvider
 
 API_KEY = "sentinel-api-key-do-not-expose"
@@ -176,6 +180,77 @@ async def test_openai_provider_decodes_valid_json_and_sends_expected_request() -
 
 
 @pytest.mark.asyncio
+async def test_openrouter_uses_strict_json_schema_for_advisor_and_copywriter() -> None:
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        content = (
+            {"summary": "Plan", "recommendations": [], "next_actions": ["Publica hoy."]}
+            if len(requests) == 1
+            else _social_payload()
+        )
+        return httpx.Response(200, json=_envelope(content))
+
+    async def transport_handler(request: httpx.Request) -> httpx.Response:
+        return handler(request)
+
+    provider = OpenAICompatibleContentModelProvider(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=API_KEY,
+        model_name="openrouter/free",
+        provider_name="openrouter",
+        structured_output=True,
+        transport=httpx.MockTransport(transport_handler),
+    )
+    await provider.generate_advice(
+        request=AdvisorModelRequest(
+            business=_business(), locale="es", user_request="Da una recomendación."
+        )
+    )
+    await provider.generate_social_post(request=_social_request())
+
+    advisor_format = json.loads(requests[0].content)["response_format"]
+    post_format = json.loads(requests[1].content)["response_format"]
+    assert advisor_format["type"] == post_format["type"] == "json_schema"
+    assert advisor_format["json_schema"]["strict"] is True
+    assert post_format["json_schema"]["strict"] is True
+    assert advisor_format["json_schema"]["schema"]["title"] == "AdvisorResponse"
+    assert post_format["json_schema"]["schema"]["title"] == "GeneratedSocialPost"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("locale", "expected_cta_fragment", "spanish_fragment"),
+    [
+        ("es", "Cuéntanos", None),
+        ("en", "Tell us", "Cuéntanos"),
+        ("pt", "Conte para nós", "Cuéntanos"),
+    ],
+)
+async def test_demo_provider_honors_locale_and_brand_words(
+    locale: str, expected_cta_fragment: str, spanish_fragment: str | None
+) -> None:
+    provider = DemoContentModelProvider()
+    business = _business().model_copy(
+        update={"preferred_words": ["artesanal"], "forbidden_words": ["milagroso"]}
+    )
+    request = _social_request().model_copy(update={"business": business, "locale": locale})
+    advisor = await provider.generate_advice(
+        request=AdvisorModelRequest(business=business, locale=locale, user_request="Ayúdame")
+    )
+    social = await provider.generate_social_post(request=request)
+
+    assert expected_cta_fragment in social["call_to_action"]
+    assert "artesanal" in social["caption"].casefold()
+    assert "milagroso" not in str(social).casefold()
+    assert "milagroso" not in str(advisor).casefold()
+    if spanish_fragment:
+        assert spanish_fragment not in str(social)
+        assert spanish_fragment not in str(advisor)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("failure", "expected_code"),
     [
@@ -251,7 +326,7 @@ async def test_openai_provider_retries_rate_limit_and_server_errors(
         await provider.generate_social_post(request=_social_request())
 
     assert caught.value.code == expected_code
-    assert caught.value.status_code == 503
+    assert caught.value.status_code == (429 if status_code == 429 else 503)
     assert caught.value.retryable is True
     assert calls == 3
     assert delays == [0.5, 1.0]

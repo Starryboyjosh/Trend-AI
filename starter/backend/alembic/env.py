@@ -38,7 +38,9 @@ def _migration_database_url() -> str:
 
 config.set_main_option("sqlalchemy.url", _migration_database_url().replace("+aiosqlite", ""))
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Alembic is also invoked in-process by migration tests.  Preserve the
+    # application's HTTP logger instead of silently disabling it afterwards.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 

@@ -158,6 +158,51 @@ class TestTier:
         info = reg.get_capability(Capability.ADVISOR)
         assert info.tier == Tier.FREE
 
+    async def test_openrouter_only_advertises_configured_quality_levels(
+        self, reg: CapabilityRegistry, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(settings, "ai_provider", "openrouter")
+        monkeypatch.setattr(settings, "openrouter_api_key", "test-key")
+        monkeypatch.setattr(settings, "openrouter_fast_model", "openrouter/free")
+        monkeypatch.setattr(settings, "openrouter_balanced_model", "")
+        monkeypatch.setattr(settings, "openrouter_quality_model", "")
+
+        snapshot = await reg.get_public_snapshot()
+
+        assert snapshot["advisor"]["status"] == "available"
+        assert snapshot["advisor"]["tier"] == "free"
+        assert snapshot["advisor"]["quality_levels"] == ["fast"]
+
+    async def test_openrouter_advertises_explicit_paid_routes_only(
+        self, reg: CapabilityRegistry, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(settings, "ai_provider", "openrouter")
+        monkeypatch.setattr(settings, "openrouter_api_key", "test-key")
+        monkeypatch.setattr(settings, "openrouter_fast_model", "openrouter/free")
+        monkeypatch.setattr(settings, "openrouter_balanced_model", "approved-balanced")
+        monkeypatch.setattr(settings, "openrouter_quality_model", "approved-quality")
+
+        snapshot = await reg.get_public_snapshot()
+
+        assert snapshot["copywriter"]["tier"] == "mixed"
+        assert snapshot["copywriter"]["quality_levels"] == ["fast", "balanced", "quality"]
+
+    async def test_openrouter_quality_levels_apply_only_to_text_capabilities(
+        self, reg: CapabilityRegistry, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(settings, "ai_provider", "openrouter")
+        monkeypatch.setattr(settings, "openrouter_api_key", "test-key")
+        monkeypatch.setattr(settings, "openrouter_fast_model", "openrouter/free")
+        monkeypatch.setattr(settings, "openrouter_balanced_model", "approved-balanced")
+        monkeypatch.setattr(settings, "openrouter_quality_model", "approved-quality")
+        monkeypatch.setattr(settings, "vision_provider", "demo")
+
+        snapshot = await reg.get_public_snapshot()
+
+        assert snapshot["advisor"]["quality_levels"] == ["fast", "balanced", "quality"]
+        assert snapshot["copywriter"]["quality_levels"] == ["fast", "balanced", "quality"]
+        assert snapshot["vision_review"]["quality_levels"] == ["fast"]
+
     async def test_unknown_ai_provider_is_unconfigured_unknown(self, reg: CapabilityRegistry, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(settings, "ai_provider", "unrecognized-provider")
         status, tier = reg._provider_status()

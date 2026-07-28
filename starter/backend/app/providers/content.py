@@ -8,13 +8,20 @@ from typing import Any, Protocol
 import httpx
 
 from app.core.errors import AppError
-from app.generation.contracts import ShortVideoScriptModelRequest, SocialPostModelRequest
+from app.domain.models import AdvisorResponse, GeneratedSocialPost
+from app.generation.contracts import (
+    AdvisorModelRequest,
+    ShortVideoScriptModelRequest,
+    SocialPostModelRequest,
+)
 from app.generation.prompt_registry import get_short_video_script_prompt, get_social_copy_prompt
 
 
 class ContentModelProvider(Protocol):
     provider_name: str
     model_name: str
+
+    async def generate_advice(self, *, request: AdvisorModelRequest) -> dict: ...
 
     async def generate_social_post(
         self,
@@ -49,17 +56,84 @@ class DemoContentModelProvider:
     provider_name = "demo"
     model_name = "demo-v1"
 
-    @staticmethod
-    def _call_to_action(objective: str) -> str:
+    async def generate_advice(self, *, request: AdvisorModelRequest) -> dict:
+        business = request.business
+        language = {
+            "en": (
+                "Focus on clear communication",
+                "Highlight your value",
+                "Connect",
+                "Prepare a short post with a call to action.",
+            ),
+            "pt": (
+                "Priorize uma comunicação clara",
+                "Destaque sua proposta",
+                "Conecte",
+                "Prepare uma publicação breve com uma chamada para ação.",
+            ),
+        }.get(
+            request.locale,
+            (
+                "Prioriza una comunicación clara",
+                "Destaca tu propuesta",
+                "Conecta",
+                "Prepara una publicación breve con una llamada a la acción.",
+            ),
+        )
+        forbidden = {word.casefold() for word in business.forbidden_words}
+        preferred = next(
+            (word for word in business.preferred_words if word.casefold() not in forbidden),
+            None,
+        )
+        detail = f" {preferred}." if preferred else "."
+        summary = {
+            "en": f"{language[0]} for {business.name}{detail}",
+            "pt": f"{language[0]} para {business.name}{detail}",
+            "es": f"{language[0]} para {business.name}{detail}",
+        }[request.locale]
+        description = {
+            "en": f"{language[2]} {business.primary_product} with {business.target_audience}{detail}",
+            "pt": f"{language[2]} {business.primary_product} com {business.target_audience}{detail}",
+            "es": f"{language[2]} {business.primary_product} con {business.target_audience}{detail}",
+        }[request.locale]
         return {
-            "reach": "Compártelo con alguien que disfrutaría conocerlo.",
-            "engagement": "Cuéntanos qué te parece.",
-            "sales": "Escríbenos para conocer la disponibilidad.",
-            "store_visits": "Visítanos y conócelo en el local.",
-            "launch": "Descúbrelo desde su lanzamiento.",
-            "brand_awareness": "Síguenos para conocer más de nuestra propuesta.",
-            "community": "Únete a la conversación y comparte tu experiencia.",
-        }[objective]
+            "summary": summary,
+            "recommendations": [{"title": language[1], "description": description, "priority": "high"}],
+            "next_actions": [language[3]],
+        }
+
+    @staticmethod
+    def _call_to_action(objective: str, locale: str = "es") -> str:
+        calls_to_action = {
+            "es": {
+                "reach": "Compártelo con alguien que disfrutaría conocerlo.",
+                "engagement": "Cuéntanos qué te parece.",
+                "sales": "Escríbenos para conocer la disponibilidad.",
+                "store_visits": "Visítanos y conócelo en el local.",
+                "launch": "Descúbrelo desde su lanzamiento.",
+                "brand_awareness": "Síguenos para conocer más de nuestra propuesta.",
+                "community": "Únete a la conversación y comparte tu experiencia.",
+            },
+            "en": {
+                "reach": "Share it with someone who would love to discover it.",
+                "engagement": "Tell us what you think.",
+                "sales": "Message us to check availability.",
+                "store_visits": "Visit us and discover it in person.",
+                "launch": "Discover it from launch day.",
+                "brand_awareness": "Follow us to learn more about our offer.",
+                "community": "Join the conversation and share your experience.",
+            },
+            "pt": {
+                "reach": "Compartilhe com alguém que gostaria de conhecer.",
+                "engagement": "Conte para nós o que você acha.",
+                "sales": "Envie uma mensagem para saber a disponibilidade.",
+                "store_visits": "Visite-nos e conheça pessoalmente.",
+                "launch": "Conheça desde o lançamento.",
+                "brand_awareness": "Siga-nos para saber mais sobre nossa proposta.",
+                "community": "Participe da conversa e compartilhe sua experiência.",
+            },
+        }
+        return calls_to_action.get(locale, calls_to_action["es"])[objective]
 
     async def generate_social_post(
         self,
@@ -71,13 +145,20 @@ class DemoContentModelProvider:
         tone = request.tone
         objective = request.objective
         text_lower = request.user_request.lower()
-        cta = self._call_to_action(objective)
+        cta = self._call_to_action(objective, request.locale)
         hook = f"Una nueva idea de {context.name} para ti ✨"
         caption = (
             f"En {context.name} queremos presentarte {context.primary_product}. "
             f"Una propuesta pensada para {context.target_audience.lower()} en {context.city}. {cta}"
         )
         visual = "Usa una imagen clara del producto, poco texto y una acción principal visible."
+        preferred = next(
+            (
+                word for word in context.preferred_words
+                if word.casefold() not in {forbidden.casefold() for forbidden in context.forbidden_words}
+            ),
+            None,
+        )
         if "más corto" in text_lower or "shorter" in text_lower:
             caption = (
                 f"{context.primary_product} de {context.name}. "
@@ -97,42 +178,63 @@ class DemoContentModelProvider:
                 f"{context.name} trae {context.primary_product}. "
                 f"{cta} No te lo pierdas."
             )
+        if request.locale == "en":
+            hook = f"Discover {context.primary_product} with {context.name}"
+            caption = f"{context.name} presents {context.primary_product} for {context.target_audience.lower()}. {cta}"
+            visual = "Use a clear product image with minimal text."
+        elif request.locale == "pt":
+            hook = f"Conheça {context.primary_product} com {context.name}"
+            caption = f"{context.name} apresenta {context.primary_product} para {context.target_audience.lower()}. {cta}"
+            visual = "Use uma imagem clara do produto com pouco texto."
+        if preferred:
+            caption = f"{caption} {preferred}"
         if (
             "más profesional" in text_lower
             or "more professional" in text_lower
             or "more_professional" in text_lower
         ):
             tone = "professional"
-            hook = f"{context.primary_product} — {context.name}"
-            caption = (
-                f"{context.name} presenta {context.primary_product}. "
-                f"Una propuesta cuidadosamente seleccionada para {context.target_audience.lower()} "
-                f"en {context.city}. {cta}"
-            )
+            if request.locale == "en":
+                hook = f"{context.primary_product} — {context.name}"
+                caption = f"{context.name} presents {context.primary_product}, thoughtfully selected for {context.target_audience.lower()} in {context.city}. {cta}"
+            elif request.locale == "pt":
+                hook = f"{context.primary_product} — {context.name}"
+                caption = f"{context.name} apresenta {context.primary_product}, cuidadosamente selecionado para {context.target_audience.lower()} em {context.city}. {cta}"
+            else:
+                hook = f"{context.primary_product} — {context.name}"
+                caption = f"{context.name} presenta {context.primary_product}. Una propuesta cuidadosamente seleccionada para {context.target_audience.lower()} en {context.city}. {cta}"
         if (
             "más amigable" in text_lower
             or "more friendly" in text_lower
             or "more_friendly" in text_lower
         ):
             tone = "friendly"
-            hook = "¡Tenemos algo especial para ti! 🎉"
-            caption = (
-                f"¡Hola! En {context.name} tenemos {context.primary_product} que te encantará. "
-                f"Está pensado para {context.target_audience.lower()} como tú. "
-                f"{cta} Te esperamos."
-            )
+            if request.locale == "en":
+                hook = "We have something special for you! 🎉"
+                caption = f"Hi! {context.name} has {context.primary_product} you will love, made for {context.target_audience.lower()}. {cta}"
+            elif request.locale == "pt":
+                hook = "Temos algo especial para você! 🎉"
+                caption = f"Olá! {context.name} tem {context.primary_product} que você vai adorar, pensado para {context.target_audience.lower()}. {cta}"
+            else:
+                hook = "¡Tenemos algo especial para ti! 🎉"
+                caption = f"¡Hola! En {context.name} tenemos {context.primary_product} que te encantará. Está pensado para {context.target_audience.lower()} como tú. {cta} Te esperamos."
+        localized = {
+            "en": ("#HiTrendy", "#BusinessContent", f"The {tone} tone from the profile or request was used."),
+            "pt": ("#HiTrendy", "#ConteudoParaNegocios", f"Foi usado o tom {tone} do perfil ou da solicitação."),
+            "es": ("#HiTrendy", "#ContenidoParaNegocios", f"Se utilizó el tono {tone} del perfil o la solicitud."),
+        }[request.locale]
         return {
             "artifact_type": "social_post",
             "platform": platform,
             "hook": hook,
             "caption": caption,
             "call_to_action": cta,
-            "hashtags": ["#HiTrendy", "#ContenidoParaNegocios"],
+            "hashtags": [localized[0], localized[1]],
             "visual_direction": visual,
             "format_recommendation": "reel"
             if platform in {"instagram", "tiktok"}
             else "static_post",
-            "assumptions": [f"Se utilizó el tono {tone} del perfil o la solicitud."],
+            "assumptions": [localized[2]],
         }
 
     async def repair_social_post(
@@ -146,7 +248,7 @@ class DemoContentModelProvider:
 
     async def generate_short_video_script(self, *, request: ShortVideoScriptModelRequest) -> dict:
         context = request.business
-        cta = self._call_to_action(request.objective)
+        cta = self._call_to_action(request.objective, request.locale)
         product = context.primary_product
         return {
             "artifact_type": "short_video_script",
@@ -212,11 +314,14 @@ class OpenAICompatibleContentModelProvider:
         retry_base_seconds: float = 0.5,
         http_referer: str = "",
         app_title: str = "HiTrendy",
+        provider_name: str = "openai-compatible",
+        structured_output: bool = False,
         transport: httpx.AsyncBaseTransport | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
+        self.provider_name = provider_name
         self.model_name = model_name
         self._timeout = httpx.Timeout(timeout_seconds)
         self._max_retries = max_retries
@@ -225,6 +330,7 @@ class OpenAICompatibleContentModelProvider:
         self._app_title = app_title
         self._transport = transport
         self._sleep = sleep
+        self._structured_output = structured_output
 
     async def generate_social_post(self, *, request: SocialPostModelRequest) -> dict:
         system_prompt, _ = get_social_copy_prompt()
@@ -232,7 +338,31 @@ class OpenAICompatibleContentModelProvider:
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": json.dumps(request.model_dump(), ensure_ascii=False)},
-            ]
+            ],
+            response_schema=GeneratedSocialPost.model_json_schema(),
+        )
+
+    async def fetch_model_catalog(self) -> list[object]:
+        """Fetch OpenAI-compatible model data through this adapter's auth/client setup."""
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout, transport=self._transport) as client:
+                response = await client.get(f"{self._base_url}/models", headers=self._headers())
+            response.raise_for_status()
+            envelope = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            raise ValueError("Catálogo remoto no disponible.") from exc
+        if not isinstance(envelope, dict) or not isinstance(envelope.get("data"), list):
+            raise ValueError("Catálogo remoto inválido.")
+        return envelope["data"]
+
+    async def generate_advice(self, *, request: AdvisorModelRequest) -> dict:
+        system = (
+            "Devuelve únicamente JSON válido con summary, recommendations y next_actions. "
+            "No incluyas razonamiento privado. Respeta el locale y evita las palabras prohibidas del perfil."
+        )
+        return await self._complete(
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": json.dumps(request.model_dump(), ensure_ascii=False)}],
+            response_schema=AdvisorResponse.model_json_schema(),
         )
 
     async def repair_social_post(
@@ -253,7 +383,8 @@ class OpenAICompatibleContentModelProvider:
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": json.dumps(repair, ensure_ascii=False)},
-            ]
+            ],
+            response_schema=GeneratedSocialPost.model_json_schema(),
         )
 
     async def generate_short_video_script(self, *, request: ShortVideoScriptModelRequest) -> dict:
@@ -297,11 +428,13 @@ class OpenAICompatibleContentModelProvider:
             headers["X-Title"] = self._app_title
         return headers
 
-    async def _complete(self, *, messages: list[dict[str, str]]) -> dict:
+    async def _complete(
+        self, *, messages: list[dict[str, str]], response_schema: dict[str, Any] | None = None
+    ) -> dict:
         payload = {
             "model": self.model_name,
             "messages": messages,
-            "response_format": {"type": "json_object"},
+            "response_format": self._response_format(response_schema),
             "temperature": 0.4,
         }
 
@@ -339,15 +472,37 @@ class OpenAICompatibleContentModelProvider:
                     retryable=True,
                 ) from exc
 
+            if response.status_code == 402:
+                raise AppError(
+                    "PAYMENT_REQUIRED",
+                    "Esta ruta de generación requiere presupuesto habilitado.",
+                    status_code=402,
+                    retryable=False,
+                )
+
             if response.status_code == 429:
+                quota_exhausted = self._is_quota_exhausted(response)
+                retry_after = self._retry_after(response)
+                if quota_exhausted:
+                    raise AppError(
+                        "GENERATION_PROVIDER_QUOTA_EXHAUSTED",
+                        "La cuota disponible para esta generación se agotó.",
+                        status_code=429,
+                        retryable=False,
+                        retry_after=retry_after,
+                    )
                 if attempt < self._max_retries:
                     await self._backoff(attempt)
                     continue
+                message = "El servicio de generación está ocupado. Inténtalo de nuevo en un momento."
+                if retry_after is not None:
+                    message = f"El servicio de generación está ocupado. Inténtalo nuevamente en {retry_after} segundos."
                 raise AppError(
                     "GENERATION_PROVIDER_RATE_LIMITED",
-                    "El servicio de generación está ocupado. Inténtalo de nuevo en un momento.",
-                    status_code=503,
+                    message,
+                    status_code=429,
                     retryable=True,
+                    retry_after=retry_after,
                 )
 
             if 500 <= response.status_code <= 599:
@@ -382,8 +537,40 @@ class OpenAICompatibleContentModelProvider:
         delay = self._retry_base_seconds * (2**attempt)
         await self._sleep(delay)
 
+    def _response_format(self, response_schema: dict[str, Any] | None) -> dict[str, Any]:
+        if self._structured_output and response_schema is not None:
+            return {
+                "type": "json_schema",
+                "json_schema": {"name": "hitrendy_response", "strict": True, "schema": response_schema},
+            }
+        return {"type": "json_object"}
+
     @staticmethod
-    def _decode_response(response: httpx.Response) -> dict[str, Any]:
+    def _retry_after(response: httpx.Response) -> int | None:
+        value = response.headers.get("Retry-After", "").strip()
+        if value.isdigit():
+            parsed = int(value)
+            return parsed if 1 <= parsed <= 86400 else None
+        return None
+
+    @staticmethod
+    def _is_quota_exhausted(response: httpx.Response) -> bool:
+        """Classify only explicit quota/credit signals; ordinary 429 stays rate limited."""
+        try:
+            body = response.json()
+        except ValueError:
+            return False
+        if not isinstance(body, dict):
+            return False
+        error = body.get("error", body)
+        if not isinstance(error, dict):
+            return False
+        signal = " ".join(
+            str(error.get(key, "")) for key in ("code", "type", "message")
+        ).casefold()
+        return any(term in signal for term in ("quota", "credit", "insufficient", "exhausted"))
+
+    def _decode_response(self, response: httpx.Response) -> dict[str, Any]:
         try:
             envelope = response.json()
         except ValueError as exc:
@@ -446,4 +633,17 @@ class OpenAICompatibleContentModelProvider:
                 status_code=502,
                 retryable=True,
             )
-        return parsed
+        usage = envelope.get("usage")
+        if self.provider_name != "openrouter":
+            return parsed
+        metadata: dict[str, Any] = {
+            "requested_model": self.model_name,
+            "actual_model": envelope.get("model") if isinstance(envelope.get("model"), str) else None,
+            "prompt_tokens": usage.get("prompt_tokens") if isinstance(usage, dict) else None,
+            "completion_tokens": usage.get("completion_tokens") if isinstance(usage, dict) else None,
+            "total_tokens": usage.get("total_tokens") if isinstance(usage, dict) else None,
+            "reported_cost": usage.get("cost") if isinstance(usage, dict) else None,
+            "currency": "USD" if isinstance(usage, dict) and usage.get("cost") is not None else None,
+            "provider_request_id": envelope.get("id") if isinstance(envelope.get("id"), str) else None,
+        }
+        return {**parsed, "__provider_metadata": metadata}

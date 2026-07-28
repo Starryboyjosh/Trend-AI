@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from app.core.capabilities import QualityLevel
 from app.core.config import Settings
 from app.db.session import get_database_engine_options
 from app.providers.content import DemoContentModelProvider, OpenAICompatibleContentModelProvider
@@ -147,6 +148,121 @@ def test_factory_selects_explicit_demo_and_openai_compatible_providers(monkeypat
     provider = get_content_provider()
     assert isinstance(provider, OpenAICompatibleContentModelProvider)
     assert provider.model_name == "approved-model"
+
+
+def test_openrouter_configuration_uses_the_existing_openai_compatible_provider(monkeypatch) -> None:
+    configured = Settings(
+        {
+            "APP_ENV": "development",
+            "AI_PROVIDER": "openrouter",
+            "OPENROUTER_API_KEY": SECRET,
+            "OPENROUTER_FAST_MODEL": "openrouter/free",
+        }
+    )
+    configured.validate_runtime_configuration()
+    monkeypatch.setattr("app.providers.factory.settings", configured)
+
+    provider = get_content_provider()
+
+    assert isinstance(provider, OpenAICompatibleContentModelProvider)
+    assert provider.provider_name == "openrouter"
+    assert provider.model_name == "openrouter/free"
+    assert provider._structured_output is True
+
+
+@pytest.mark.parametrize("app_env", ["production", "staging"])
+def test_production_like_openrouter_configuration_is_valid(app_env: str) -> None:
+    values = _production_values()
+    values.update(
+        {
+            "APP_ENV": app_env,
+            "AI_PROVIDER": "openrouter",
+            "OPENROUTER_API_KEY": SECRET,
+            "OPENROUTER_FAST_MODEL": "openrouter/free",
+            "OPENROUTER_BASE_URL": "https://openrouter.ai/api/v1",
+        }
+    )
+    settings = Settings(values)
+
+    settings.validate_runtime_configuration()
+
+    assert settings.ai_provider == "openrouter"
+
+
+def test_production_rejects_demo_text_provider() -> None:
+    values = _production_values()
+    values["AI_PROVIDER"] = "demo"
+
+    with pytest.raises(RuntimeError, match="AI_PROVIDER"):
+        Settings(values).validate_runtime_configuration()
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "match"),
+    [
+        ("OPENROUTER_API_KEY", "", "OPENROUTER_API_KEY"),
+        ("OPENROUTER_BASE_URL", "http://openrouter.example/v1", "OPENROUTER_BASE_URL"),
+    ],
+)
+def test_production_openrouter_requires_key_and_https(field: str, value: str, match: str) -> None:
+    values = _production_values()
+    values.update(
+        {
+            "AI_PROVIDER": "openrouter",
+            "OPENROUTER_API_KEY": SECRET,
+            "OPENROUTER_FAST_MODEL": "openrouter/free",
+            "OPENROUTER_BASE_URL": "https://openrouter.ai/api/v1",
+            field: value,
+        }
+    )
+
+    with pytest.raises(RuntimeError, match=match):
+        Settings(values).validate_runtime_configuration()
+
+
+def test_openrouter_routes_select_only_explicit_approved_models(monkeypatch) -> None:
+    configured = Settings(
+        {
+            "APP_ENV": "development",
+            "AI_PROVIDER": "openrouter",
+            "OPENROUTER_API_KEY": SECRET,
+            "OPENROUTER_FAST_MODEL": "openrouter/free",
+            "OPENROUTER_BALANCED_MODEL": "approved/balanced",
+            "OPENROUTER_QUALITY_MODEL": "approved/quality",
+        }
+    )
+    monkeypatch.setattr("app.providers.factory.settings", configured)
+
+    assert get_content_provider(quality_level=QualityLevel.FAST).model_name == "openrouter/free"
+    assert get_content_provider(quality_level=QualityLevel.BALANCED).model_name == "approved/balanced"
+    assert get_content_provider(quality_level=QualityLevel.QUALITY).model_name == "approved/quality"
+
+
+def test_openrouter_configuration_fails_closed_without_a_key() -> None:
+    settings = Settings({"AI_PROVIDER": "openrouter"})
+
+    with pytest.raises(RuntimeError, match="OPENROUTER_API_KEY"):
+        settings.validate_runtime_configuration()
+
+
+@pytest.mark.parametrize("fast_model", ["paid/model", "arbitrary/model"])
+def test_openrouter_fast_route_rejects_any_non_free_model(
+    monkeypatch: pytest.MonkeyPatch, fast_model: str
+) -> None:
+    configured = Settings(
+        {
+            "AI_PROVIDER": "openrouter",
+            "OPENROUTER_API_KEY": SECRET,
+            "OPENROUTER_FAST_MODEL": fast_model,
+        }
+    )
+    with pytest.raises(RuntimeError, match="OPENROUTER_FAST_MODEL"):
+        configured.validate_runtime_configuration()
+
+    # Factory validation remains closed if a caller mutates Settings directly.
+    monkeypatch.setattr("app.providers.factory.settings", configured)
+    with pytest.raises(Exception, match="CAPABILITY_UNAVAILABLE"):
+        get_content_provider()
 
 
 def test_factory_keeps_demo_vision_available_in_production(monkeypatch) -> None:

@@ -72,7 +72,7 @@ def _template_ids(engine) -> list[str]:
 def test_upgrade_empty_postgres_to_head(postgres_engine) -> None:
     _upgrade("head")
     with postgres_engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "015"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "016"
     assert set(_template_ids(postgres_engine)) == EXPECTED_TEMPLATE_IDS
 
 
@@ -163,3 +163,38 @@ def test_upgrade_from_014_adds_google_oauth_schema(postgres_engine) -> None:
             )
         }
     assert "uq_pending_signup_oauth_identity" in constraints
+
+
+def test_upgrade_from_015_adds_ai_usage_events(postgres_engine) -> None:
+    _upgrade("015")
+    with postgres_engine.connect() as connection:
+        assert connection.scalar(text("SELECT to_regclass('public.ai_usage_events')")) is None
+    _upgrade("head")
+    with postgres_engine.connect() as connection:
+        columns = {
+            row.column_name: row.data_type
+            for row in connection.execute(text("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'ai_usage_events'"))
+        }
+        indexes = {
+            row.indexname
+            for row in connection.execute(text("SELECT indexname FROM pg_indexes WHERE tablename = 'ai_usage_events'"))
+        }
+        foreign_keys = {
+            row.conname
+            for row in connection.execute(
+                text(
+                    "SELECT conname FROM pg_constraint "
+                    "WHERE conrelid = 'ai_usage_events'::regclass AND contype = 'f'"
+                )
+            )
+        }
+    assert columns["reported_cost"] == "numeric"
+    assert {"workspace_id", "user_id", "created_at", "provider_request_id"} <= columns.keys()
+    assert {
+        "ix_ai_usage_events_workspace_id",
+        "ix_ai_usage_events_user_id",
+        "ix_ai_usage_events_created_at",
+    } <= indexes
+    assert len(foreign_keys) == 2
+    command.downgrade(_alembic_config(), "015")
+    _upgrade("head")

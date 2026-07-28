@@ -12,6 +12,7 @@ from app.domain.models import (
 from app.generation.contracts import ShortVideoScriptModelRequest
 from app.generation.prompt_registry import get_short_video_script_prompt
 from app.providers.content import ContentModelProvider
+from app.services.ai_usage import combine_usage_metadata
 from app.services.generate_social_post import BusinessContextRepository
 
 
@@ -40,6 +41,7 @@ class GenerateShortVideoScriptService:
         self._business_repository = business_repository
         self._artifact_repository = artifact_repository
         self._provider = provider
+        self.usage_metadata: dict[str, object] | None = None
 
     async def execute(self, command: GenerateShortVideoScriptCommand) -> GeneratedShortVideoScript:
         context = await self._business_repository.get_for_generation(
@@ -53,6 +55,8 @@ class GenerateShortVideoScriptService:
             prompt_version=prompt_version,
         )
         raw = await self._provider.generate_short_video_script(request=request)
+        metadata = raw.pop("__provider_metadata", None)
+        self.usage_metadata = metadata if isinstance(metadata, dict) else None
         try:
             artifact = GeneratedShortVideoScript.model_validate(raw)
         except ValidationError as exc:
@@ -60,6 +64,11 @@ class GenerateShortVideoScriptService:
                 request=request,
                 invalid_output=raw,
                 errors=[error["msg"] for error in exc.errors()],
+            )
+            repair_metadata = raw.pop("__provider_metadata", None)
+            self.usage_metadata = combine_usage_metadata(
+                self.usage_metadata,
+                repair_metadata if isinstance(repair_metadata, dict) else None,
             )
             try:
                 artifact = GeneratedShortVideoScript.model_validate(raw)

@@ -12,6 +12,21 @@ from app.domain.models import (
 )
 
 
+class AdvisorModelRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: str = "advisor-response@1.0.0"
+    locale: str = "es"
+    business: BusinessGenerationContext
+    user_request: str = Field(min_length=1, max_length=4000)
+
+    @classmethod
+    def from_context(
+        cls, *, context: BusinessGenerationContext, user_request: str, locale: str
+    ) -> AdvisorModelRequest:
+        return cls(business=context, user_request=user_request, locale=locale)
+
+
 class SocialPostModelRequest(BaseModel):
     """A bounded, database-free envelope passed to a content provider."""
 
@@ -20,7 +35,7 @@ class SocialPostModelRequest(BaseModel):
     prompt_id: str = "social-copy"
     prompt_version: str
     schema_version: str = "generated-social-post@1.0.0"
-    locale: str = "es-HN"
+    locale: str = "es"
     business: BusinessGenerationContext
     user_request: str = Field(min_length=1, max_length=4000)
     platform: Platform
@@ -46,6 +61,7 @@ class SocialPostModelRequest(BaseModel):
             objective=command.objective or context.primary_objective,
             tone=command.tone or context.brand_tones[0],
             product_or_service=context.primary_product,
+            locale=command.locale,
         )
 
 
@@ -57,7 +73,7 @@ class ShortVideoScriptModelRequest(BaseModel):
     prompt_id: str = "short-video-script"
     prompt_version: str
     schema_version: str = "short-video-script@1.0.0"
-    locale: str = "es-HN"
+    locale: str = "es"
     business: BusinessGenerationContext
     user_request: str = Field(min_length=1, max_length=4000)
     platform: Platform
@@ -82,4 +98,5 @@ class ShortVideoScriptModelRequest(BaseModel):
             objective=command.objective or context.primary_objective,
             tone=command.tone or context.brand_tones[0],
             product_or_service=context.primary_product,
+            locale=command.locale,
         )

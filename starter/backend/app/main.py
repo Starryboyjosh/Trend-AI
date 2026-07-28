@@ -30,6 +30,7 @@ from app.projects.routes import router as project_router
 from app.templates.routes import router as template_router
 
 logger = logging.getLogger("hitrendy.http")
+logger.setLevel(logging.INFO)
 
 
 @asynccontextmanager
@@ -84,6 +85,7 @@ def _requires_rate_limit(path: str) -> bool:
     return (
         path in _RATE_LIMITED_PATHS
         or path.endswith("/messages")
+        or path.endswith("/advisor")
         or path.endswith("/variations")
         or path.endswith("/analyses")
     )

@@ -14,4 +14,5 @@ asyncio_mode = "strict"
 testpaths = ["tests"]
 markers = [
     "e2e: pruebas HTTP contra FastAPI y PostgreSQL migrado",
+    "real_ai: smoke opt-in que consume una llamada real de proveedor",
 ]

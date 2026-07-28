@@ -4,36 +4,18 @@ import os
 
 import pytest
 
-from app.core.config import Settings
-from app.domain.models import (
-    BusinessGenerationContext,
-    GeneratedShortVideoScript,
-    GeneratedSocialPost,
-)
-from app.generation.contracts import ShortVideoScriptModelRequest, SocialPostModelRequest
+from app.domain.models import AdvisorResponse, BusinessGenerationContext
+from app.generation.contracts import AdvisorModelRequest
 from app.providers.content import OpenAICompatibleContentModelProvider
 
 
 def _smoke_skip_reason() -> str | None:
-    enabled = os.environ.get("RUN_REAL_AI_SMOKE", "0").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
-    if not enabled:
+    if os.environ.get("RUN_REAL_AI_SMOKE", "0").strip().lower() not in {"1", "true", "yes", "on"}:
         return "RUN_REAL_AI_SMOKE no está habilitada."
-    if os.environ.get("AI_PROVIDER", "").strip().lower() != "openai-compatible":
-        return "AI_PROVIDER debe ser openai-compatible para el smoke real."
-    missing = [
-        name
-        for name in ("AI_BASE_URL", "AI_API_KEY", "AI_MODEL")
-        if not os.environ.get(name, "").strip()
-    ]
-    if missing:
-        return f"Faltan variables requeridas para el smoke real: {', '.join(missing)}."
-    if os.environ.get("AI_MODEL", "").strip() == "demo-v1":
-        return "AI_MODEL debe identificar un modelo real para el smoke."
+    if os.environ.get("AI_PROVIDER", "").strip().lower() != "openrouter":
+        return "AI_PROVIDER debe ser openrouter para el smoke real."
+    if not os.environ.get("OPENROUTER_API_KEY", "").strip():
+        return "Falta OPENROUTER_API_KEY para el smoke real."
     return None
 
 
@@ -43,67 +25,38 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _business() -> BusinessGenerationContext:
-    return BusinessGenerationContext(
-        business_id="business-real-smoke",
-        name="Café Aurora",
-        category="gastronomy",
-        city="Tegucigalpa",
-        country="Honduras",
-        primary_product="café frío artesanal",
-        target_audience="jóvenes profesionales",
-        preferred_platforms=["instagram", "tiktok"],
-        primary_objective="engagement",
-        brand_tones=["friendly", "professional"],
-        value_proposition="Bebidas artesanales preparadas al momento.",
-        preferred_words=["artesanal", "fresco"],
-        forbidden_words=["milagroso"],
-        profile_version=1,
-    )
-
-
+@pytest.mark.real_ai
 @pytest.mark.asyncio
-async def test_openrouter_generates_both_phase1_contracts() -> None:
-    settings = Settings()
-    settings.validate_runtime_configuration()
-    assert settings.ai_provider == "openai-compatible"
-
+async def test_openrouter_fast_advisor_smoke() -> None:
+    """One minimal OpenRouter call, deliberately excluded from normal CI."""
     provider = OpenAICompatibleContentModelProvider(
-        base_url=settings.ai_base_url,
-        api_key=settings.ai_api_key,
-        model_name=settings.ai_model,
-        timeout_seconds=settings.ai_timeout_seconds,
-        max_retries=settings.ai_max_retries,
-        retry_base_seconds=settings.ai_retry_base_seconds,
-        http_referer=settings.ai_http_referer,
-        app_title=settings.ai_app_title,
+        base_url=os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
+        api_key=os.environ["OPENROUTER_API_KEY"],
+        model_name="openrouter/free",
+        provider_name="openrouter",
+        timeout_seconds=30,
+        max_retries=0,
+        http_referer=os.environ.get("AI_HTTP_REFERER", ""),
+        app_title=os.environ.get("AI_APP_TITLE", "HiTrendy"),
+        structured_output=True,
     )
-    business = _business()
-
-    social_request = SocialPostModelRequest(
-        business=business,
-        user_request="Crea una publicación breve en español para presentar el café frío.",
-        platform="instagram",
-        tone="friendly",
-        objective="engagement",
-        prompt_version="real-smoke-v1",
-        product_or_service=business.primary_product,
+    business = BusinessGenerationContext(
+        business_id="real-smoke", name="Café Aurora", category="gastronomy",
+        city="Tegucigalpa", country="Honduras", primary_product="café frío",
+        target_audience="jóvenes profesionales", preferred_platforms=["instagram"],
+        primary_objective="engagement", brand_tones=["friendly"],
+        value_proposition="Bebidas preparadas al momento.", forbidden_words=["milagroso"],
     )
-    social_raw = await provider.generate_social_post(request=social_request)
-    social = GeneratedSocialPost.model_validate(social_raw)
-    assert social.caption.strip()
-    assert social.platform == "instagram"
-
-    video_request = ShortVideoScriptModelRequest(
-        business=business,
-        user_request="Crea un guion vertical de menos de 45 segundos en español.",
-        platform="tiktok",
-        tone="friendly",
-        objective="engagement",
-        prompt_version="real-smoke-v1",
-        product_or_service=business.primary_product,
+    raw = await provider.generate_advice(
+        request=AdvisorModelRequest(
+            business=business, locale="es", user_request="Da una recomendación breve y accionable."
+        )
     )
-    video_raw = await provider.generate_short_video_script(request=video_request)
-    video = GeneratedShortVideoScript.model_validate(video_raw)
-    assert 5 <= video.duration_seconds <= 90
-    assert len(video.scenes) >= 2
+    metadata = raw.pop("__provider_metadata", {})
+    response = AdvisorResponse.model_validate(raw)
+    assert response.summary.strip()
+    assert metadata.get("requested_model") == "openrouter/free"
+    # OpenRouter may omit usage/model metadata for free routing; validate it only if present.
+    actual_model = metadata.get("actual_model")
+    assert actual_model is None or isinstance(actual_model, str)
+    assert metadata.get("total_tokens") is None or isinstance(metadata.get("total_tokens"), int)

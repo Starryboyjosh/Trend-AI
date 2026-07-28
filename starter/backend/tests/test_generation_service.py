@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 import pytest
 
+from app.core.errors import AppError
 from app.domain.models import (
     BusinessGenerationContext,
     GeneratedSocialPost,
@@ -101,54 +104,88 @@ class QualityRepairingProvider:
         return _artifact()
 
 
-@pytest.mark.asyncio
-async def test_generation_repairs_invalid_output_and_persists_auditable_metadata() -> None:
-    repository = ArtifactRepository()
-    provider = RepairingProvider()
-    service = GenerateSocialPostService(ContextRepository(), repository, provider)
+class UsageRepairingProvider(QualityRepairingProvider):
+    def __init__(self) -> None:
+        super().__init__()
+        self.calls = 0
 
-    artifact = await service.execute(
-        GenerateSocialPostCommand(
-            workspace_id="ws_001",
-            business_id="biz_001",
-            conversation_id="conv_001",
-            text="Promociona el café frío",
-            platform="instagram",
-            objective="sales",
+    async def generate_social_post(self, *, request: object) -> dict:
+        self.calls += 1
+        payload = await super().generate_social_post(request=request)
+        payload["__provider_metadata"] = {
+            "requested_model": "openrouter/free",
+            "actual_model": "physical/first",
+            "prompt_tokens": 3,
+            "completion_tokens": 5,
+            "total_tokens": 8,
+            "reported_cost": Decimal("0.001"),
+            "currency": "USD",
+            "provider_request_id": "first-request",
+        }
+        return payload
+
+    async def repair_social_post(
+        self, *, request: object, invalid_output: dict, errors: list[str]
+    ) -> dict:
+        self.calls += 1
+        payload = await super().repair_social_post(
+            request=request, invalid_output=invalid_output, errors=errors
         )
-    )
-
-    assert artifact.caption == _artifact()["caption"]
-    assert provider.repair_calls == 1
-    assert repository.saved is not None
-    assert repository.saved["objective"] == "sales"
-    assert repository.saved["provider_name"] == "test-provider"
-    assert repository.saved["model_name"] == "test-model"
-    assert repository.saved["prompt_version"] == "social-copy@1.0.0"
+        payload["__provider_metadata"] = {
+            "requested_model": "openrouter/free",
+            "actual_model": "physical/second",
+            "prompt_tokens": 7,
+            "completion_tokens": 11,
+            "total_tokens": 18,
+            "reported_cost": Decimal("0.002"),
+            "currency": "USD",
+            "provider_request_id": "second-request",
+        }
+        return payload
 
 
 @pytest.mark.asyncio
-async def test_variation_uses_the_same_contract_repair_flow() -> None:
+async def test_generation_rejects_invalid_output_without_persisting_an_artifact() -> None:
     repository = ArtifactRepository()
     provider = RepairingProvider()
     service = GenerateSocialPostService(ContextRepository(), repository, provider)
 
-    artifact = await service.execute_variation(
-        command=GenerateSocialPostCommand(
-            workspace_id="ws_001",
-            business_id="biz_001",
-            conversation_id="conv_001",
-            text="Hazlo más corto",
-        ),
-        artifact_id="artifact_001",
-        parent_version_id="version_001",
-    )
+    with pytest.raises(AppError, match="GENERATION_CONTRACT_INVALID"):
+        await service.execute(
+            GenerateSocialPostCommand(
+                workspace_id="ws_001",
+                business_id="biz_001",
+                conversation_id="conv_001",
+                text="Promociona el café frío",
+                platform="instagram",
+                objective="sales",
+            )
+        )
 
-    assert artifact.caption == _artifact()["caption"]
-    assert provider.repair_calls == 1
-    assert repository.saved is not None
-    assert repository.saved["artifact_id"] == "artifact_001"
-    assert repository.saved["parent_version_id"] == "version_001"
+    assert provider.repair_calls == 0
+    assert repository.saved is None
+
+
+@pytest.mark.asyncio
+async def test_variation_rejects_invalid_output_without_new_version() -> None:
+    repository = ArtifactRepository()
+    provider = RepairingProvider()
+    service = GenerateSocialPostService(ContextRepository(), repository, provider)
+
+    with pytest.raises(AppError, match="GENERATION_CONTRACT_INVALID"):
+        await service.execute_variation(
+            command=GenerateSocialPostCommand(
+                workspace_id="ws_001",
+                business_id="biz_001",
+                conversation_id="conv_001",
+                text="Hazlo más corto",
+            ),
+            artifact_id="artifact_001",
+            parent_version_id="version_001",
+        )
+
+    assert provider.repair_calls == 0
+    assert repository.saved is None
 
 
 @pytest.mark.asyncio
@@ -168,3 +205,32 @@ async def test_generation_repairs_unconfirmed_commercial_claims() -> None:
 
     assert artifact.caption == _artifact()["caption"]
     assert provider.repair_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_quality_repair_aggregates_all_provider_usage_metadata() -> None:
+    repository = ArtifactRepository()
+    provider = UsageRepairingProvider()
+    service = GenerateSocialPostService(ContextRepository(), repository, provider)
+
+    await service.execute(
+        GenerateSocialPostCommand(
+            workspace_id="ws_001",
+            business_id="biz_001",
+            conversation_id="conv_001",
+            text="Promociona el café frío",
+        )
+    )
+
+    assert provider.calls == 2
+    assert repository.saved is not None
+    assert service.usage_metadata == {
+        "requested_model": "openrouter/free",
+        "currency": "USD",
+        "actual_model": "physical/second",
+        "provider_request_id": "second-request",
+        "prompt_tokens": 10,
+        "completion_tokens": 16,
+        "total_tokens": 26,
+        "reported_cost": Decimal("0.003"),
+    }

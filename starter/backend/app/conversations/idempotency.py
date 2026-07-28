@@ -72,7 +72,7 @@ async def reserve(
 
 
 async def mark_failed(
-    db: AsyncSession, *, workspace_id: str, endpoint: str, key: str | None
+    db: AsyncSession, *, workspace_id: str, endpoint: str, key: str | None, commit: bool = True
 ) -> None:
     if not key:
         return
@@ -86,12 +86,37 @@ async def mark_failed(
     record = result.scalar_one_or_none()
     if record:
         record.status = "failed"
-        await db.commit()
+        if commit:
+            await db.commit()
 
 
-async def complete(db: AsyncSession, record: IdempotencyRecord | None, response: dict) -> dict:
+async def recover_failed(
+    db: AsyncSession,
+    *,
+    workspace_id: str,
+    endpoint: str,
+    key: str | None,
+) -> None:
+    """Leave a reserved request retryable even after later work rolls back."""
+    if not key:
+        await db.rollback()
+        return
+    await db.rollback()
+    await mark_failed(
+        db,
+        workspace_id=workspace_id,
+        endpoint=endpoint,
+        key=key,
+        commit=True,
+    )
+
+
+async def complete(
+    db: AsyncSession, record: IdempotencyRecord | None, response: dict, *, commit: bool = True
+) -> dict:
     if record:
         record.status = "completed"
         record.response_json = json.dumps(response, ensure_ascii=False)
-        await db.commit()
+        if commit:
+            await db.commit()
     return response

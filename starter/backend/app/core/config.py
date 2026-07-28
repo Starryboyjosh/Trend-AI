@@ -208,6 +208,19 @@ class Settings:
         )
         self.ai_http_referer: str = values.get("AI_HTTP_REFERER", "").strip()
         self.ai_app_title: str = values.get("AI_APP_TITLE", "HiTrendy").strip() or "HiTrendy"
+        self.openrouter_api_key: str = values.get("OPENROUTER_API_KEY", "").strip()
+        self.openrouter_base_url: str = values.get(
+            "OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"
+        ).strip().rstrip("/")
+        self.openrouter_fast_model: str = values.get(
+            "OPENROUTER_FAST_MODEL", "openrouter/free"
+        ).strip()
+        self.openrouter_balanced_model: str = values.get("OPENROUTER_BALANCED_MODEL", "").strip()
+        self.openrouter_quality_model: str = values.get("OPENROUTER_QUALITY_MODEL", "").strip()
+        self.openrouter_catalog_ttl_seconds: int = _positive_int(
+            values.get("OPENROUTER_CATALOG_TTL_SECONDS", "3600"),
+            name="OPENROUTER_CATALOG_TTL_SECONDS",
+        )
 
         self.vision_provider: str = values.get("VISION_PROVIDER", "demo").strip().lower()
         self.vision_model: str = values.get("VISION_MODEL", "demo-vision-v1").strip()
@@ -335,7 +348,7 @@ class Settings:
             raise RuntimeError(
                 f"APP_ENV debe ser {' ,'.join(sorted(VALID_ENVS))}."
             )
-        if self.ai_provider not in {"demo", "openai-compatible"}:
+        if self.ai_provider not in {"demo", "openai-compatible", "openrouter"}:
             raise RuntimeError("AI_PROVIDER no es compatible.")
         if self.vision_provider not in {"demo", "openai-compatible"}:
             raise RuntimeError("VISION_PROVIDER no es compatible.")
@@ -430,6 +443,21 @@ class Settings:
                 require_https=self.is_production_like,
             )
 
+        if self.ai_provider == "openrouter":
+            if not self.openrouter_api_key or not self.openrouter_fast_model:
+                raise RuntimeError(
+                    "OPENROUTER_API_KEY y OPENROUTER_FAST_MODEL son obligatorias para openrouter."
+                )
+            if self.openrouter_fast_model != "openrouter/free":
+                raise RuntimeError(
+                    "OPENROUTER_FAST_MODEL debe ser openrouter/free durante WAVE-008B."
+                )
+            _validate_http_url(
+                self.openrouter_base_url,
+                name="OPENROUTER_BASE_URL",
+                require_https=self.is_production_like,
+            )
+
         if self.vision_provider == "openai-compatible":
             if not self.vision_base_url or not self.vision_api_key or not self.vision_model:
                 raise RuntimeError(
@@ -470,8 +498,10 @@ class Settings:
             ]
         ):
             raise RuntimeError("La configuración S3 de producción está incompleta.")
-        if self.ai_provider != "openai-compatible":
-            raise RuntimeError("AI_PROVIDER debe ser openai-compatible en producción.")
+        if self.ai_provider not in {"openai-compatible", "openrouter"}:
+            raise RuntimeError(
+                "AI_PROVIDER debe ser openai-compatible u openrouter en producción."
+            )
         if not self.csrf_enabled:
             raise RuntimeError("CSRF_ENABLED debe ser true en staging y producción.")
 

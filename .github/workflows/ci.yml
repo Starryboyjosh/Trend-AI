@@ -115,7 +115,7 @@ jobs:
           PYTHONPATH=. python -m alembic upgrade head
           PYTHONPATH=. python -m alembic current
 
-      - name: Confirmar revisión 015
+      - name: Confirmar revisión 016
         run: |
           python - <<'PY'
           import os
@@ -129,8 +129,8 @@ jobs:
                   text("SELECT version_num FROM alembic_version")
               )
 
-          assert revision == "015", (
-              f"Revisión inesperada: {revision!r}. Se esperaba '015'."
+          assert revision == "016", (
+              f"Revisión inesperada: {revision!r}. Se esperaba '016'."
           )
 
           print(f"Alembic revision: {revision}")

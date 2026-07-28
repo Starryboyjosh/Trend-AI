@@ -179,6 +179,13 @@ class CapabilityRegistry:
         self._outcome_store = outcome_store or NullCapabilityOutcomeStore()
 
     def _provider_status(self) -> tuple[CapabilityStatus, Tier]:
+        if settings.ai_provider == "openrouter":
+            if (
+                settings.openrouter_api_key
+                and settings.openrouter_fast_model == "openrouter/free"
+            ):
+                return CapabilityStatus.AVAILABLE, self._openrouter_tier()
+            return CapabilityStatus.UNCONFIGURED, Tier.UNKNOWN
         if settings.ai_provider == "openai-compatible":
             has_creds = bool(settings.ai_base_url and settings.ai_api_key and settings.ai_model)
             if has_creds:
@@ -189,6 +196,16 @@ class CapabilityRegistry:
                 return CapabilityStatus.DISABLED, Tier.FREE
             return CapabilityStatus.AVAILABLE, Tier.FREE
         return CapabilityStatus.UNCONFIGURED, Tier.UNKNOWN
+
+    @staticmethod
+    def _openrouter_tier() -> Tier:
+        paid_routes = bool(settings.openrouter_balanced_model or settings.openrouter_quality_model)
+        free_route = settings.openrouter_fast_model == "openrouter/free"
+        if free_route and paid_routes:
+            return Tier.MIXED
+        if paid_routes:
+            return Tier.PAID
+        return Tier.FREE
 
     def _vision_status(self) -> tuple[CapabilityStatus, Tier]:
         if settings.vision_provider == "openai-compatible":
@@ -202,8 +219,17 @@ class CapabilityRegistry:
             return CapabilityStatus.AVAILABLE, Tier.FREE
         return CapabilityStatus.UNCONFIGURED, Tier.UNKNOWN
 
-    def _levels_for(self, status: CapabilityStatus) -> list[QualityLevel]:
+    def _levels_for(
+        self, capability: Capability, status: CapabilityStatus
+    ) -> list[QualityLevel]:
         if status in (CapabilityStatus.AVAILABLE, CapabilityStatus.DEGRADED):
+            if capability in (Capability.ADVISOR, Capability.COPYWRITER) and settings.ai_provider == "openrouter":
+                levels = [QualityLevel.FAST]
+                if settings.openrouter_balanced_model:
+                    levels.append(QualityLevel.BALANCED)
+                if settings.openrouter_quality_model:
+                    levels.append(QualityLevel.QUALITY)
+                return levels
             return [QualityLevel.FAST]
         return []
 
@@ -213,7 +239,7 @@ class CapabilityRegistry:
             return PublicCapability(
                 status=status,
                 tier=tier,
-                quality_levels=self._levels_for(status),
+                quality_levels=self._levels_for(capability, status),
                 message=_sanitized_message(capability, status),
                 fallback=_FALLBACK_MAP.get(capability),
             )
@@ -223,7 +249,7 @@ class CapabilityRegistry:
             return PublicCapability(
                 status=status,
                 tier=tier,
-                quality_levels=self._levels_for(status),
+                quality_levels=self._levels_for(capability, status),
                 message=_sanitized_message(capability, status),
                 fallback=_FALLBACK_MAP.get(capability),
             )
@@ -271,7 +297,12 @@ class CapabilityRegistry:
             message=_sanitized_message(capability, CapabilityStatus.UNCONFIGURED),
         )
 
-    def _apply_outcome(self, info: PublicCapability, outcome: CapabilityOutcome | None) -> PublicCapability:
+    def _apply_outcome(
+        self,
+        capability: Capability,
+        info: PublicCapability,
+        outcome: CapabilityOutcome | None,
+    ) -> PublicCapability:
         if outcome is None:
             return info
 
@@ -283,7 +314,7 @@ class CapabilityRegistry:
             return PublicCapability(
                 status=base_status if base_status == CapabilityStatus.AVAILABLE else CapabilityStatus.AVAILABLE,
                 tier=info.tier,
-                quality_levels=self._levels_for(CapabilityStatus.AVAILABLE),
+                quality_levels=self._levels_for(capability, CapabilityStatus.AVAILABLE),
                 message=None,
                 fallback=info.fallback,
             )
@@ -319,7 +350,7 @@ class CapabilityRegistry:
             return PublicCapability(
                 status=CapabilityStatus.DEGRADED,
                 tier=info.tier,
-                quality_levels=self._levels_for(CapabilityStatus.DEGRADED),
+                quality_levels=self._levels_for(capability, CapabilityStatus.DEGRADED),
                 message="Esta función está funcionando con capacidad reducida.",
                 fallback=info.fallback,
             )
@@ -335,14 +366,14 @@ class CapabilityRegistry:
         for cap in Capability.all():
             info = self._base_capability(cap)
             outcome = self._outcome_store.get(cap)
-            info = self._apply_outcome(info, outcome)
+            info = self._apply_outcome(cap, info, outcome)
             caps[cap.value] = _public_to_dict(info)
         return caps
 
     def get_capability(self, capability: Capability) -> PublicCapability:
         info = self._base_capability(capability)
         outcome = self._outcome_store.get(capability)
-        return self._apply_outcome(info, outcome)
+        return self._apply_outcome(capability, info, outcome)
 
     async def resolve(
         self,

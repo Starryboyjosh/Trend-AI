@@ -14,6 +14,7 @@ from app.generation.contracts import SocialPostModelRequest
 from app.generation.evaluation import SocialPostEvaluator
 from app.generation.prompt_registry import get_social_copy_prompt
 from app.providers.content import ContentModelProvider
+from app.services.ai_usage import combine_usage_metadata
 
 
 class BusinessContextRepository(Protocol):
@@ -58,6 +59,7 @@ class GenerateSocialPostService:
         self._artifact_repository = artifact_repository
         self._provider = provider
         self._evaluator = evaluator or SocialPostEvaluator()
+        self.usage_metadata: dict[str, object] | None = None
 
     async def execute(self, command: GenerateSocialPostCommand) -> GeneratedSocialPost:
         artifact, context, request = await self._generate(command)
@@ -98,29 +100,27 @@ class GenerateSocialPostService:
             context=context, command=command, prompt_version=prompt_version
         )
         raw = await self._provider.generate_social_post(request=request)
+        self.usage_metadata = raw.pop("__provider_metadata", None)
         try:
             artifact = GeneratedSocialPost.model_validate(raw)
         except ValidationError as exc:
-            raw = await self._provider.repair_social_post(
-                request=request,
-                invalid_output=raw,
-                errors=[error["msg"] for error in exc.errors()],
-            )
-            try:
-                artifact = GeneratedSocialPost.model_validate(raw)
-            except ValidationError as repair_error:
-                raise AppError(
-                    "GENERATION_CONTRACT_INVALID",
-                    "No pudimos preparar una propuesta editable. Inténtalo nuevamente.",
-                    status_code=502,
-                    retryable=True,
-                ) from repair_error
+            raise AppError(
+                "GENERATION_CONTRACT_INVALID",
+                "No pudimos preparar una propuesta editable. Inténtalo nuevamente.",
+                status_code=502,
+                retryable=True,
+            ) from exc
         evaluation = self._evaluator.evaluate(artifact, request)
         if not evaluation.accepted:
             raw = await self._provider.repair_social_post(
                 request=request,
                 invalid_output=artifact.model_dump(),
                 errors=list(evaluation.issues),
+            )
+            repair_metadata = raw.pop("__provider_metadata", None)
+            self.usage_metadata = combine_usage_metadata(
+                self.usage_metadata,
+                repair_metadata if isinstance(repair_metadata, dict) else None,
             )
             try:
                 artifact = GeneratedSocialPost.model_validate(raw)

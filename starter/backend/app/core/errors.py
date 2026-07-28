@@ -11,10 +11,14 @@ class AppError(HTTPException):
         message: str,
         status_code: int = 400,
         retryable: bool = False,
+        retry_after: int | None = None,
     ) -> None:
         self.code = code
         self.message = message
         self.retryable = retryable
+        # Only a bounded, parsed delay is ever reflected to clients.  Provider
+        # headers and bodies are intentionally not forwarded.
+        self.retry_after = retry_after if retry_after is not None and 1 <= retry_after <= 86400 else None
         super().__init__(status_code=status_code, detail=self._envelope())
 
     def _envelope(self) -> dict:
@@ -56,4 +60,5 @@ class ConflictError(AppError):
 
 
 async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
-    return JSONResponse(status_code=exc.status_code, content=exc._envelope())
+    headers = {"Retry-After": str(exc.retry_after)} if exc.retry_after is not None else None
+    return JSONResponse(status_code=exc.status_code, content=exc._envelope(), headers=headers)
