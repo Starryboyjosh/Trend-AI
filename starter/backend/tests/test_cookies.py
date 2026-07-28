@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import Response
 
+from app.core.config import settings
 from app.core.cookies import (
     CSRF_COOKIE,
     OAUTH_COOKIE,
@@ -86,6 +87,17 @@ def test_delete_session_cookie() -> None:
     set_cookie = response.headers.get("set-cookie", "")
     assert SESSION_COOKIE in set_cookie
     assert "max-age=0" in set_cookie.lower() or "expires" in set_cookie.lower()
+
+
+def test_session_cookie_name_uses_runtime_configuration(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "session_cookie_name", "custom_session")
+    response = _make_response()
+    set_session_cookie(response, "test-token")
+    assert "custom_session=" in response.headers.get("set-cookie", "")
+
+    response = _make_response()
+    delete_session_cookie(response)
+    assert "custom_session=" in response.headers.get("set-cookie", "")
 
 
 def test_delete_signup_cookie() -> None:

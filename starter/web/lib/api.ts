@@ -6,6 +6,7 @@ import {
 } from "@/lib/demo-mode";
 import type { Category, Objective, Platform } from "@/types/business";
 import type { Tone } from "@/types/brand";
+import type { PublicCapabilities } from "@/types/capabilities";
 
 let _csrfToken: string | null = null;
 let _csrfTokenPromise: Promise<string | null> | null = null;
@@ -427,6 +428,17 @@ async function demoRequest<T>(
     return { ok: true } as T;
   }
 
+  if (pathname === "/api/v1/capabilities" && method === "GET") {
+    return {
+      advisor: { status: "available", tier: "free", quality_levels: ["fast"] },
+      copywriter: { status: "available", tier: "free", quality_levels: ["fast"] },
+      vision_review: { status: "available", tier: "free", quality_levels: ["fast"] },
+      image_generation: { status: "disabled", tier: "paid", quality_levels: [] },
+      video_generation: { status: "disabled", tier: "paid", quality_levels: [] },
+      trend_analysis: { status: "disabled", tier: "free", quality_levels: [] },
+    } as T;
+  }
+
   const demoProjects = readDemoProjects(
     cloneDemo(demoData.projects)
   );
@@ -678,6 +690,12 @@ function parseJsonBody(
 const BASE = "/api/v1";
 
 export const api = {
+  capabilities: {
+    get(): Promise<PublicCapabilities> {
+      return request<PublicCapabilities>(`${BASE}/capabilities`);
+    },
+  },
+
   conversations: {
     create(data: Record<string, unknown>) {
       return request<Record<string, unknown>>(

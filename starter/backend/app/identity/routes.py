@@ -25,8 +25,8 @@ from app.business.repository import (
 from app.core.config import settings
 from app.core.cookies import (
     OAUTH_COOKIE,
-    SESSION_COOKIE,
     SIGNUP_COOKIE,
+    delete_csrf_cookie,
     delete_oauth_cookie,
     delete_session_cookie,
     delete_signup_cookie,
@@ -136,6 +136,24 @@ async def _create_session(db: AsyncSession, user_id: str) -> str:
     )
     await db.flush()
     return token
+
+
+async def _reject_authenticated_signup(
+    db: AsyncSession, session_token: str | None
+) -> None:
+    if not session_token:
+        return
+    session = (
+        await db.execute(
+            select(AuthSession).where(AuthSession.token_hash == _token_hash(session_token))
+        )
+    ).scalar_one_or_none()
+    if session is not None and not _datetime_is_expired(session.expires_at):
+        raise AppError(
+            "ALREADY_AUTHENTICATED",
+            "Ya tienes una sesión activa.",
+            status_code=409,
+        )
 
 
 
@@ -356,6 +374,8 @@ async def register(
     token = await _create_session(db, user.id)
     await db.commit()
     set_session_cookie(response, token)
+    delete_signup_cookie(response)
+    delete_csrf_cookie(response)
     return {
         "user": {"id": user.id, "name": user.name, "email": user.email},
         "workspace": {"id": workspace.id, "name": workspace.name, "role": "owner"},
@@ -455,6 +475,7 @@ async def google_callback(
         response = _google_callback_redirect("/dashboard")
         set_session_cookie(response, token)
         delete_signup_cookie(response)
+        delete_csrf_cookie(response)
         return response
 
     signup_token = await _create_or_resume_google_signup(db, identity)
@@ -471,8 +492,10 @@ async def google_callback(
 async def start_signup(
     body: SignupStartRequest,
     response: Response,
+    session_token: str | None = Cookie(None, alias=settings.session_cookie_name),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, object]:
+    await _reject_authenticated_signup(db, session_token)
     now = datetime.now(UTC)
     email = body.email.casefold().strip()
     await db.execute(
@@ -519,8 +542,10 @@ async def get_signup(
 async def save_signup_draft(
     body: SignupDraftRequest,
     signup_token: str | None = Cookie(None, alias=SIGNUP_COOKIE),
+    session_token: str | None = Cookie(None, alias=settings.session_cookie_name),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, object]:
+    await _reject_authenticated_signup(db, session_token)
     pending = await _get_pending_signup(db, signup_token)
     if pending.completed_at is not None:
         raise AppError("SIGNUP_CONFLICT", "El registro ya fue completado.", status_code=409)
@@ -548,8 +573,10 @@ async def save_signup_draft(
 async def cancel_signup(
     response: Response,
     signup_token: str | None = Cookie(None, alias=SIGNUP_COOKIE),
+    session_token: str | None = Cookie(None, alias=settings.session_cookie_name),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
+    await _reject_authenticated_signup(db, session_token)
     pending = await _get_pending_signup(db, signup_token)
     if pending.completed_at is not None:
         raise AppError("SIGNUP_CONFLICT", "El registro ya fue completado.", status_code=409)
@@ -579,6 +606,7 @@ async def complete_signup(
     response: Response,
     idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=1, max_length=255),
     signup_token: str | None = Cookie(None, alias=SIGNUP_COOKIE),
+    session_token: str | None = Cookie(None, alias=settings.session_cookie_name),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, object]:
     pending = await _get_pending_signup(db, signup_token, lock=True)
@@ -586,6 +614,7 @@ async def complete_signup(
         if pending.completion_idempotency_key == idempotency_key:
             return json.loads(pending.completion_response_json or "{}")
         raise AppError("SIGNUP_CONFLICT", "El registro ya fue completado.", status_code=409)
+    await _reject_authenticated_signup(db, session_token)
     business_draft, channels_draft, brand_draft = _validated_complete_draft(_load_draft(pending))
     try:
         existing = await db.execute(select(User).where(User.email == pending.email_normalized))
@@ -650,6 +679,7 @@ async def complete_signup(
         raise
     set_session_cookie(response, session_token)
     delete_signup_cookie(response)
+    delete_csrf_cookie(response)
     return result
 
 
@@ -664,6 +694,8 @@ async def login(body: LoginRequest, response: Response, db: AsyncSession = Depen
     token = await _create_session(db, user.id)
     await db.commit()
     set_session_cookie(response, token)
+    delete_signup_cookie(response)
+    delete_csrf_cookie(response)
     return {"user": {"id": user.id, "name": user.name, "email": user.email}}
 
 
@@ -687,7 +719,7 @@ async def me(principal: CurrentPrincipal = Depends(get_current_principal)) -> di
 @router.get("/csrf")
 async def csrf_token(
     response: Response,
-    session_token: str | None = Cookie(None, alias=SESSION_COOKIE),
+    session_token: str | None = Cookie(None, alias=settings.session_cookie_name),
     signup_token: str | None = Cookie(None, alias=SIGNUP_COOKIE),
 ) -> dict[str, str | None]:
     context = _pick_context("/api/v1/auth/csrf", session_token, signup_token)

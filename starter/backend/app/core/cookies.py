@@ -7,7 +7,7 @@ from fastapi import Response
 
 from app.core.config import settings
 
-SESSION_COOKIE = "hitrendy_session"
+SESSION_COOKIE = settings.session_cookie_name
 SIGNUP_COOKIE = "hitrendy_signup"
 OAUTH_COOKIE = "hitrendy_google_oauth"
 CSRF_COOKIE = "hitrendy_csrf"
@@ -37,7 +37,7 @@ def _csrf_cookie_samesite() -> Literal["lax", "strict", "none"]:
 
 def set_session_cookie(response: Response, token: str) -> None:
     response.set_cookie(
-        key=SESSION_COOKIE,
+        key=settings.session_cookie_name,
         value=token,
         httponly=True,
         secure=_cookie_secure(),
@@ -50,7 +50,7 @@ def set_session_cookie(response: Response, token: str) -> None:
 
 def delete_session_cookie(response: Response) -> None:
     response.delete_cookie(
-        key=SESSION_COOKIE,
+        key=settings.session_cookie_name,
         path="/",
         domain=_cookie_domain(),
         secure=_cookie_secure(),

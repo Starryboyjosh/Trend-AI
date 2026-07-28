@@ -98,6 +98,38 @@ def test_production_rejects_cors_wildcard_with_credentials() -> None:
         Settings(values).validate_runtime_configuration()
 
 
+def test_origins_are_normalized_and_deduplicated() -> None:
+    settings = Settings({"APP_ENV": "development", "ALLOWED_ORIGINS": " http://localhost:3000/ ,http://localhost:3000"})
+    assert settings.allowed_origin_list == ["http://localhost:3000"]
+
+
+@pytest.mark.parametrize("origin", ["https://app.example.com/path", "https://app.example.com?x=1", "https://user:pass@app.example.com"])
+def test_origins_reject_non_origin_values(origin: str) -> None:
+    with pytest.raises(RuntimeError, match="ALLOWED_ORIGINS"):
+        Settings({"APP_ENV": "development", "ALLOWED_ORIGINS": origin})
+
+
+def test_staging_requires_csrf_and_hosts() -> None:
+    values = _minimal_production()
+    values["APP_ENV"] = "staging"
+    values["CSRF_ENABLED"] = "false"
+    with pytest.raises(RuntimeError, match="CSRF_ENABLED"):
+        Settings(values).validate_runtime_configuration()
+    values["CSRF_ENABLED"] = "true"
+    values.pop("ALLOWED_HOSTS")
+    with pytest.raises(RuntimeError, match="ALLOWED_HOSTS"):
+        Settings(values).validate_runtime_configuration()
+
+
+def test_forwarded_allow_ips_rejects_invalid_and_production_wildcard() -> None:
+    with pytest.raises(RuntimeError, match="FORWARDED_ALLOW_IPS"):
+        Settings({"APP_ENV": "development", "FORWARDED_ALLOW_IPS": "not-an-ip"}).validate_runtime_configuration()
+    values = _minimal_production()
+    values["FORWARDED_ALLOW_IPS"] = "*"
+    with pytest.raises(RuntimeError, match="FORWARDED_ALLOW_IPS"):
+        Settings(values).validate_runtime_configuration()
+
+
 def test_invalid_env_rejected() -> None:
     with pytest.raises(RuntimeError, match="APP_ENV"):
         Settings({"APP_ENV": "invalid"}).validate_runtime_configuration()

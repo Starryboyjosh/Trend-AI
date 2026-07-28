@@ -10,12 +10,15 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.assets.routes import router as asset_router
 from app.business.routes import router as business_router
+from app.capabilities.routes import router as capabilities_router
 from app.conversations.routes import router as conversation_router
 from app.core.config import settings
-from app.core.cookies import CSRF_COOKIE, SESSION_COOKIE, SIGNUP_COOKIE, set_csrf_cookie
+from app.core.cookies import CSRF_COOKIE, SIGNUP_COOKIE, set_csrf_cookie
 from app.core.ephemeral_store import get_ephemeral_store
 from app.core.errors import AppError, app_error_handler
 from app.core.hosts import trusted_host_middleware
@@ -61,15 +64,6 @@ _CORS_HEADERS = [
     "X-Request-Id",
     "Idempotency-Key",
 ]
-
-cors_origins = settings.allowed_origin_list
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=True,
-    allow_methods=_CORS_METHODS,
-    allow_headers=_CORS_HEADERS,
-)
 
 app.add_exception_handler(AppError, app_error_handler)
 
@@ -118,15 +112,12 @@ def _record_request(request: Request, request_id: str, status_code: int, started
     )
 
 
-@app.middleware("http")
 async def trusted_host_handler(request: Request, call_next):
     return await trusted_host_middleware(request, call_next)
 
 
-@app.middleware("http")
-async def security_headers(request: Request, call_next):
-    started = monotonic()
-    request_id = request.headers.get("X-Request-Id") or uuid4().hex
+async def request_controls(request: Request, call_next):
+    request_id = getattr(request.state, "request_id", request.headers.get("X-Request-Id") or uuid4().hex)
     content_length = request.headers.get("content-length")
     if _requires_rate_limit(request.url.path):
         key = f"hitrendy:rate-limit:{request.client.host if request.client else 'unknown'}:{request.url.path}"
@@ -149,7 +140,6 @@ async def security_headers(request: Request, call_next):
                     "Retry-After": str(settings.rate_limit_window_seconds),
                 },
             )
-            _record_request(request, request_id, limited_response.status_code, started)
             return limited_response
     if content_length:
         try:
@@ -166,7 +156,6 @@ async def security_headers(request: Request, call_next):
                 },
                 headers={"X-Request-Id": request_id},
             )
-            _record_request(request, request_id, invalid_length_response.status_code, started)
             return invalid_length_response
         if requested_bytes > settings.max_request_body_bytes:
             oversized_response = JSONResponse(
@@ -180,12 +169,19 @@ async def security_headers(request: Request, call_next):
                 },
                 headers={"X-Request-Id": request_id},
             )
-            _record_request(request, request_id, oversized_response.status_code, started)
             return oversized_response
+    response = await call_next(request)
+    return response
+
+
+async def security_headers(request: Request, call_next):
+    started = monotonic()
+    request_id = request.headers.get("X-Request-Id") or uuid4().hex
+    request.state.request_id = request_id
     try:
         response = await call_next(request)
     except Exception:
-        logger.error(
+        logger.exception(
             "http_request_failed",
             extra={
                 "request_id": request_id,
@@ -195,7 +191,16 @@ async def security_headers(request: Request, call_next):
                 "duration_ms": round((monotonic() - started) * 1000, 2),
             },
         )
-        raise
+        response = JSONResponse(
+            status_code=500,
+            content={
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": "Ocurrió un error interno.",
+                    "retryable": True,
+                }
+            },
+        )
     response.headers["X-Request-Id"] = request_id
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
@@ -203,7 +208,7 @@ async def security_headers(request: Request, call_next):
     response.headers["Permissions-Policy"] = (
         "camera=(), geolocation=(), microphone=()"
     )
-    if settings.is_production_like:
+    if settings.is_production_like and request.url.scheme == "https":
         response.headers["Strict-Transport-Security"] = (
             f"max-age={settings.hsts_max_age_seconds}"
             f"{'; includeSubDomains' if settings.hsts_include_subdomains else ''}"
@@ -212,7 +217,6 @@ async def security_headers(request: Request, call_next):
     return response
 
 
-@app.middleware("http")
 async def csrf_handler(request: Request, call_next):
     if not settings.csrf_enabled:
         return await call_next(request)
@@ -225,7 +229,7 @@ async def csrf_handler(request: Request, call_next):
 
     path = request.url.path
     method = request.method
-    session_token = request.cookies.get(SESSION_COOKIE)
+    session_token = request.cookies.get(settings.session_cookie_name)
     signup_token = request.cookies.get(SIGNUP_COOKIE)
 
     if not should_validate_csrf(path, method):
@@ -243,6 +247,84 @@ async def csrf_handler(request: Request, call_next):
     return await csrf_middleware(request, call_next)
 
 
+class RequestBodyLimitMiddleware:
+    """Enforce the configured byte limit while the ASGI body stream is consumed."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        content_length = next(
+            (value for key, value in scope.get("headers", []) if key == b"content-length"),
+            None,
+        )
+        if content_length is not None:
+            try:
+                if int(content_length) > settings.max_request_body_bytes:
+                    await self._reject(scope, receive, send)
+                    return
+            except ValueError:
+                await self._invalid_length(scope, receive, send)
+                return
+
+        received_bytes = 0
+        rejected = False
+        response_started = False
+
+        async def limited_receive() -> Message:
+            nonlocal received_bytes, rejected
+            message = await receive()
+            if message["type"] == "http.request":
+                received_bytes += len(message.get("body", b""))
+                if received_bytes > settings.max_request_body_bytes:
+                    rejected = True
+                    if not response_started:
+                        await self._reject(scope, receive, send)
+                    return {"type": "http.disconnect"}
+            return message
+
+        async def guarded_send(message: Message) -> None:
+            nonlocal response_started
+            if rejected:
+                return
+            if message["type"] == "http.response.start":
+                response_started = True
+            await send(message)
+
+        await self.app(scope, limited_receive, guarded_send)
+
+    @staticmethod
+    async def _reject(scope: Scope, receive: Receive, send: Send) -> None:
+        await JSONResponse(
+            status_code=413,
+            content={"error": {"code": "REQUEST_TOO_LARGE", "message": "La solicitud supera el tamaño permitido.", "retryable": False}},
+        )(scope, receive, send)
+
+    @staticmethod
+    async def _invalid_length(scope: Scope, receive: Receive, send: Send) -> None:
+        await JSONResponse(
+            status_code=400,
+            content={"error": {"code": "INVALID_CONTENT_LENGTH", "message": "El tamaño de la solicitud no es válido.", "retryable": False}},
+        )(scope, receive, send)
+app.add_middleware(BaseHTTPMiddleware, dispatch=trusted_host_handler)
+app.add_middleware(BaseHTTPMiddleware, dispatch=request_controls)
+app.add_middleware(BaseHTTPMiddleware, dispatch=csrf_handler)
+app.add_middleware(RequestBodyLimitMiddleware)
+app.add_middleware(BaseHTTPMiddleware, dispatch=security_headers)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.allowed_origin_list,
+    allow_credentials=True,
+    allow_methods=_CORS_METHODS,
+    allow_headers=_CORS_HEADERS,
+)
+
+
+app.include_router(capabilities_router, prefix=settings.api_prefix)
 app.include_router(business_router, prefix=settings.api_prefix)
 app.include_router(identity_router, prefix=settings.api_prefix)
 app.include_router(conversation_router, prefix=settings.api_prefix)

@@ -6,6 +6,7 @@ import {
   createIdempotencyKey,
   resetCsrfToken,
 } from "@/lib/api";
+import { isDemoModeEnabled } from "@/lib/demo-mode";
 
 vi.mock("@/lib/demo-mode", () => ({
   isDemoModeEnabled: vi.fn(() => false),
@@ -363,5 +364,91 @@ describe("API client", () => {
 
     expect(cookieGetter).not.toHaveBeenCalled();
     cookieGetter.mockRestore();
+  });
+
+  describe("capabilities", () => {
+    test("obtiene snapshot de capacidades vía GET", async () => {
+      const snapshot = {
+        advisor: { status: "available", tier: "free", quality_levels: ["fast"] },
+        copywriter: { status: "available", tier: "free", quality_levels: ["fast"] },
+      };
+      fetchMock.mockResolvedValueOnce(jsonResponse(snapshot));
+
+      const result = await api.capabilities.get();
+
+      expect(result).toMatchObject(snapshot);
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/v1/capabilities",
+        expect.objectContaining({ credentials: "include" })
+      );
+    });
+
+    test("incluye las seis capacidades esperadas", async () => {
+      const snapshot = {
+        advisor: { status: "available", tier: "free", quality_levels: ["fast"] },
+        copywriter: { status: "available", tier: "free", quality_levels: ["fast"] },
+        vision_review: { status: "available", tier: "free", quality_levels: ["fast"] },
+        image_generation: { status: "disabled", tier: "paid", quality_levels: [] },
+        video_generation: { status: "disabled", tier: "paid", quality_levels: [] },
+        trend_analysis: { status: "disabled", tier: "free", quality_levels: [] },
+      };
+      fetchMock.mockResolvedValueOnce(jsonResponse(snapshot));
+
+      const result = await api.capabilities.get();
+
+      expect(Object.keys(result)).toHaveLength(6);
+      expect(result.advisor?.status).toBe("available");
+      expect(result.image_generation?.status).toBe("disabled");
+    });
+
+    test("parsea los ocho estados posibles", async () => {
+      const snapshot = {
+        advisor: { status: "available", tier: "free", quality_levels: ["fast"] },
+        copywriter: { status: "unconfigured", tier: "free", quality_levels: [] },
+        vision_review: { status: "degraded", tier: "free", quality_levels: ["fast"] },
+        image_generation: { status: "disabled", tier: "paid", quality_levels: [] },
+        video_generation: { status: "payment_required", tier: "paid", quality_levels: [] },
+        trend_analysis: { status: "quota_exhausted", tier: "free", quality_levels: [] },
+      };
+      fetchMock.mockResolvedValueOnce(jsonResponse(snapshot));
+
+      const result = await api.capabilities.get();
+      expect(result.advisor.status).toBe("available");
+      expect(result.copywriter.status).toBe("unconfigured");
+      expect(result.vision_review.status).toBe("degraded");
+      expect(result.image_generation.status).toBe("disabled");
+      expect(result.video_generation.status).toBe("payment_required");
+      expect(result.trend_analysis.status).toBe("quota_exhausted");
+    });
+
+    test("devuelve las seis capacidades deterministas en modo demo", async () => {
+      vi.mocked(isDemoModeEnabled).mockReturnValueOnce(true);
+
+      const result = await api.capabilities.get();
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(Object.keys(result)).toHaveLength(6);
+      expect(result.advisor.status).toBe("available");
+      expect(result.image_generation.tier).toBe("paid");
+    });
+
+    test("no solicita CSRF para GET", async () => {
+      fetchMock.mockResolvedValueOnce(jsonResponse({}));
+
+      await api.capabilities.get();
+
+      const csrfCalls = fetchMock.mock.calls.filter(
+        (c: unknown[]) => c[0] === "/api/v1/auth/csrf"
+      );
+      expect(csrfCalls.length).toBe(0);
+    });
+
+    test("error de API devuelve ApiError", async () => {
+      fetchMock.mockResolvedValueOnce(
+        new Response("Not Found", { status: 404 })
+      );
+
+      await expect(api.capabilities.get()).rejects.toThrow(ApiError);
+    });
   });
 });

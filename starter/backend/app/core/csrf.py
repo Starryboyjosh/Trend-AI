@@ -7,17 +7,10 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
-from app.core.cookies import CSRF_COOKIE, SESSION_COOKIE, SIGNUP_COOKIE
+from app.core.cookies import CSRF_COOKIE, SIGNUP_COOKIE
 
 CSRF_CONTEXT_SESSION = "session"
 CSRF_CONTEXT_SIGNUP = "signup"
-
-SIGNUP_PATHS: set[str] = {
-    "/api/v1/auth/signup",
-    "/api/v1/auth/signup/start",
-    "/api/v1/auth/signup/complete",
-}
-
 
 def _generate_csrf_token(context_token: str, context: str) -> str:
     return hmac.new(
@@ -57,8 +50,6 @@ def should_validate_csrf(path: str, method: str) -> bool:
 def _pick_context(
     path: str, session_token: str | None, signup_token: str | None
 ) -> tuple[str, str] | None:
-    if session_token and signup_token and path in SIGNUP_PATHS:
-        return signup_token, CSRF_CONTEXT_SIGNUP
     if session_token:
         return session_token, CSRF_CONTEXT_SESSION
     if signup_token:
@@ -72,7 +63,7 @@ async def csrf_middleware(request: Request, call_next):
 
     csrf_cookie = request.cookies.get(CSRF_COOKIE)
     csrf_header = request.headers.get("X-CSRF-Token")
-    session_token = request.cookies.get(SESSION_COOKIE)
+    session_token = request.cookies.get(settings.session_cookie_name)
     signup_token = request.cookies.get(SIGNUP_COOKIE)
 
     context = _pick_context(request.url.path, session_token, signup_token)

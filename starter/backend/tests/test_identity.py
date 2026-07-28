@@ -38,6 +38,7 @@ BRAND_DRAFT = {
 
 
 async def _start_signup(client: AsyncClient, email: str) -> tuple[int, str]:
+    client.cookies.delete(settings.session_cookie_name)
     response = await client.post(
         "/api/v1/auth/signup/start",
         json={
@@ -51,6 +52,21 @@ async def _start_signup(client: AsyncClient, email: str) -> tuple[int, str]:
     token = response.cookies.get(SIGNUP_COOKIE_NAME)
     assert token
     return response.json()["signup"]["version"], token
+
+
+@pytest.mark.asyncio
+async def test_authenticated_session_cannot_start_pending_signup(client: AsyncClient) -> None:
+    response = await client.post(
+        "/api/v1/auth/signup/start",
+        json={
+            "email": "pending@example.com",
+            "name": "Cuenta activa",
+            "password": "una-clave-segura-123",
+            "interface_locale": "es",
+        },
+    )
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "ALREADY_AUTHENTICATED"
 
 
 async def _complete_draft(client: AsyncClient, email: str) -> str:
@@ -308,7 +324,7 @@ async def test_signup_rejects_active_and_pending_email_reuse(client: AsyncClient
         },
     )
     assert active.status_code == 409
-    assert active.json()["error"]["code"] == "EMAIL_IN_USE"
+    assert active.json()["error"]["code"] == "ALREADY_AUTHENTICATED"
 
 
 @pytest.mark.asyncio

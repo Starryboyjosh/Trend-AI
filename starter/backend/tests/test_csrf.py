@@ -278,7 +278,7 @@ async def test_csrf_signup_token_from_another_account() -> None:
 
 
 @pytest.mark.asyncio
-async def test_csrf_session_token_used_with_signup() -> None:
+async def test_csrf_session_token_is_selected_when_both_cookies_are_present() -> None:
     from app.core.cookies import SIGNUP_COOKIE
     from app.main import app as main_app
 
@@ -298,8 +298,8 @@ async def test_csrf_session_token_used_with_signup() -> None:
                 json={"step": "business", "business": {"name": "Test"}},
                 headers={"X-CSRF-Token": session_csrf},
             )
-        assert response.status_code == 403
-        assert response.json()["error"]["code"] == "CSRF_TOKEN_INVALID"
+        assert response.status_code == 422
+        assert response.json()["detail"]
     finally:
         settings.csrf_enabled = original_enabled
 

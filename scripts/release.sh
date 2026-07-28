@@ -12,4 +12,8 @@ set -euo pipefail
 cd starter/backend
 
 echo "--- Starting application ---"
-exec python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+exec python -m uvicorn app.main:app \
+  --host 0.0.0.0 \
+  --port "${PORT:-8000}" \
+  --proxy-headers \
+  --forwarded-allow-ips "${FORWARDED_ALLOW_IPS:-127.0.0.1}"

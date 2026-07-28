@@ -4,12 +4,14 @@ import uuid
 
 import pytest
 
+from app.core.config import settings
 from app.core.cookies import SIGNUP_COOKIE as SIGNUP_COOKIE_NAME
 
 
 @pytest.mark.asyncio
 async def test_pending_signup_completes_over_http_and_replays_idempotently(client_factory) -> None:
     client, _ = await client_factory(name="Signup E2E")
+    client.cookies.delete(settings.session_cookie_name)
     email = f"signup-{uuid.uuid4().hex}@example.com"
     start = await client.post(
         "/api/v1/auth/signup/start",

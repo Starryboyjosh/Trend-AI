@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from ipaddress import ip_address, ip_network
 from os import environ
 from pathlib import Path
 from urllib.parse import urlparse
@@ -55,6 +56,15 @@ def _validate_http_url(value: str, *, name: str, require_https: bool) -> None:
         raise RuntimeError(f"{name} no debe contener credenciales embebidas.")
 
 
+def _normalize_origin(value: str, *, require_https: bool) -> str:
+    value = value.strip()
+    _validate_http_url(value, name="ALLOWED_ORIGINS", require_https=require_https)
+    parsed = urlparse(value)
+    if parsed.path not in {"", "/"} or parsed.params or parsed.query or parsed.fragment:
+        raise RuntimeError("ALLOWED_ORIGINS debe contener únicamente orígenes, sin paths ni query strings.")
+    return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
+
+
 def _normalize_database_url(value: str) -> str:
     if value.startswith("postgres://"):
         return value.replace("postgres://", "postgresql+psycopg://", 1)
@@ -75,9 +85,32 @@ def _is_local_database_url(value: str) -> bool:
     }
 
 
-def _validate_origin_list(origins: list[str], *, require_https: bool) -> None:
-    for origin in origins:
-        _validate_http_url(origin, name="ALLOWED_ORIGINS", require_https=require_https)
+def _normalize_origin_list(value: str, *, require_https: bool) -> list[str]:
+    normalized: list[str] = []
+    for origin in value.split(","):
+        if not origin.strip():
+            continue
+        candidate = _normalize_origin(origin, require_https=require_https)
+        if candidate not in normalized:
+            normalized.append(candidate)
+    return normalized
+
+
+def _validate_forwarded_allow_ips(value: str, *, production_like: bool) -> list[str]:
+    entries = [entry.strip() for entry in value.split(",") if entry.strip()]
+    for entry in entries:
+        if entry == "*":
+            if production_like:
+                raise RuntimeError("FORWARDED_ALLOW_IPS no puede usar '*' en staging o producción.")
+            continue
+        try:
+            if "/" in entry:
+                ip_network(entry, strict=False)
+            else:
+                ip_address(entry)
+        except ValueError as exc:
+            raise RuntimeError("FORWARDED_ALLOW_IPS debe contener IPs o CIDRs válidos.") from exc
+    return entries
 
 
 def _validate_host(value: str, *, name: str) -> str:
@@ -189,7 +222,11 @@ class Settings:
             values.get("SESSION_TTL_HOURS", "168"),
             name="SESSION_TTL_HOURS",
         )
-        self.allowed_origins: str = values.get("ALLOWED_ORIGINS", "http://localhost:3000").strip()
+        self.allowed_origin_values = _normalize_origin_list(
+            values.get("ALLOWED_ORIGINS", "http://localhost:3000"),
+            require_https=self.app_env in PRODUCTION_LIKE,
+        )
+        self.allowed_origins: str = ",".join(self.allowed_origin_values)
         self.frontend_url: str = values.get("FRONTEND_URL", "http://localhost:3000").strip().rstrip("/")
         self.google_sign_in_enabled: bool = _as_bool(
             values.get("GOOGLE_SIGN_IN_ENABLED", "0"),
@@ -205,11 +242,6 @@ class Settings:
         )
 
         self.allowed_hosts_str: str = values.get("ALLOWED_HOSTS", "").strip()
-        self.trusted_proxy_count: int = _non_negative_int(
-            values.get("TRUSTED_PROXY_COUNT", "0"),
-            name="TRUSTED_PROXY_COUNT",
-            maximum=10,
-        )
         self.forwarded_allow_ips_str: str = values.get("FORWARDED_ALLOW_IPS", "").strip()
         self.csrf_enabled: bool = _as_bool(
             values.get("CSRF_ENABLED", "1"),
@@ -252,13 +284,30 @@ class Settings:
             name="RUN_REAL_AI_SMOKE",
         )
 
+        self.image_generation_enabled: bool = _as_bool(
+            values.get("IMAGE_GENERATION_ENABLED", "0"),
+            name="IMAGE_GENERATION_ENABLED",
+        )
+        self.video_generation_enabled: bool = _as_bool(
+            values.get("VIDEO_GENERATION_ENABLED", "0"),
+            name="VIDEO_GENERATION_ENABLED",
+        )
+        self.trend_analysis_enabled: bool = _as_bool(
+            values.get("TREND_ANALYSIS_ENABLED", "0"),
+            name="TREND_ANALYSIS_ENABLED",
+        )
+        self.allow_paid_model_fallback: bool = _as_bool(
+            values.get("ALLOW_PAID_MODEL_FALLBACK", "0"),
+            name="ALLOW_PAID_MODEL_FALLBACK",
+        )
+
     @property
     def is_demo(self) -> bool:
         return self.app_env == "development" and self.ai_provider == "demo"
 
     @property
     def allowed_origin_list(self) -> list[str]:
-        return [origin.strip() for origin in self.allowed_origins.split(",") if origin.strip()]
+        return list(self.allowed_origin_values)
 
     @property
     def allowed_hosts(self) -> list[str]:
@@ -266,7 +315,10 @@ class Settings:
 
     @property
     def forwarded_allow_ips(self) -> list[str]:
-        return [ip.strip() for ip in self.forwarded_allow_ips_str.split(",") if ip.strip()]
+        return _validate_forwarded_allow_ips(
+            self.forwarded_allow_ips_str,
+            production_like=self.is_production_like,
+        )
 
     @property
     def is_production_like(self) -> bool:
@@ -396,10 +448,7 @@ class Settings:
                 require_https=self.is_production_like,
             )
 
-        if self.trusted_proxy_count > 0 and not self.forwarded_allow_ips:
-            raise RuntimeError(
-                "FORWARDED_ALLOW_IPS es obligatorio cuando TRUSTED_PROXY_COUNT > 0."
-            )
+        _ = self.forwarded_allow_ips
 
         if self.allowed_hosts_str:
             for host in self.allowed_hosts:
@@ -423,10 +472,11 @@ class Settings:
             raise RuntimeError("La configuración S3 de producción está incompleta.")
         if self.ai_provider != "openai-compatible":
             raise RuntimeError("AI_PROVIDER debe ser openai-compatible en producción.")
-        _validate_origin_list(self.allowed_origin_list, require_https=True)
+        if not self.csrf_enabled:
+            raise RuntimeError("CSRF_ENABLED debe ser true en staging y producción.")
 
-        if not self.allowed_hosts_str and self.app_env == "production":
-            raise RuntimeError("ALLOWED_HOSTS es obligatorio en producción.")
+        if not self.allowed_hosts_str:
+            raise RuntimeError("ALLOWED_HOSTS es obligatorio en staging y producción.")
 
         localhost_origins = {"http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:8000"}
         for origin in self.allowed_origin_list:
@@ -435,9 +485,6 @@ class Settings:
 
         if not self.frontend_url.startswith("https://"):
             raise RuntimeError("FRONTEND_URL debe usar HTTPS en producción.")
-
-        if self.app_env == "production" and not self.allowed_hosts:
-            raise RuntimeError("ALLOWED_HOSTS es obligatorio en producción.")
 
         for host in self.allowed_hosts:
             if host in {"localhost", "127.0.0.1", "::1"}:
