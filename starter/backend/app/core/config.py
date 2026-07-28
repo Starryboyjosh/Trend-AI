@@ -51,11 +51,11 @@ def _validate_http_url(value: str, *, name: str, require_https: bool) -> None:
     if parsed.scheme not in allowed_schemes or not parsed.netloc:
         protocol = "https" if require_https else "http o https"
         raise RuntimeError(f"{name} debe ser una URL válida con {protocol}.")
+    if parsed.username or parsed.password:
+        raise RuntimeError(f"{name} no debe contener credenciales embebidas.")
 
 
 def _normalize_database_url(value: str) -> str:
-    """Use psycopg consistently for both SQLAlchemy and Alembic."""
-
     if value.startswith("postgres://"):
         return value.replace("postgres://", "postgresql+psycopg://", 1)
     if value.startswith("postgresql://"):
@@ -73,6 +73,21 @@ def _is_local_database_url(value: str) -> bool:
         "postgres",
         "db",
     }
+
+
+def _validate_origin_list(origins: list[str], *, require_https: bool) -> None:
+    for origin in origins:
+        _validate_http_url(origin, name="ALLOWED_ORIGINS", require_https=require_https)
+
+
+def _validate_host(value: str, *, name: str) -> str:
+    if not value or value.startswith(".") or ".." in value:
+        raise RuntimeError(f"{name} no es un host válido.")
+    return value
+
+
+VALID_ENVS = {"development", "test", "staging", "production"}
+PRODUCTION_LIKE = {"staging", "production"}
 
 
 class Settings:
@@ -106,10 +121,10 @@ class Settings:
         )
         self.redis_url: str = values.get("REDIS_URL", "").strip()
         self.redis_provider: str = values.get(
-            "REDIS_PROVIDER", "redis" if self.app_env == "production" else "memory"
+            "REDIS_PROVIDER", "redis" if self.app_env in PRODUCTION_LIKE else "memory"
         ).strip().lower()
         self.redis_required: bool = _as_bool(
-            values.get("REDIS_REQUIRED", "1" if self.app_env == "production" else "0"),
+            values.get("REDIS_REQUIRED", "1" if self.app_env in PRODUCTION_LIKE else "0"),
             name="REDIS_REQUIRED",
         )
         self.upstash_redis_rest_url: str = values.get("UPSTASH_REDIS_REST_URL", "").strip().rstrip("/")
@@ -189,6 +204,26 @@ class Settings:
             minimum=60,
         )
 
+        self.allowed_hosts_str: str = values.get("ALLOWED_HOSTS", "").strip()
+        self.trusted_proxy_count: int = _non_negative_int(
+            values.get("TRUSTED_PROXY_COUNT", "0"),
+            name="TRUSTED_PROXY_COUNT",
+            maximum=10,
+        )
+        self.forwarded_allow_ips_str: str = values.get("FORWARDED_ALLOW_IPS", "").strip()
+        self.csrf_enabled: bool = _as_bool(
+            values.get("CSRF_ENABLED", "1"),
+            name="CSRF_ENABLED",
+        )
+        self.hsts_max_age_seconds: int = _positive_int(
+            values.get("HSTS_MAX_AGE_SECONDS", "31536000"),
+            name="HSTS_MAX_AGE_SECONDS",
+        )
+        self.hsts_include_subdomains: bool = _as_bool(
+            values.get("HSTS_INCLUDE_SUBDOMAINS", "1"),
+            name="HSTS_INCLUDE_SUBDOMAINS",
+        )
+
         self.max_upload_mb: int = _positive_int(
             values.get("MAX_UPLOAD_MB", "10"), name="MAX_UPLOAD_MB"
         )
@@ -226,14 +261,28 @@ class Settings:
         return [origin.strip() for origin in self.allowed_origins.split(",") if origin.strip()]
 
     @property
+    def allowed_hosts(self) -> list[str]:
+        return [h.strip().lower() for h in self.allowed_hosts_str.split(",") if h.strip()]
+
+    @property
+    def forwarded_allow_ips(self) -> list[str]:
+        return [ip.strip() for ip in self.forwarded_allow_ips_str.split(",") if ip.strip()]
+
+    @property
+    def is_production_like(self) -> bool:
+        return self.app_env in PRODUCTION_LIKE
+
+    @property
     def google_sign_in_configured(self) -> bool:
         return self.google_sign_in_enabled and all(
             [self.google_client_id, self.google_client_secret, self.google_redirect_uri]
         )
 
     def validate_runtime_configuration(self) -> None:
-        if self.app_env not in {"development", "test", "production"}:
-            raise RuntimeError("APP_ENV debe ser development, test o production.")
+        if self.app_env not in VALID_ENVS:
+            raise RuntimeError(
+                f"APP_ENV debe ser {' ,'.join(sorted(VALID_ENVS))}."
+            )
         if self.ai_provider not in {"demo", "openai-compatible"}:
             raise RuntimeError("AI_PROVIDER no es compatible.")
         if self.vision_provider not in {"demo", "openai-compatible"}:
@@ -257,7 +306,7 @@ class Settings:
         ):
             raise RuntimeError("DATABASE_URL debe incluir un host PostgreSQL válido.")
         if (
-            self.app_env == "production"
+            self.is_production_like
             and not _is_local_database_url(self.database_url)
             and self.database_ssl_mode != "require"
         ):
@@ -277,7 +326,7 @@ class Settings:
                 _validate_http_url(
                     self.upstash_redis_rest_url,
                     name="UPSTASH_REDIS_REST_URL",
-                    require_https=self.app_env == "production",
+                    require_https=self.is_production_like,
                 )
         elif self.redis_required:
             raise RuntimeError("REDIS_REQUIRED requiere REDIS_PROVIDER=redis.")
@@ -294,7 +343,7 @@ class Settings:
             _validate_http_url(
                 self.supabase_url,
                 name="SUPABASE_URL",
-                require_https=self.app_env == "production",
+                require_https=self.is_production_like,
             )
         if not self.session_cookie_name:
             raise RuntimeError("SESSION_COOKIE_NAME es obligatoria.")
@@ -304,14 +353,14 @@ class Settings:
             _validate_http_url(
                 self.frontend_url,
                 name="FRONTEND_URL",
-                require_https=self.app_env == "production",
+                require_https=self.is_production_like,
             )
             if self.frontend_url not in self.allowed_origin_list:
                 raise RuntimeError("FRONTEND_URL debe estar incluida en ALLOWED_ORIGINS para Google.")
             _validate_http_url(
                 self.google_redirect_uri,
                 name="GOOGLE_REDIRECT_URI",
-                require_https=self.app_env == "production",
+                require_https=self.is_production_like,
             )
 
         if self.ai_provider == "openai-compatible":
@@ -326,7 +375,7 @@ class Settings:
             _validate_http_url(
                 self.ai_base_url,
                 name="AI_BASE_URL",
-                require_https=self.app_env == "production",
+                require_https=self.is_production_like,
             )
 
         if self.vision_provider == "openai-compatible":
@@ -337,17 +386,26 @@ class Settings:
             _validate_http_url(
                 self.vision_base_url,
                 name="VISION_BASE_URL",
-                require_https=self.app_env == "production",
+                require_https=self.is_production_like,
             )
 
         if self.ai_http_referer:
             _validate_http_url(
                 self.ai_http_referer,
                 name="AI_HTTP_REFERER",
-                require_https=self.app_env == "production",
+                require_https=self.is_production_like,
             )
 
-        if self.app_env != "production":
+        if self.trusted_proxy_count > 0 and not self.forwarded_allow_ips:
+            raise RuntimeError(
+                "FORWARDED_ALLOW_IPS es obligatorio cuando TRUSTED_PROXY_COUNT > 0."
+            )
+
+        if self.allowed_hosts_str:
+            for host in self.allowed_hosts:
+                _validate_host(host, name="ALLOWED_HOSTS")
+
+        if not self.is_production_like:
             return
 
         if self.jwt_secret == "replace-in-local-env" or len(self.jwt_secret) < 32:
@@ -365,10 +423,25 @@ class Settings:
             raise RuntimeError("La configuración S3 de producción está incompleta.")
         if self.ai_provider != "openai-compatible":
             raise RuntimeError("AI_PROVIDER debe ser openai-compatible en producción.")
-        for origin in self.allowed_origin_list:
-            _validate_http_url(origin, name="ALLOWED_ORIGINS", require_https=True)
+        _validate_origin_list(self.allowed_origin_list, require_https=True)
 
-        # Phase 1 explicitly permits VISION_PROVIDER=demo in production.
+        if not self.allowed_hosts_str and self.app_env == "production":
+            raise RuntimeError("ALLOWED_HOSTS es obligatorio en producción.")
+
+        localhost_origins = {"http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:8000"}
+        for origin in self.allowed_origin_list:
+            if origin in localhost_origins:
+                raise RuntimeError("ALLOWED_ORIGINS no debe incluir localhost en producción.")
+
+        if not self.frontend_url.startswith("https://"):
+            raise RuntimeError("FRONTEND_URL debe usar HTTPS en producción.")
+
+        if self.app_env == "production" and not self.allowed_hosts:
+            raise RuntimeError("ALLOWED_HOSTS es obligatorio en producción.")
+
+        for host in self.allowed_hosts:
+            if host in {"localhost", "127.0.0.1", "::1"}:
+                raise RuntimeError("ALLOWED_HOSTS no debe incluir localhost en producción.")
 
 
 settings = Settings()

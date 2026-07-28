@@ -23,6 +23,24 @@ from app.business.repository import (
     upsert_brand_profile,
 )
 from app.core.config import settings
+from app.core.cookies import (
+    OAUTH_COOKIE,
+    SESSION_COOKIE,
+    SIGNUP_COOKIE,
+    delete_oauth_cookie,
+    delete_session_cookie,
+    delete_signup_cookie,
+    read_oauth_cookie,
+    set_csrf_cookie,
+    set_oauth_cookie,
+    set_session_cookie,
+    set_signup_cookie,
+)
+from app.core.csrf import (
+    CSRF_CONTEXT_SIGNUP,
+    _generate_csrf_token,
+    _pick_context,
+)
 from app.core.errors import AppError, ForbiddenError
 from app.dependencies import CurrentPrincipal, get_current_principal, get_db
 from app.domain.models import Category, Objective, Platform, Tone
@@ -45,8 +63,6 @@ from app.identity.models import (
 
 router = APIRouter(prefix="/auth", tags=["identity"])
 
-SIGNUP_COOKIE_NAME = "hitrendy_signup"
-GOOGLE_OAUTH_COOKIE_NAME = "hitrendy_google_oauth"
 GOOGLE_PROVIDER = "google"
 SIGNUP_TTL = timedelta(hours=24)
 SignupStep = Literal["business", "channels", "brand", "review"]
@@ -122,73 +138,7 @@ async def _create_session(db: AsyncSession, user_id: str) -> str:
     return token
 
 
-def _set_session_cookie(response: Response, token: str) -> None:
-    response.set_cookie(
-        key=settings.session_cookie_name,
-        value=token,
-        httponly=True,
-        secure=settings.app_env == "production",
-        samesite="strict",
-        max_age=settings.session_ttl_hours * 3600,
-        path="/",
-    )
 
-
-def _set_signup_cookie(response: Response, token: str) -> None:
-    response.set_cookie(
-        key=SIGNUP_COOKIE_NAME,
-        value=token,
-        httponly=True,
-        secure=settings.app_env == "production",
-        samesite="strict",
-        max_age=int(SIGNUP_TTL.total_seconds()),
-        path="/",
-    )
-
-
-def _clear_signup_cookie(response: Response) -> None:
-    response.delete_cookie(SIGNUP_COOKIE_NAME, path="/")
-
-
-def _google_oauth_cookie_path() -> str:
-    return f"{settings.api_prefix}/auth/google"
-
-
-def _google_oauth_cookie_value(state: str, code_verifier: str) -> str:
-    payload = f"{state}.{code_verifier}"
-    signature = hmac.new(
-        settings.jwt_secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
-    ).hexdigest()
-    return f"{payload}.{signature}"
-
-
-def _read_google_oauth_cookie(value: str | None) -> tuple[str, str] | None:
-    if not value:
-        return None
-    try:
-        state, code_verifier, signature = value.split(".", 2)
-    except ValueError:
-        return None
-    expected = _google_oauth_cookie_value(state, code_verifier).rsplit(".", 1)[1]
-    if not hmac.compare_digest(signature, expected):
-        return None
-    return state, code_verifier
-
-
-def _set_google_oauth_cookie(response: Response, *, state: str, code_verifier: str) -> None:
-    response.set_cookie(
-        key=GOOGLE_OAUTH_COOKIE_NAME,
-        value=_google_oauth_cookie_value(state, code_verifier),
-        httponly=True,
-        secure=settings.app_env == "production",
-        samesite="lax",
-        max_age=settings.google_oauth_state_ttl_seconds,
-        path=_google_oauth_cookie_path(),
-    )
-
-
-def _clear_google_oauth_cookie(response: Response) -> None:
-    response.delete_cookie(GOOGLE_OAUTH_COOKIE_NAME, path=_google_oauth_cookie_path())
 
 
 def get_google_oidc_client() -> GoogleOIDCClient:
@@ -199,7 +149,7 @@ def _google_callback_redirect(path: str, *, outcome: str | None = None) -> Redir
     query = f"?{urlencode({'oauth': outcome})}" if outcome else ""
     response = RedirectResponse(f"{settings.frontend_url}{path}{query}", status_code=303)
     response.headers["Cache-Control"] = "no-store"
-    _clear_google_oauth_cookie(response)
+    delete_oauth_cookie(response)
     return response
 
 
@@ -405,7 +355,7 @@ async def register(
     db.add(WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role="owner"))
     token = await _create_session(db, user.id)
     await db.commit()
-    _set_session_cookie(response, token)
+    set_session_cookie(response, token)
     return {
         "user": {"id": user.id, "name": user.name, "email": user.email},
         "workspace": {"id": workspace.id, "name": workspace.name, "role": "owner"},
@@ -442,7 +392,7 @@ async def start_google_sign_in(
         )
     )
     await db.commit()
-    _set_google_oauth_cookie(response, state=state, code_verifier=code_verifier)
+    set_oauth_cookie(response, state=state, code_verifier=code_verifier)
     response.headers["Cache-Control"] = "no-store"
     return {
         "authorization_url": get_google_oidc_client().authorization_url(
@@ -458,12 +408,12 @@ async def google_callback(
     code: str | None = None,
     state: str | None = None,
     error: str | None = None,
-    oauth_cookie: str | None = Cookie(None, alias=GOOGLE_OAUTH_COOKIE_NAME),
+    oauth_cookie: str | None = Cookie(None, alias=OAUTH_COOKIE),
     db: AsyncSession = Depends(get_db),
 ) -> RedirectResponse:
     if not settings.google_sign_in_configured:
         return _google_callback_error("unavailable")
-    cookie_state = _read_google_oauth_cookie(oauth_cookie)
+    cookie_state = read_oauth_cookie(oauth_cookie)
     if state is None or cookie_state is None or not hmac.compare_digest(state, cookie_state[0]):
         return _google_callback_error("invalid_state")
     authorization_request, state_error = await _consume_google_authorization_request(db, state=state)
@@ -503,15 +453,17 @@ async def google_callback(
         token = await _create_session(db, user.id)
         await db.commit()
         response = _google_callback_redirect("/dashboard")
-        _set_session_cookie(response, token)
-        _clear_signup_cookie(response)
+        set_session_cookie(response, token)
+        delete_signup_cookie(response)
         return response
 
     signup_token = await _create_or_resume_google_signup(db, identity)
     if signup_token is None:
         return _google_callback_error("account_exists")
     response = _google_callback_redirect("/onboarding")
-    _set_signup_cookie(response, signup_token)
+    set_signup_cookie(response, signup_token)
+    csrf_token = _generate_csrf_token(signup_token, CSRF_CONTEXT_SIGNUP)
+    set_csrf_cookie(response, csrf_token)
     return response
 
 
@@ -548,13 +500,15 @@ async def start_signup(
     db.add(pending)
     await db.commit()
     await db.refresh(pending)
-    _set_signup_cookie(response, token)
+    set_signup_cookie(response, token)
+    csrf_token = _generate_csrf_token(token, CSRF_CONTEXT_SIGNUP)
+    set_csrf_cookie(response, csrf_token)
     return _signup_response(pending)
 
 
 @router.get("/signup")
 async def get_signup(
-    signup_token: str | None = Cookie(None, alias=SIGNUP_COOKIE_NAME),
+    signup_token: str | None = Cookie(None, alias=SIGNUP_COOKIE),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, object]:
     pending = await _get_pending_signup(db, signup_token)
@@ -564,7 +518,7 @@ async def get_signup(
 @router.patch("/signup")
 async def save_signup_draft(
     body: SignupDraftRequest,
-    signup_token: str | None = Cookie(None, alias=SIGNUP_COOKIE_NAME),
+    signup_token: str | None = Cookie(None, alias=SIGNUP_COOKIE),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, object]:
     pending = await _get_pending_signup(db, signup_token)
@@ -593,7 +547,7 @@ async def save_signup_draft(
 @router.delete("/signup", status_code=204)
 async def cancel_signup(
     response: Response,
-    signup_token: str | None = Cookie(None, alias=SIGNUP_COOKIE_NAME),
+    signup_token: str | None = Cookie(None, alias=SIGNUP_COOKIE),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     pending = await _get_pending_signup(db, signup_token)
@@ -601,7 +555,7 @@ async def cancel_signup(
         raise AppError("SIGNUP_CONFLICT", "El registro ya fue completado.", status_code=409)
     await db.delete(pending)
     await db.commit()
-    _clear_signup_cookie(response)
+    delete_signup_cookie(response)
     return Response(status_code=204, headers=response.headers)
 
 
@@ -624,7 +578,7 @@ def _validated_complete_draft(
 async def complete_signup(
     response: Response,
     idempotency_key: str = Header(..., alias="Idempotency-Key", min_length=1, max_length=255),
-    signup_token: str | None = Cookie(None, alias=SIGNUP_COOKIE_NAME),
+    signup_token: str | None = Cookie(None, alias=SIGNUP_COOKIE),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, object]:
     pending = await _get_pending_signup(db, signup_token, lock=True)
@@ -694,8 +648,8 @@ async def complete_signup(
     except Exception:
         await db.rollback()
         raise
-    _set_session_cookie(response, session_token)
-    _clear_signup_cookie(response)
+    set_session_cookie(response, session_token)
+    delete_signup_cookie(response)
     return result
 
 
@@ -709,7 +663,7 @@ async def login(body: LoginRequest, response: Response, db: AsyncSession = Depen
         raise ForbiddenError("Credenciales inválidas.")
     token = await _create_session(db, user.id)
     await db.commit()
-    _set_session_cookie(response, token)
+    set_session_cookie(response, token)
     return {"user": {"id": user.id, "name": user.name, "email": user.email}}
 
 
@@ -721,10 +675,27 @@ async def logout(
     await db.execute(delete(AuthSession).where(AuthSession.id == principal.session.id))
     await db.commit()
     response = Response(status_code=204)
-    response.delete_cookie(settings.session_cookie_name, path="/")
+    delete_session_cookie(response)
     return response
 
 
 @router.get("/me")
 async def me(principal: CurrentPrincipal = Depends(get_current_principal)) -> dict:
     return {"user": principal.user, "workspaces": principal.workspaces}
+
+
+@router.get("/csrf")
+async def csrf_token(
+    response: Response,
+    session_token: str | None = Cookie(None, alias=SESSION_COOKIE),
+    signup_token: str | None = Cookie(None, alias=SIGNUP_COOKIE),
+) -> dict[str, str | None]:
+    context = _pick_context("/api/v1/auth/csrf", session_token, signup_token)
+    if context is None:
+        response.headers["Cache-Control"] = "no-store"
+        return {"token": None}
+    context_token, context_name = context
+    token = _generate_csrf_token(context_token, context_name)
+    set_csrf_cookie(response, token)
+    response.headers["Cache-Control"] = "no-store"
+    return {"token": token}

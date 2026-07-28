@@ -8,10 +8,10 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
 from app.core.config import settings
+from app.core.cookies import OAUTH_COOKIE as GOOGLE_OAUTH_COOKIE_NAME
 from app.db.session import get_session_factory
 from app.identity.google_oauth import GoogleIdentity
 from app.identity.models import OAuthAccount, PendingSignup
-from app.identity.routes import GOOGLE_OAUTH_COOKIE_NAME
 
 
 class DeterministicGoogleOIDCClient:

@@ -54,6 +54,9 @@ services:
       - AI_PROVIDER=demo
       - AI_MODEL=demo-v1
       - JWT_SECRET=replace-in-local-env
+      - ALLOWED_ORIGINS=http://localhost:3000
+      - FRONTEND_URL=http://localhost:3000
+      - CSRF_ENABLED=1
     volumes:
       - ./starter/backend:/app
     depends_on:
@@ -68,7 +71,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+      - NEXT_PUBLIC_API_URL=http://api:8000/api/v1
     volumes:
       - ./starter/web:/app
       - /app/node_modules

@@ -32,6 +32,8 @@ def _production_values() -> dict[str, str]:
         "VISION_MODEL": "demo-vision-v1",
         "JWT_SECRET": "j" * 32,
         "ALLOWED_ORIGINS": "https://app.example",
+        "ALLOWED_HOSTS": "app.example,api.example",
+        "FRONTEND_URL": "https://app.example",
     }
 
 

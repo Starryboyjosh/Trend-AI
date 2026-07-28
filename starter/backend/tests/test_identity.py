@@ -8,10 +8,10 @@ from sqlalchemy import select
 
 from app.business.models import Business
 from app.core.config import settings
+from app.core.cookies import SIGNUP_COOKIE as SIGNUP_COOKIE_NAME
 from app.core.errors import AppError
 from app.dependencies import get_db
 from app.identity.models import PendingSignup, User, UserPreference
-from app.identity.routes import SIGNUP_COOKIE_NAME
 
 BUSINESS_DRAFT = {
     "name": "Café de registro",

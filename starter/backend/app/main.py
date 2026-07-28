@@ -15,8 +15,10 @@ from app.assets.routes import router as asset_router
 from app.business.routes import router as business_router
 from app.conversations.routes import router as conversation_router
 from app.core.config import settings
+from app.core.cookies import CSRF_COOKIE, SESSION_COOKIE, SIGNUP_COOKIE, set_csrf_cookie
 from app.core.ephemeral_store import get_ephemeral_store
 from app.core.errors import AppError, app_error_handler
+from app.core.hosts import trusted_host_middleware
 from app.core.infrastructure import get_infrastructure_capabilities
 from app.core.rate_limit import LocalRateLimiter, RateLimiter, RedisRateLimiter
 from app.db.session import get_session_factory
@@ -51,12 +53,22 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+_CORS_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+_CORS_HEADERS = [
+    "Content-Type",
+    "Authorization",
+    "X-CSRF-Token",
+    "X-Request-Id",
+    "Idempotency-Key",
+]
+
+cors_origins = settings.allowed_origin_list
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.allowed_origins.split(","),
+    allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=_CORS_METHODS,
+    allow_headers=_CORS_HEADERS,
 )
 
 app.add_exception_handler(AppError, app_error_handler)
@@ -69,7 +81,6 @@ _RATE_LIMITED_PATHS = {
     "/api/v1/auth/google/start",
 }
 _local_rate_limiter = LocalRateLimiter()
-# Kept as a test-only inspection point while development uses the local adapter.
 _rate_windows = _local_rate_limiter.windows
 _rate_limiter: RateLimiter | None = None
 _rate_limiter_url: str | None = None
@@ -105,6 +116,11 @@ def _record_request(request: Request, request_id: str, status_code: int, started
             "duration_ms": round((monotonic() - started) * 1000, 2),
         },
     )
+
+
+@app.middleware("http")
+async def trusted_host_handler(request: Request, call_next):
+    return await trusted_host_middleware(request, call_next)
 
 
 @app.middleware("http")
@@ -184,9 +200,47 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Permissions-Policy"] = "camera=(), geolocation=(), microphone=()"
+    response.headers["Permissions-Policy"] = (
+        "camera=(), geolocation=(), microphone=()"
+    )
+    if settings.is_production_like:
+        response.headers["Strict-Transport-Security"] = (
+            f"max-age={settings.hsts_max_age_seconds}"
+            f"{'; includeSubDomains' if settings.hsts_include_subdomains else ''}"
+        )
     _record_request(request, request_id, response.status_code, started)
     return response
+
+
+@app.middleware("http")
+async def csrf_handler(request: Request, call_next):
+    if not settings.csrf_enabled:
+        return await call_next(request)
+
+    from app.core.csrf import (
+        _generate_csrf_token,
+        _pick_context,
+        should_validate_csrf,
+    )
+
+    path = request.url.path
+    method = request.method
+    session_token = request.cookies.get(SESSION_COOKIE)
+    signup_token = request.cookies.get(SIGNUP_COOKIE)
+
+    if not should_validate_csrf(path, method):
+        response = await call_next(request)
+        if method in {"GET", "HEAD"} and not request.cookies.get(CSRF_COOKIE):
+            context = _pick_context(path, session_token, signup_token)
+            if context:
+                context_token, context_name = context
+                csrf_token = _generate_csrf_token(context_token, context_name)
+                set_csrf_cookie(response, csrf_token)
+        return response
+
+    from app.core.csrf import csrf_middleware
+
+    return await csrf_middleware(request, call_next)
 
 
 app.include_router(business_router, prefix=settings.api_prefix)
@@ -204,8 +258,6 @@ def live() -> dict[str, str]:
 
 @app.get("/health/ready", response_model=None)
 async def ready() -> dict[str, object] | JSONResponse:
-    """Report database readiness plus safe states for optional infrastructure."""
-
     try:
         factory = get_session_factory()
         async with factory() as session:

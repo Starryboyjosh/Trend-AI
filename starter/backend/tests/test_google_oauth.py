@@ -12,11 +12,12 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
 from app.core.config import Settings, settings
+from app.core.cookies import OAUTH_COOKIE as GOOGLE_OAUTH_COOKIE_NAME
+from app.core.cookies import SIGNUP_COOKIE as SIGNUP_COOKIE_NAME
 from app.core.errors import AppError
 from app.dependencies import get_db
 from app.identity.google_oauth import GoogleIdentity, GoogleOIDCClient, GoogleOIDCError
 from app.identity.models import OAuthAccount, OAuthAuthorizationRequest, PendingSignup, User
-from app.identity.routes import GOOGLE_OAUTH_COOKIE_NAME, SIGNUP_COOKIE_NAME
 
 
 class FakeGoogleOIDCClient:

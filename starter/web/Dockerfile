@@ -2,17 +2,18 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy root package.json and workspace definition
 COPY package.json package-lock.json ./
 COPY starter/web/package.json ./starter/web/
 
-# Install dependencies using the monorepo lockfile
 RUN npm ci
 
-# Copy the rest of the application files
 COPY . .
 
-# Expose Next.js default port
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
 EXPOSE 3000
+
+ENV NODE_ENV=production
 
 CMD ["npm", "run", "web:dev"]

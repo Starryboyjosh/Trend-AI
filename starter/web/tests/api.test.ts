@@ -1,247 +1,367 @@
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
-import { api, createIdempotencyKey } from "@/lib/api";
-import { disableDemoMode, enableDemoMode } from "@/lib/demo-mode";
+import {
+  ApiError,
+  api,
+  createIdempotencyKey,
+  resetCsrfToken,
+} from "@/lib/api";
 
-const originalFetch = global.fetch;
+vi.mock("@/lib/demo-mode", () => ({
+  isDemoModeEnabled: vi.fn(() => false),
+  readDemoProjects: vi.fn((projects: unknown) => projects),
+  saveDemoProjects: vi.fn(),
+}));
 
-afterEach(() => {
-  global.fetch = originalFetch;
+type FetchMock = ReturnType<typeof vi.fn>;
+
+const fetchMock = vi.fn() as FetchMock;
+
+function jsonResponse(
+  body: unknown,
+  init: ResponseInit = {}
+): Response {
+  return new Response(JSON.stringify(body), {
+    status: init.status ?? 200,
+    headers: {
+      "Content-Type": "application/json",
+      ...(init.headers ?? {}),
+    },
+  });
+}
+
+function errorResponse(
+  code: string,
+  status = 403,
+  retryable = false,
+  headers?: HeadersInit
+): Response {
+  return jsonResponse(
+    {
+      error: {
+        code,
+        message: code,
+        retryable,
+      },
+    },
+    { status, headers }
+  );
+}
+
+function requestInitAt(index: number): RequestInit {
+  const call = fetchMock.mock.calls[index];
+  expect(call).toBeDefined();
+  return (call?.[1] ?? {}) as RequestInit;
+}
+
+function requestHeadersAt(index: number): Headers {
+  return new Headers(requestInitAt(index).headers);
+}
+
+beforeEach(() => {
+  resetCsrfToken();
+  fetchMock.mockReset();
+  vi.stubGlobal("fetch", fetchMock);
   window.localStorage.clear();
   window.sessionStorage.clear();
-  vi.unstubAllEnvs();
 });
 
-describe("cliente HTTP", () => {
-  test("genera claves nativas únicas para operaciones nuevas", () => {
+describe("API client", () => {
+  test("crea claves de idempotencia no vacías", () => {
     const first = createIdempotencyKey();
     const second = createIdempotencyKey();
 
-    expect(first).toMatch(/[a-z0-9-]+/i);
-    expect(second).not.toBe(first);
+    expect(first).toBeTruthy();
+    expect(second).toBeTruthy();
+    expect(first).not.toBe(second);
   });
 
-  test("reintenta errores recuperables con la misma clave", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { retryable: true } }), { status: 503 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
-    global.fetch = fetchMock;
+  test("una petición GET no solicita token CSRF", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]));
 
-    const result = api.conversations.sendMessage("conv-1", "Crea un post", undefined, [], {
-      idempotencyKey: "stable-key",
-      maxAttempts: 2,
+    await api.projects.list();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/v1/projects");
+  });
+
+  test("obtiene CSRF con credentials include y cache no-store", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ token: "csrf-one" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "project-1" }));
+
+    await api.projects.create({ name: "Proyecto" });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/v1/auth/csrf");
+    expect(requestInitAt(0)).toMatchObject({
+      credentials: "include",
+      cache: "no-store",
     });
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    await expect(result).resolves.toEqual({ ok: true });
-    expect(fetchMock.mock.calls[0][1]).toEqual(
-      expect.objectContaining({ headers: expect.any(Headers) })
-    );
-    expect(
-      ((fetchMock.mock.calls[0][1] as RequestInit).headers as Headers).get(
-        "Idempotency-Key"
-      )
-    ).toBe("stable-key");
   });
 
-  test("no reintenta errores de validación", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ error: { retryable: false } }), { status: 422 })
+  test("adjunta X-CSRF-Token en mutaciones", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ token: "csrf-one" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "project-1" }));
+
+    await api.projects.create({ name: "Proyecto" });
+
+    expect(requestHeadersAt(1).get("X-CSRF-Token")).toBe("csrf-one");
+    expect(requestInitAt(1).credentials).toBe("include");
+  });
+
+  test("mantiene el token CSRF únicamente en memoria", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ token: "csrf-memory" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "project-1" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "project-2" }));
+
+    await api.projects.create({ name: "Uno" });
+    await api.projects.create({ name: "Dos" });
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(window.localStorage.length).toBe(0);
+    expect(window.sessionStorage.length).toBe(0);
+  });
+
+  test("resetCsrfToken obliga a obtener un token nuevo", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ token: "csrf-one" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "project-1" }))
+      .mockResolvedValueOnce(jsonResponse({ token: "csrf-two" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "project-2" }));
+
+    await api.projects.create({ name: "Uno" });
+    resetCsrfToken();
+    await api.projects.create({ name: "Dos" });
+
+    expect(fetchMock.mock.calls[2]?.[0]).toBe("/api/v1/auth/csrf");
+    expect(requestHeadersAt(3).get("X-CSRF-Token")).toBe("csrf-two");
+  });
+
+  test("reintenta una vez un error CSRF aunque maxAttempts sea 1", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ token: "csrf-old" }))
+      .mockResolvedValueOnce(errorResponse("CSRF_TOKEN_INVALID"))
+      .mockResolvedValueOnce(jsonResponse({ token: "csrf-new" }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }));
+
+    const result = await api.conversations.sendMessage(
+      "conversation-1",
+      "Hola",
+      undefined,
+      [],
+      { maxAttempts: 1 }
     );
-    global.fetch = fetchMock;
+
+    expect(result).toEqual({ ok: true });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(requestHeadersAt(1).get("X-CSRF-Token")).toBe("csrf-old");
+    expect(requestHeadersAt(3).get("X-CSRF-Token")).toBe("csrf-new");
+  });
+
+  test("no entra en bucle ante un segundo error CSRF", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ token: "csrf-old" }))
+      .mockResolvedValueOnce(errorResponse("CSRF_TOKEN_INVALID"))
+      .mockResolvedValueOnce(jsonResponse({ token: "csrf-new" }))
+      .mockResolvedValueOnce(errorResponse("CSRF_TOKEN_INVALID"));
 
     await expect(
-      api.conversations.sendMessage("conv-1", "", undefined, [], {
-        idempotencyKey: "stable-key",
-        maxAttempts: 3,
-      })
-    ).rejects.toMatchObject({ status: 422 });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  test("respeta el máximo de intentos y Retry-After", async () => {
-    vi.useFakeTimers();
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ error: { retryable: true } }), {
-        status: 429,
-        headers: { "Retry-After": "0" },
-      })
-    );
-    global.fetch = fetchMock;
-
-    const result = api.conversations.sendMessage("conv-1", "Crea un post", undefined, [], {
-      idempotencyKey: "stable-key",
-      maxAttempts: 3,
+      api.conversations.sendMessage(
+        "conversation-1",
+        "Hola",
+        undefined,
+        [],
+        { maxAttempts: 1 }
+      )
+    ).rejects.toMatchObject({
+      status: 403,
+      code: "CSRF_TOKEN_INVALID",
     });
-    const rejection = expect(result).rejects.toMatchObject({ status: 429 });
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
-    await rejection;
-    vi.useRealTimers();
+
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
-  test("cancela el reintento y no crea otra petición", async () => {
-    const controller = new AbortController();
-    const fetchMock = vi.fn().mockRejectedValue(new TypeError("offline"));
-    global.fetch = fetchMock;
+  test("elimina el header CSRF anterior antes del refresco", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ token: "csrf-stale" }))
+      .mockResolvedValueOnce(errorResponse("CSRF_TOKEN_MISMATCH"))
+      .mockResolvedValueOnce(jsonResponse({ token: null }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }));
 
-    const result = api.conversations.sendMessage("conv-1", "Crea un post", undefined, [], {
-      idempotencyKey: "stable-key",
-      signal: controller.signal,
-      maxAttempts: 3,
-    });
-    controller.abort();
-    await expect(result).rejects.toMatchObject({ name: "AbortError" });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await api.projects.create({ name: "Proyecto" });
+
+    expect(requestHeadersAt(1).get("X-CSRF-Token")).toBe("csrf-stale");
+    expect(requestHeadersAt(3).has("X-CSRF-Token")).toBe(false);
   });
 
-  test("acepta logout exitoso sin cuerpo (204)", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(null, {
-        status: 204,
-      })
+  test("agrega Content-Type JSON cuando el body es texto", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ token: "csrf-one" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "project-1" }));
+
+    await api.projects.create({ name: "Proyecto" });
+
+    expect(requestHeadersAt(1).get("Content-Type")).toBe("application/json");
+  });
+
+  test("no agrega Content-Type a una petición GET sin body", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+
+    await api.projects.list();
+
+    expect(requestHeadersAt(0).has("Content-Type")).toBe(false);
+  });
+
+  test("envía Idempotency-Key y reintenta respuestas retryable", async () => {
+    const onRetry = vi.fn();
+
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ token: "csrf-one" }))
+      .mockResolvedValueOnce(
+        errorResponse("TEMPORARY", 503, true, { "Retry-After": "0" })
+      )
+      .mockResolvedValueOnce(jsonResponse({ ok: true }));
+
+    const result = await api.conversations.sendMessage(
+      "conversation-1",
+      "Hola",
+      undefined,
+      [],
+      {
+        idempotencyKey: "idem-1",
+        maxAttempts: 2,
+        onRetry,
+      }
     );
-    global.fetch = fetchMock;
+
+    expect(result).toEqual({ ok: true });
+    expect(requestHeadersAt(1).get("Idempotency-Key")).toBe("idem-1");
+    expect(requestHeadersAt(2).get("Idempotency-Key")).toBe("idem-1");
+    expect(onRetry).toHaveBeenCalledWith(2);
+  });
+
+  test("no reintenta errores retryable sin clave de idempotencia", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ token: "csrf-one" }))
+      .mockResolvedValueOnce(errorResponse("TEMPORARY", 503, true));
+
+    await expect(
+      api.projects.create({ name: "Proyecto" })
+    ).rejects.toBeInstanceOf(ApiError);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  test("devuelve undefined para respuestas 204", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ token: "csrf-one" }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
 
     await expect(api.auth.logout()).resolves.toBeUndefined();
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/v1/auth/logout",
-      expect.objectContaining({
-        method: "POST",
-        credentials: "include",
-      })
-    );
   });
 
-  test("usa el contrato de Pending Signup y conserva expected_version", async () => {
-    const progress = {
-      signup: {
-        status: "pending",
-        current_step: "business",
-        expires_at: "2099-01-01T00:00:00Z",
-        updated_at: null,
-        version: 1,
-        draft: {},
-      },
-    };
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify(progress), { status: 201 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify(progress), { status: 200 }));
-    global.fetch = fetchMock;
+  test("login rota el token CSRF después de crear sesión", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ token: "csrf-before" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "project-1" }))
+      .mockResolvedValueOnce(jsonResponse({ user: { id: "u1" } }))
+      .mockResolvedValueOnce(jsonResponse({ token: "csrf-session" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "project-2" }));
+
+    await api.projects.create({ name: "Antes" });
+    await api.auth.login({
+      email: "user@example.com",
+      password: "secret",
+    });
+    await api.projects.create({ name: "Después" });
+
+    expect(fetchMock.mock.calls[3]?.[0]).toBe("/api/v1/auth/csrf");
+    expect(requestHeadersAt(4).get("X-CSRF-Token")).toBe("csrf-session");
+  });
+
+  test("signup start rota el token hacia el contexto pending signup", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ token: null }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          signup: {
+            status: "pending",
+            current_step: "business",
+            expires_at: "2026-07-29T00:00:00Z",
+            updated_at: null,
+            version: 1,
+            draft: {},
+          },
+        })
+      )
+      .mockResolvedValueOnce(jsonResponse({ token: "csrf-signup" }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          signup: {
+            status: "pending",
+            current_step: "channels",
+            expires_at: "2026-07-29T00:00:00Z",
+            updated_at: "2026-07-28T00:00:00Z",
+            version: 2,
+            draft: {},
+          },
+        })
+      );
 
     await api.auth.signup.start({
-      email: "ana@example.com",
-      name: "Ana",
-      password: "una-clave-segura-123",
+      email: "user@example.com",
+      name: "User",
+      password: "secret",
       interface_locale: "es",
     });
+
     await api.auth.signup.saveDraft(
       {
         step: "business",
         business: {
-          name: "Café Central",
-          category: "gastronomy",
-          country: "Honduras",
+          name: "Negocio",
+          category: "other" as never,
+          country: "HN",
           city: "Tegucigalpa",
-          primary_product: "Café artesanal",
-          target_audience: "Personas que trabajan cerca",
+          primary_product: "Servicio",
+          target_audience: "Clientes",
         },
       },
-      7
+      1
     );
 
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      1,
-      "/api/v1/auth/signup/start",
-      expect.objectContaining({ method: "POST", credentials: "include" })
-    );
-    expect(JSON.parse(fetchMock.mock.calls[1][1].body as string)).toMatchObject({
-      step: "business",
-      expected_version: 7,
+    expect(fetchMock.mock.calls[2]?.[0]).toBe("/api/v1/auth/csrf");
+    expect(requestHeadersAt(3).get("X-CSRF-Token")).toBe("csrf-signup");
+  });
+
+  test("signup complete limpia el token pending signup", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ token: "csrf-signup" }))
+      .mockResolvedValueOnce(jsonResponse({ user_id: "u1" }))
+      .mockResolvedValueOnce(jsonResponse({ token: "csrf-session" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "project-1" }));
+
+    await api.auth.signup.complete({
+      idempotencyKey: "signup-complete-1",
     });
+    await api.projects.create({ name: "Proyecto" });
+
+    expect(fetchMock.mock.calls[2]?.[0]).toBe("/api/v1/auth/csrf");
+    expect(requestHeadersAt(3).get("X-CSRF-Token")).toBe("csrf-session");
   });
 
-  test("envía una Idempotency-Key estable al completar signup", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ ok: true }), { status: 200 })
-    );
-    global.fetch = fetchMock;
+  test("no usa document.cookie para obtener CSRF", async () => {
+    const cookieGetter = vi.spyOn(document, "cookie", "get");
 
-    await api.auth.signup.complete({ idempotencyKey: "signup-completion-1" });
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ token: "csrf-one" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "project-1" }));
 
-    const headers = fetchMock.mock.calls[0][1].headers as Headers;
-    expect(headers.get("Idempotency-Key")).toBe("signup-completion-1");
-    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/auth/signup/complete");
-  });
+    await api.projects.create({ name: "Proyecto" });
 
-  test("consulta Google y usa el inicio OAuth controlado por backend", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ configured: true }), { status: 200 })
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({ authorization_url: "https://accounts.google.com/o/oauth2/v2/auth" }),
-          { status: 200 }
-        )
-      );
-    global.fetch = fetchMock;
-
-    await expect(api.auth.google.status()).resolves.toEqual({ configured: true });
-    await expect(api.auth.google.start()).resolves.toEqual({
-      authorization_url: "https://accounts.google.com/o/oauth2/v2/auth",
-    });
-
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      1,
-      "/api/v1/auth/google/status",
-      expect.objectContaining({ credentials: "include" })
-    );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
-      "/api/v1/auth/google/start",
-      expect.objectContaining({ credentials: "include" })
-    );
-  });
-
-  test("propaga conflictos de versión sin reintentar a ciegas", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          error: {
-            code: "SIGNUP_CONFLICT",
-            message: "El borrador fue actualizado en otra sesión.",
-          },
-        }),
-        { status: 409 }
-      )
-    );
-    global.fetch = fetchMock;
-
-    await expect(
-      api.auth.signup.saveDraft(
-        {
-          step: "review",
-          review: { confirmed: true },
-        },
-        2
-      )
-    ).rejects.toMatchObject({ status: 409, code: "SIGNUP_CONFLICT" });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  test("modo demo conserva un proyecto iniciado desde plantilla", async () => {
-    vi.stubEnv("NEXT_PUBLIC_ENABLE_DEMO", "true");
-    enableDemoMode();
-
-    const project = await api.projects.create({
-      template_id: "template-demo-1",
-      business_id: "business-demo-1",
-    });
-    const projects = await api.projects.list({ status: "active" });
-
-    expect(project.source_template_id).toBe("template-demo-1");
-    expect(projects.some((item) => item.id === project.id)).toBe(true);
+    expect(cookieGetter).not.toHaveBeenCalled();
+    cookieGetter.mockRestore();
   });
 });

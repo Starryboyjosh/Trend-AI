@@ -50,6 +50,14 @@ def setup_db():
     _sync_engine.dispose()
 
 
+@pytest.fixture(scope="session", autouse=True)
+def apply_test_defaults():
+    import app.core.config as config_module
+
+    config_module.settings.app_env = "test"
+    config_module.settings.csrf_enabled = False
+
+
 async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
     async with _TestingSessionFactory() as session:
         yield session

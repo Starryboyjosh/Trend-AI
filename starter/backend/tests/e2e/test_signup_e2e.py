@@ -4,7 +4,7 @@ import uuid
 
 import pytest
 
-from app.identity.routes import SIGNUP_COOKIE_NAME
+from app.core.cookies import SIGNUP_COOKIE as SIGNUP_COOKIE_NAME
 
 
 @pytest.mark.asyncio
