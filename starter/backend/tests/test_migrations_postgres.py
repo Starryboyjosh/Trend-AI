@@ -16,6 +16,7 @@ import app.conversations.models  # noqa: F401
 import app.identity.models  # noqa: F401
 import app.projects.models  # noqa: F401
 import app.templates.models  # noqa: F401
+import app.trends.models  # noqa: F401
 from alembic import command
 from app.core.config import settings
 from app.db.base import Base
@@ -85,8 +86,43 @@ def _public_template_ids(engine) -> list[str]:
 def test_upgrade_empty_postgres_to_head(postgres_engine) -> None:
     _upgrade("head")
     with postgres_engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "018"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "019"
     assert set(_public_template_ids(postgres_engine)) == EXPECTED_TEMPLATE_IDS
+
+
+def test_trend_framework_upgrade_downgrade_and_reupgrade(postgres_engine) -> None:
+    _upgrade("018")
+    _upgrade("019")
+    with postgres_engine.connect() as connection:
+        assert connection.scalar(text("SELECT to_regclass('public.trend_items')"))
+        assert connection.scalar(text("SELECT to_regclass('public.trend_evidence')"))
+        assert connection.scalar(text("SELECT to_regclass('public.trend_item_evidence')"))
+        assert connection.scalar(text("SELECT to_regclass('public.trend_run_evidence')"))
+    command.downgrade(_alembic_config(), "018")
+    with postgres_engine.connect() as connection:
+        assert connection.scalar(text("SELECT to_regclass('public.trend_items')")) is None
+    _upgrade("019")
+    with postgres_engine.connect() as connection:
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "019"
+
+
+def test_trend_framework_schema_matches_the_sqlalchemy_models(postgres_engine) -> None:
+    """019 owns these tables; compare only its declarative surface."""
+
+    _upgrade("head")
+    owned_tables = {
+        "trend_runs",
+        "trend_items",
+        "trend_evidence",
+        "trend_item_evidence",
+        "trend_run_evidence",
+        "workspace_trend_relevance",
+    }
+    with postgres_engine.connect() as connection:
+        context = MigrationContext.configure(connection)
+        diffs = _flatten_diffs(compare_metadata(context, Base.metadata))
+    divergences = [entry for entry in diffs if _diff_table(entry) in owned_tables]
+    assert divergences == [], f"019 no coincide con los modelos: {divergences}"
 
 
 def test_phase1_templates_are_seeded_once_and_upgrade_is_repeatable(postgres_engine) -> None:
@@ -250,7 +286,7 @@ def test_upgrade_from_017_adds_account_lifecycle_schema(postgres_engine) -> None
         assert connection.scalar(text("SELECT to_regclass('public.admin_audit_events')"))
         assert connection.scalar(text("SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='deletion_requested_at'"))
 
-    # 018 -> 017 must leave no trace behind, so a redeploy can replay it.
+    # 019 -> 018 must leave no trace behind, so a redeploy can replay it.
     command.downgrade(_alembic_config(), "017")
     with postgres_engine.connect() as connection:
         assert connection.scalar(text("SELECT to_regclass('public.account_purge_jobs')")) is None
@@ -259,7 +295,7 @@ def test_upgrade_from_017_adds_account_lifecycle_schema(postgres_engine) -> None
 
     _upgrade("head")
     with postgres_engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "018"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "019"
         assert connection.scalar(text("SELECT to_regclass('public.account_purge_jobs')"))
 
 
@@ -323,4 +359,4 @@ def test_account_lifecycle_schema_matches_the_sqlalchemy_models(postgres_engine)
         if _diff_table(entry) in owned_tables
         or (_diff_table(entry) == "users" and _diff_column(entry) == "deletion_requested_at")
     ]
-    assert divergences == [], f"018 no coincide con los modelos: {divergences}"
+    assert divergences == [], f"019 no coincide con los modelos: {divergences}"

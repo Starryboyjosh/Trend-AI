@@ -28,6 +28,7 @@ from app.db.session import get_session_factory
 from app.identity.routes import router as identity_router
 from app.projects.routes import router as project_router
 from app.templates.routes import router as template_router
+from app.trends.routes import router as trends_router
 
 logger = logging.getLogger("hitrendy.http")
 logger.setLevel(logging.INFO)
@@ -339,6 +340,7 @@ app.include_router(conversation_router, prefix=settings.api_prefix)
 app.include_router(project_router, prefix=settings.api_prefix)
 app.include_router(asset_router, prefix=settings.api_prefix)
 app.include_router(template_router, prefix=settings.api_prefix)
+app.include_router(trends_router, prefix=settings.api_prefix)
 
 
 @app.get("/health/live")

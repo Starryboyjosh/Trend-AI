@@ -85,6 +85,7 @@ _WORKSPACE_STATEMENTS: tuple[str, ...] = (
     "DELETE FROM creation_flow_events WHERE workspace_id = :workspace_id",
     "DELETE FROM ai_usage_events WHERE workspace_id = :workspace_id",
     "DELETE FROM idempotency_records WHERE workspace_id = :workspace_id",
+    "DELETE FROM workspace_trend_relevance WHERE workspace_id = :workspace_id",
     "DELETE FROM upload_sessions WHERE workspace_id = :workspace_id",
     "DELETE FROM asset_analyses WHERE asset_id IN (SELECT id FROM assets WHERE workspace_id = :workspace_id)",
     "DELETE FROM assets WHERE workspace_id = :workspace_id",

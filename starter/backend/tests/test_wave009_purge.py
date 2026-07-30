@@ -53,6 +53,7 @@ from app.identity.purge_worker import run_once
 from app.main import app
 from app.projects.models import CreationFlowEvent, Project
 from app.templates.models import Template
+from app.trends.models import TrendItem, WorkspaceTrendRelevance
 
 
 @asynccontextmanager
@@ -397,6 +398,37 @@ async def test_purge_removes_every_workspace_scoped_row(client, monkeypatch) -> 
         assert await session.get(AdminAuditEvent, "aud_keep") is not None
         assert await session.get(User, other_user.id) is not None
         assert storage.objects == set()
+
+
+@pytest.mark.asyncio
+async def test_purge_removes_private_trend_relevance_but_keeps_global_evidence(client) -> None:
+    async with session_scope() as session:
+        user, workspace = await _make_account(session, suffix="purge_trends")
+        item = TrendItem(
+            id="trend_global_keep",
+            group_key="g" * 64,
+            observation_window="utc-week-v1:0",
+            fingerprint="f" * 64,
+            title="Tendencia global",
+            summary="Resumen",
+            region="HN",
+            category="gastronomy",
+            observed_at=datetime.now(UTC),
+            freshness_score=0.5,
+            scoring_version="trend-v1",
+            component_scores="{}",
+            total_score=0.5,
+            calculated_at=datetime.now(UTC),
+        )
+        session.add_all((item, WorkspaceTrendRelevance(
+            workspace_id=workspace.id, trend_item_id=item.id, score=0.5,
+            relevance_version="workspace-relevance-v1", component_scores="{}", calculated_at=datetime.now(UTC),
+        )))
+        await session.commit()
+        completed = await run_account_purge(session, await _create_job(session, user, workspace.id))
+        assert completed.status == "completed"
+        assert await session.get(TrendItem, item.id) is not None
+        assert await _count(session, "workspace_trend_relevance", "workspace_id", workspace.id) == 0
 
 
 @pytest.mark.asyncio

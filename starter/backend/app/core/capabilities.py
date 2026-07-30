@@ -281,7 +281,15 @@ class CapabilityRegistry:
             )
 
         if capability == Capability.TREND_ANALYSIS:
-            status = CapabilityStatus.UNCONFIGURED if settings.trend_analysis_enabled else CapabilityStatus.DISABLED
+            # WAVE-010A exposes only deterministic demo adapters.  They are
+            # useful in development/tests when explicitly enabled, but never
+            # claim a real production source is configured.
+            if not settings.trend_analysis_enabled:
+                status = CapabilityStatus.DISABLED
+            elif settings.app_env in {"development", "test"}:
+                status = CapabilityStatus.AVAILABLE
+            else:
+                status = CapabilityStatus.UNCONFIGURED
             return PublicCapability(
                 status=status,
                 tier=Tier.FREE,
@@ -375,6 +383,11 @@ class CapabilityRegistry:
         outcome = self._outcome_store.get(capability)
         return self._apply_outcome(capability, info, outcome)
 
+    def get_base_capability(self, capability: Capability) -> PublicCapability:
+        """Return configuration state without applying transient provider outcomes."""
+
+        return self._base_capability(capability)
+
     async def resolve(
         self,
         capability: Capability,
@@ -431,6 +444,22 @@ class CapabilityRegistry:
         outcome: CapabilityOutcome,
     ) -> None:
         self._outcome_store.set(route.capability, outcome)
+
+    async def record_outcome_for(
+        self, capability: Capability, outcome: CapabilityOutcome
+    ) -> None:
+        """Record a safe runtime outcome when a capability has no provider route."""
+
+        self._outcome_store.set(capability, outcome)
+
+
+_runtime_outcome_store = MemoryCapabilityOutcomeStore()
+
+
+def get_runtime_capability_registry() -> CapabilityRegistry:
+    """Shared, process-local registry for safe runtime capability outcomes."""
+
+    return CapabilityRegistry(outcome_store=_runtime_outcome_store)
 
 
 def _resolve_provider_key(capability: Capability) -> str:

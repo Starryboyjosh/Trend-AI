@@ -15,6 +15,7 @@ import app.business.models  # noqa: F401
 import app.conversations.models  # noqa: F401
 import app.projects.models  # noqa: F401
 import app.templates.models  # noqa: F401
+import app.trends.models  # noqa: F401
 from app.db.base import Base
 from app.dependencies import get_db
 from app.identity.models import (
