@@ -1,6 +1,7 @@
 "use client";
 
 import type { Objective, Platform } from "@/types/business";
+import { optionLabel, surfaceCopy, useInterfaceLocale } from "@/lib/i18n";
 
 interface Props {
   data: { preferred_platforms: Platform[]; primary_objective: Objective | "" };
@@ -28,6 +29,8 @@ const OBJECTIVES: { value: Objective; label: string }[] = [
 ];
 
 export function StepChannels({ data, onChange }: Props) {
+  const locale = useInterfaceLocale();
+  const copy = surfaceCopy[locale].onboarding;
   function togglePlatform(p: Platform) {
     const current = data.preferred_platforms;
     const next = current.includes(p)
@@ -39,11 +42,11 @@ export function StepChannels({ data, onChange }: Props) {
   return (
     <section>
       <h2 style={{ fontFamily: "var(--font-heading)", marginTop: 0 }}>
-        Canales y objetivos
+        {copy.channelsTitle}
       </h2>
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <fieldset>
-          <legend>Redes sociales que usas *</legend>
+          <legend>{copy.platforms} *</legend>
           <div
             style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}
           >
@@ -78,7 +81,7 @@ export function StepChannels({ data, onChange }: Props) {
           </div>
         </fieldset>
         <div>
-          <label htmlFor="obj-primary">Objetivo principal *</label>
+          <label htmlFor="obj-primary">{copy.objective} *</label>
           <select
             id="obj-primary"
             value={data.primary_objective}
@@ -86,10 +89,10 @@ export function StepChannels({ data, onChange }: Props) {
             required
             style={{ display: "block", width: "100%", marginTop: 4 }}
           >
-            <option value="">Seleccionar...</option>
+            <option value="">{copy.select}</option>
             {OBJECTIVES.map((o) => (
               <option key={o.value} value={o.value}>
-                {o.label}
+                {optionLabel(locale, "objective", o.value) || o.label}
               </option>
             ))}
           </select>

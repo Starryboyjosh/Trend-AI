@@ -5,11 +5,20 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import pytest
+from alembic.autogenerate import compare_metadata
 from alembic.config import Config
+from alembic.runtime.migration import MigrationContext
 from sqlalchemy import create_engine, text
 
+import app.assets.models  # noqa: F401
+import app.business.models  # noqa: F401
+import app.conversations.models  # noqa: F401
+import app.identity.models  # noqa: F401
+import app.projects.models  # noqa: F401
+import app.templates.models  # noqa: F401
 from alembic import command
 from app.core.config import settings
+from app.db.base import Base
 
 POSTGRES_URL = os.environ.get(
     "POSTGRES_MIGRATION_DATABASE_URL",
@@ -76,7 +85,7 @@ def _public_template_ids(engine) -> list[str]:
 def test_upgrade_empty_postgres_to_head(postgres_engine) -> None:
     _upgrade("head")
     with postgres_engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "017"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "018"
     assert set(_public_template_ids(postgres_engine)) == EXPECTED_TEMPLATE_IDS
 
 
@@ -142,6 +151,10 @@ def test_upgrade_from_013_adds_pending_signup_schema(postgres_engine) -> None:
     with postgres_engine.connect() as connection:
         assert connection.scalar(text("SELECT to_regclass('public.pending_signups')"))
         assert connection.scalar(text("SELECT to_regclass('public.user_preferences')"))
+        pending_columns = {
+            row.column_name
+            for row in connection.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'pending_signups'"))
+        }
         columns = {
             row.column_name
             for row in connection.execute(
@@ -152,6 +165,9 @@ def test_upgrade_from_013_adds_pending_signup_schema(postgres_engine) -> None:
             )
         }
     assert {"website_url", "content_locale", "onboarding_completed_at"} <= columns
+    # The deletion status token lives on account_purge_jobs, never here.
+    assert {"completion_response_json"} <= pending_columns
+    assert {"status_token_hash", "status_token_expires_at"} & pending_columns == set()
 
 
 def test_upgrade_from_014_adds_google_oauth_schema(postgres_engine) -> None:
@@ -224,3 +240,87 @@ def test_upgrade_from_016_adds_instagram_flow_timing(postgres_engine) -> None:
     assert {"flow_started_at", "first_generation_completed_at", "elapsed_seconds", "completion_status", "flow_key"} <= columns
     command.downgrade(_alembic_config(), "016")
     _upgrade("head")
+
+
+def test_upgrade_from_017_adds_account_lifecycle_schema(postgres_engine) -> None:
+    _upgrade("017")
+    _upgrade("head")
+    with postgres_engine.connect() as connection:
+        assert connection.scalar(text("SELECT to_regclass('public.account_purge_jobs')"))
+        assert connection.scalar(text("SELECT to_regclass('public.admin_audit_events')"))
+        assert connection.scalar(text("SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='deletion_requested_at'"))
+
+    # 018 -> 017 must leave no trace behind, so a redeploy can replay it.
+    command.downgrade(_alembic_config(), "017")
+    with postgres_engine.connect() as connection:
+        assert connection.scalar(text("SELECT to_regclass('public.account_purge_jobs')")) is None
+        assert connection.scalar(text("SELECT to_regclass('public.admin_audit_events')")) is None
+        assert connection.scalar(text("SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='deletion_requested_at'")) is None
+
+    _upgrade("head")
+    with postgres_engine.connect() as connection:
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "018"
+        assert connection.scalar(text("SELECT to_regclass('public.account_purge_jobs')"))
+
+
+def test_account_purge_job_survives_the_rows_it_deletes(postgres_engine) -> None:
+    """No cascade may take the job away before it reports its outcome."""
+
+    _upgrade("head")
+    with postgres_engine.connect() as connection:
+        referenced = list(
+            connection.scalars(
+                text(
+                    "SELECT confrelid::regclass::text FROM pg_constraint "
+                    "WHERE contype = 'f' AND conrelid = 'account_purge_jobs'::regclass"
+                )
+            )
+        )
+    assert referenced == []
+
+
+def _flatten_diffs(diffs: list) -> list[tuple]:
+    flat: list[tuple] = []
+    for entry in diffs:
+        flat.extend(entry) if isinstance(entry, list) else flat.append(entry)
+    return flat
+
+
+def _diff_table(entry: tuple) -> str | None:
+    kind = entry[0]
+    if kind in {"add_table", "remove_table"}:
+        return entry[1].name
+    if kind in {"add_column", "remove_column"} or kind.startswith("modify_"):
+        return entry[2]
+    return getattr(getattr(entry[1], "table", None), "name", None)
+
+
+def _diff_column(entry: tuple) -> str | None:
+    kind = entry[0]
+    if kind in {"add_column", "remove_column"}:
+        return entry[3].name
+    if kind.startswith("modify_"):
+        return entry[3]
+    return None
+
+
+def test_account_lifecycle_schema_matches_the_sqlalchemy_models(postgres_engine) -> None:
+    """The schema Alembic builds for WAVE-009 must equal the declared models.
+
+    The comparison is scoped to what this wave owns: tables created before it
+    carry drift that predates this work and is not corrected here.
+    """
+
+    _upgrade("head")
+    owned_tables = {"account_purge_jobs", "admin_audit_events"}
+    with postgres_engine.connect() as connection:
+        context = MigrationContext.configure(connection)
+        diffs = _flatten_diffs(compare_metadata(context, Base.metadata))
+
+    divergences = [
+        entry
+        for entry in diffs
+        if _diff_table(entry) in owned_tables
+        or (_diff_table(entry) == "users" and _diff_column(entry) == "deletion_requested_at")
+    ]
+    assert divergences == [], f"018 no coincide con los modelos: {divergences}"

@@ -6,13 +6,14 @@ import json
 import os
 import secrets
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import Literal
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Cookie, Depends, Header, Response
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field, ValidationError, model_validator
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -42,8 +43,18 @@ from app.core.csrf import (
     _pick_context,
 )
 from app.core.errors import AppError, ForbiddenError
-from app.dependencies import CurrentPrincipal, get_current_principal, get_db
+from app.dependencies import CurrentPrincipal, get_current_principal, get_db, require_workspace
 from app.domain.models import Category, Objective, Platform, Tone
+from app.identity.account_deletion import (
+    STATUS_TOKEN_MAX_LENGTH,
+    STATUS_TOKEN_MIN_LENGTH,
+    STATUS_TOKEN_PATTERN,
+    confirmation_phrase,
+    read_public_deletion_status,
+)
+from app.identity.account_deletion import (
+    request_account_deletion as apply_account_deletion,
+)
 from app.identity.google_oauth import (
     GoogleIdentity,
     GoogleOIDCClient,
@@ -65,6 +76,7 @@ router = APIRouter(prefix="/auth", tags=["identity"])
 
 GOOGLE_PROVIDER = "google"
 SIGNUP_TTL = timedelta(hours=24)
+USAGE_PERIOD_DAYS = 30
 SignupStep = Literal["business", "channels", "brand", "review"]
 InterfaceLocale = Literal["es", "en", "pt"]
 
@@ -206,6 +218,22 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: str = Field(min_length=3, max_length=255)
     password: str = Field(min_length=1, max_length=256)
+
+
+class UpdateAccountRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    interface_locale: InterfaceLocale
+
+
+class DeleteAccountRequest(BaseModel):
+    confirmation: str = Field(min_length=1, max_length=64)
+    # The client generates the opaque status token so a retried request recovers
+    # the same job. Only its hash is ever persisted.
+    status_token: str = Field(
+        min_length=STATUS_TOKEN_MIN_LENGTH,
+        max_length=STATUS_TOKEN_MAX_LENGTH,
+        pattern=STATUS_TOKEN_PATTERN,
+    )
 
 
 class SignupStartRequest(BaseModel):
@@ -712,8 +740,139 @@ async def logout(
 
 
 @router.get("/me")
-async def me(principal: CurrentPrincipal = Depends(get_current_principal)) -> dict:
-    return {"user": principal.user, "workspaces": principal.workspaces}
+async def me(principal: CurrentPrincipal = Depends(get_current_principal), db: AsyncSession = Depends(get_db)) -> dict:
+    preference = await db.get(UserPreference, principal.user["id"])
+    locale = preference.interface_locale if preference else "es"
+    return {
+        "user": {
+            **principal.user,
+            "interface_locale": locale,
+            # The UI must offer exactly the phrase the server accepts.
+            "deletion_confirmation_phrase": confirmation_phrase(locale),
+        },
+        "workspaces": principal.workspaces,
+    }
+
+
+@router.patch("/account")
+async def update_account(
+    body: UpdateAccountRequest,
+    principal: CurrentPrincipal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    user = await db.get(User, principal.user["id"])
+    if user is None or user.status != "active":
+        raise ForbiddenError()
+    user.name = body.name.strip()
+    # The email is identity, never editable here.
+    user.interface_locale = body.interface_locale
+    preference = await db.get(UserPreference, user.id)
+    if preference is None:
+        preference = UserPreference(user_id=user.id, interface_locale=body.interface_locale)
+        db.add(preference)
+    else:
+        preference.interface_locale = body.interface_locale
+    await db.commit()
+    return {
+        "user": {
+            "id": user.id,
+            "name": user.name,
+            "email": user.email,
+            "interface_locale": preference.interface_locale,
+            "deletion_confirmation_phrase": confirmation_phrase(preference.interface_locale),
+        }
+    }
+
+
+@router.get("/usage")
+async def account_usage(
+    workspace_id: str = Depends(require_workspace),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Honest 30-day usage for the authorized workspace.
+
+    A ``NULL`` reported cost is unknown, never zero, so each group reports how
+    many events carried a cost and how many did not. Model identifiers and
+    provider request ids are intentionally never exposed.
+    """
+
+    from app.conversations.models import AIUsageEvent
+
+    since = datetime.now(UTC) - timedelta(days=USAGE_PERIOD_DAYS)
+    rows = (
+        await db.execute(
+            select(
+                AIUsageEvent.capability,
+                AIUsageEvent.quality_level,
+                AIUsageEvent.currency,
+                func.count().label("generations"),
+                func.sum(AIUsageEvent.total_tokens).label("total_tokens"),
+                func.sum(AIUsageEvent.reported_cost).label("reported_cost"),
+                func.count(AIUsageEvent.reported_cost).label("known_cost_count"),
+            )
+            .where(
+                AIUsageEvent.workspace_id == workspace_id,
+                AIUsageEvent.created_at >= since,
+            )
+            .group_by(
+                AIUsageEvent.capability, AIUsageEvent.quality_level, AIUsageEvent.currency
+            )
+            .order_by(AIUsageEvent.capability, AIUsageEvent.quality_level)
+        )
+    ).all()
+    items = []
+    for row in rows:
+        generations = int(row.generations or 0)
+        known = int(row.known_cost_count or 0)
+        cost = Decimal(row.reported_cost) if row.reported_cost is not None else None
+        items.append(
+            {
+                "capability": row.capability,
+                "quality_level": row.quality_level,
+                "generations": generations,
+                "total_tokens": int(row.total_tokens) if row.total_tokens is not None else None,
+                "reported_cost": format(cost, "f") if cost is not None else None,
+                "known_cost_count": known,
+                "unknown_cost_count": generations - known,
+                "currency": row.currency,
+            }
+        )
+    return {"period_days": USAGE_PERIOD_DAYS, "items": items}
+
+
+@router.post("/account/delete", status_code=202)
+async def request_account_deletion(
+    body: DeleteAccountRequest,
+    response: Response,
+    principal: CurrentPrincipal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Revoke access now, purge later. Idempotent for the same client token."""
+
+    job = await apply_account_deletion(
+        db,
+        user_id=principal.user["id"],
+        confirmation=body.confirmation,
+        status_token=body.status_token,
+    )
+    delete_session_cookie(response)
+    delete_csrf_cookie(response)
+    response.headers["Cache-Control"] = "no-store"
+    return {"status": job.status}
+
+
+@router.get("/account/deletion-status")
+async def deletion_status(
+    response: Response,
+    status_token: str | None = Header(None, alias="X-Deletion-Status-Token", max_length=200),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Public, session-less status lookup. Exposes only a coarse status."""
+
+    response.headers["Cache-Control"] = "no-store"
+    if not status_token:
+        raise ForbiddenError("El token de estado no es válido.")
+    return {"status": await read_public_deletion_status(db, status_token)}
 
 
 @router.get("/csrf")

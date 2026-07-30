@@ -27,6 +27,9 @@ export type Category =
   | "technology"
   | "other";
 
+/** Language new generations start from; independent of the interface language. */
+export type ContentLocale = "es" | "en" | "pt";
+
 export interface BusinessProfile {
   id: string;
   workspace_id: string;
@@ -39,6 +42,7 @@ export interface BusinessProfile {
   target_audience: string;
   preferred_platforms: Platform[];
   primary_objective: Objective;
+  content_locale: ContentLocale;
   created_at: string;
   updated_at: string;
 }
@@ -65,4 +69,5 @@ export interface UpdateBusinessRequest {
   target_audience?: string;
   preferred_platforms?: Platform[];
   primary_objective?: Objective;
+  content_locale?: ContentLocale;
 }

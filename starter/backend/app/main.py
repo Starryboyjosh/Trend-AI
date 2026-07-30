@@ -64,6 +64,8 @@ _CORS_HEADERS = [
     "X-CSRF-Token",
     "X-Request-Id",
     "Idempotency-Key",
+    # Carried by the public deletion status screen, which has no session.
+    "X-Deletion-Status-Token",
 ]
 
 app.add_exception_handler(AppError, app_error_handler)
@@ -88,6 +90,7 @@ def _requires_rate_limit(path: str) -> bool:
         or path.endswith("/advisor")
         or path.endswith("/variations")
         or path.endswith("/analyses")
+        or path.endswith("/auth/account/deletion-status")
     )
 
 
@@ -210,6 +213,9 @@ async def security_headers(request: Request, call_next):
     response.headers["Permissions-Policy"] = (
         "camera=(), geolocation=(), microphone=()"
     )
+    if request.url.path.endswith("/auth/account/deletion-status"):
+        # Also covers the rejection paths, which never reach the route handler.
+        response.headers["Cache-Control"] = "no-store"
     if settings.is_production_like and request.url.scheme == "https":
         response.headers["Strict-Transport-Security"] = (
             f"max-age={settings.hsts_max_age_seconds}"

@@ -22,7 +22,13 @@ type DemoProject = {
 };
 
 const demoUser = {
-  user: { id: "demo-user", name: "Ana Demo", email: "demo@hitrendy.local" },
+  user: {
+    id: "demo-user",
+    name: "Ana Demo",
+    email: "demo@hitrendy.local",
+    interface_locale: "es",
+    deletion_confirmation_phrase: "ELIMINAR",
+  },
   workspaces: [{ id: "demo-workspace", role: "owner" }],
 };
 

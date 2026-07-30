@@ -9,6 +9,7 @@ import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { Logo } from "@/components/brand/logo";
 import { api, ApiError } from "@/lib/api";
 import { routes } from "@/lib/routes";
+import { readStoredLocale, setStoredLocale, surfaceCopy, useInterfaceLocale } from "@/lib/i18n";
 
 type InterfaceLocale = "es" | "en" | "pt";
 
@@ -18,10 +19,11 @@ export default function RegisterPage() {
     name: "",
     email: "",
     password: "",
-    interfaceLocale: "es" as InterfaceLocale,
+    interfaceLocale: readStoredLocale() as InterfaceLocale,
   });
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const copy = surfaceCopy[useInterfaceLocale()].auth;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -39,7 +41,7 @@ export default function RegisterPage() {
       setError(
         reason instanceof ApiError
           ? reason.message
-          : "No pudimos crear tu cuenta."
+          : copy.registerFallback
       );
     } finally {
       setSubmitting(false);
@@ -53,18 +55,17 @@ export default function RegisterPage() {
         <div className="auth-brand">
           <Logo />
         </div>
-        <h1 id="register-title">Crea tu cuenta</h1>
+        <h1 id="register-title">{copy.register}</h1>
         <p className="auth-description">
-          Primero creemos tu cuenta. Después conoceremos tu negocio para
-          preparar tu espacio en HiTrendy.
+          {copy.registerLead}
         </p>
         <GoogleSignInButton />
         <div className="auth-divider" aria-hidden="true">
-          <span>o</span>
+          <span>{copy.divider}</span>
         </div>
         <form onSubmit={submit} className="auth-form">
           <label htmlFor="name">
-            Tu nombre
+            {copy.name}
             <input
               id="name"
               value={form.name}
@@ -76,7 +77,7 @@ export default function RegisterPage() {
             />
           </label>
           <label htmlFor="register-email">
-            Correo electrónico
+            {copy.email}
             <input
               id="register-email"
               type="email"
@@ -89,7 +90,7 @@ export default function RegisterPage() {
             />
           </label>
           <label htmlFor="register-password">
-            Contraseña
+            {copy.password}
             <input
               id="register-password"
               type="password"
@@ -103,20 +104,21 @@ export default function RegisterPage() {
             />
           </label>
           <label htmlFor="interface-locale">
-            Idioma de la interfaz
+            {copy.interfaceLocale}
             <select
               id="interface-locale"
               value={form.interfaceLocale}
-              onChange={(event) =>
+              onChange={(event) => {
+                setStoredLocale(event.target.value as InterfaceLocale);
                 setForm({
                   ...form,
                   interfaceLocale: event.target.value as InterfaceLocale,
                 })
-              }
+              }}
             >
-              <option value="es">Español</option>
-              <option value="en">English</option>
-              <option value="pt">Português</option>
+            <option value="es">Español</option>
+            <option value="en">English</option>
+            <option value="pt">Português</option>
             </select>
           </label>
           {error ? (
@@ -125,11 +127,11 @@ export default function RegisterPage() {
             </p>
           ) : null}
           <button type="submit" disabled={submitting}>
-            {submitting ? "Creando cuenta…" : "Crear cuenta"}
+            {submitting ? copy.creating : copy.create}
           </button>
         </form>
         <p className="auth-register-prompt">
-          ¿Ya tienes cuenta? <Link href={routes.login}>Inicia sesión</Link>
+          {copy.hasAccount} <Link href={routes.login}>{copy.loginLink}</Link>
         </p>
         </section>
       </main>

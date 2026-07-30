@@ -6,10 +6,12 @@ import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/shell/app-shell";
 import { TemplateLibrary } from "@/components/templates/template-library";
 import { api, ApiError } from "@/lib/api";
+import { surfaceCopy, useInterfaceLocale } from "@/lib/i18n";
 import type { Template } from "@/types/template";
 
 export default function TemplatesPage() {
   const router = useRouter();
+  const copy = surfaceCopy[useInterfaceLocale()].templates;
   const [loading, setLoading] = useState(true);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [error, setError] = useState("");
@@ -22,11 +24,11 @@ export default function TemplatesPage() {
         setError(
           reason instanceof ApiError
             ? reason.message
-            : "No pudimos comprobar las plantillas."
+            : copy.error
         )
       )
       .finally(() => setLoading(false));
-  }, []);
+  }, [copy.error]);
 
   async function useTemplate(template: Template) {
     router.push(`/studio/new?template=${encodeURIComponent(template.id)}`);
@@ -41,9 +43,9 @@ export default function TemplatesPage() {
           </p>
         ) : null}
         {loading ? (
-          <p className="route-status">Preparando catálogo…</p>
+          <p className="route-status">{copy.loading}</p>
         ) : (
-          <TemplateLibrary templates={templates} onUse={useTemplate} />
+          <TemplateLibrary templates={templates} onUse={useTemplate} copy={copy} />
         )}
       </main>
     </AppShell>

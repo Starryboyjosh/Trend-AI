@@ -18,6 +18,8 @@ import app.templates.models  # noqa: F401
 from app.db.base import Base
 from app.dependencies import get_db
 from app.identity.models import (
+    AccountPurgeJob,
+    AdminAuditEvent,
     AuthSession,
     OAuthAccount,
     OAuthAuthorizationRequest,
@@ -71,6 +73,8 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
         token = "test-session-token"
         async with _TestingSessionFactory() as session:
             for model in (
+                AccountPurgeJob,
+                AdminAuditEvent,
                 AuthSession,
                 OAuthAuthorizationRequest,
                 OAuthAccount,

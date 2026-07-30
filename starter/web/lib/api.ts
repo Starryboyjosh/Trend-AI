@@ -145,6 +145,34 @@ export interface GoogleAuthorizationStart {
   authorization_url: string;
 }
 
+export type InterfaceLocale = "es" | "en" | "pt";
+
+export interface AccountUser {
+  id: string;
+  name: string;
+  email: string;
+  interface_locale: InterfaceLocale;
+  /** Word the backend accepts as confirmation, in the user's own locale. */
+  deletion_confirmation_phrase: string;
+}
+
+/**
+ * One usage group. A null cost is unknown, never zero: the counters say how
+ * many generations in the group actually reported one.
+ */
+export interface UsageItem {
+  capability: string;
+  quality_level: string;
+  generations: number;
+  total_tokens: number | null;
+  reported_cost: string | null;
+  known_cost_count: number;
+  unknown_cost_count: number;
+  currency: string | null;
+}
+
+export type DeletionStatus = "pending" | "processing" | "completed" | "failed";
+
 const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 const DEFAULT_MAX_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 250;
@@ -1197,17 +1225,35 @@ export const api = {
     },
 
     me() {
-      return request<{
-        user: {
-          id: string;
-          name: string;
-          email: string;
-        };
-        workspaces: {
-          id: string;
-          role: string;
-        }[];
-      }>(`${BASE}/auth/me`);
+      return request<{ user: AccountUser; workspaces: { id: string; role: string }[] }>(
+        `${BASE}/auth/me`
+      );
+    },
+    updateAccount(data: { name: string; interface_locale: InterfaceLocale }) {
+      return request<{ user: AccountUser }>(`${BASE}/auth/account`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      });
+    },
+    usage() {
+      return request<{ period_days: number; items: UsageItem[] }>(`${BASE}/auth/usage`);
+    },
+    /**
+     * The status token is minted by the caller, so a retry of this request
+     * resolves to the same purge job. The response never echoes it back.
+     */
+    deleteAccount(confirmation: string, statusToken: string) {
+      return resetCsrfAfter(
+        request<{ status: DeletionStatus }>(`${BASE}/auth/account/delete`, {
+          method: "POST",
+          body: JSON.stringify({ confirmation, status_token: statusToken }),
+        })
+      );
+    },
+    deletionStatus(statusToken: string) {
+      return request<{ status: DeletionStatus }>(`${BASE}/auth/account/deletion-status`, {
+        headers: { "X-Deletion-Status-Token": statusToken },
+      });
     },
   },
 };

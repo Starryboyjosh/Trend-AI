@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 from fastapi import APIRouter, Depends, Header
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.business.repository import (
@@ -55,6 +55,7 @@ class UpdateBusinessRequest(BaseModel):
     target_audience: str | None = Field(None, max_length=500)
     preferred_platforms: list[Platform] | None = None
     primary_objective: Objective | None = None
+    content_locale: str | None = Field(None, pattern=r"^(es|en|pt)$")
 
 
 class UpsertBrandProfileRequest(BaseModel):
@@ -64,6 +65,23 @@ class UpsertBrandProfileRequest(BaseModel):
     forbidden_words: list[str] = Field(default_factory=list, max_length=30)
     primary_color: str | None = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$")
     secondary_color: str | None = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$")
+
+    @model_validator(mode="after")
+    def normalize_words(self) -> UpsertBrandProfileRequest:
+        def cleaned(words: list[str]) -> list[str]:
+            output: list[str] = []
+            for word in words:
+                value = word.strip()
+                if not value or len(value) > 80:
+                    raise ValueError("Las palabras de marca deben tener entre 1 y 80 caracteres.")
+                if value.casefold() not in {item.casefold() for item in output}:
+                    output.append(value)
+            return output
+        self.preferred_words = cleaned(self.preferred_words)
+        self.forbidden_words = cleaned(self.forbidden_words)
+        if {word.casefold() for word in self.preferred_words} & {word.casefold() for word in self.forbidden_words}:
+            raise ValueError("Una palabra no puede ser preferida y prohibida a la vez.")
+        return self
 
 
 class AdvisorRequest(BaseModel):

@@ -1,6 +1,7 @@
 "use client";
 
 import type { Category } from "@/types/business";
+import { optionLabel, surfaceCopy, useInterfaceLocale } from "@/lib/i18n";
 
 export interface BusinessFormData {
   name: string;
@@ -31,16 +32,17 @@ const CATEGORIES: { value: Category; label: string }[] = [
 ];
 
 export function StepBusiness({ data, onChange }: Props) {
+  const locale = useInterfaceLocale();
+  const copy = surfaceCopy[locale].onboarding;
   return (
     <section aria-labelledby="business-step-title">
-      <h2 id="business-step-title">Cuéntanos sobre tu negocio</h2>
+      <h2 id="business-step-title">{copy.businessTitle}</h2>
       <p className="onboarding-step-description">
-        Usaremos este contexto para que tus primeras recomendaciones sean útiles
-        desde el inicio.
+        {copy.businessLead}
       </p>
       <div className="onboarding-fields">
         <label>
-          Nombre comercial <span aria-hidden="true">*</span>
+          {copy.businessName} <span aria-hidden="true">*</span>
           <input
             name="business-name"
             type="text"
@@ -52,24 +54,24 @@ export function StepBusiness({ data, onChange }: Props) {
           />
         </label>
         <label>
-          Categoría <span aria-hidden="true">*</span>
+          {copy.category} <span aria-hidden="true">*</span>
           <select
             name="business-category"
             value={data.category}
             onChange={(event) => onChange("category", event.target.value)}
             required
           >
-            <option value="">Seleccionar…</option>
+            <option value="">{copy.select}</option>
             {CATEGORIES.map((category) => (
               <option key={category.value} value={category.value}>
-                {category.label}
+                {optionLabel(locale, "category", category.value) || category.label}
               </option>
             ))}
           </select>
         </label>
         <div className="onboarding-field-grid">
           <label>
-            País <span aria-hidden="true">*</span>
+            {copy.country} <span aria-hidden="true">*</span>
             <input
               name="business-country"
               type="text"
@@ -81,7 +83,7 @@ export function StepBusiness({ data, onChange }: Props) {
             />
           </label>
           <label>
-            Ciudad <span aria-hidden="true">*</span>
+            {copy.city} <span aria-hidden="true">*</span>
             <input
               name="business-city"
               type="text"
@@ -94,7 +96,7 @@ export function StepBusiness({ data, onChange }: Props) {
           </label>
         </div>
         <label>
-          Producto o servicio principal <span aria-hidden="true">*</span>
+          {copy.product} <span aria-hidden="true">*</span>
           <input
             name="business-product"
             type="text"
@@ -105,7 +107,7 @@ export function StepBusiness({ data, onChange }: Props) {
           />
         </label>
         <label>
-          ¿A quién ayudas? <span aria-hidden="true">*</span>
+          {copy.audience} <span aria-hidden="true">*</span>
           <textarea
             name="business-audience"
             value={data.target_audience}
@@ -113,11 +115,11 @@ export function StepBusiness({ data, onChange }: Props) {
             required
             maxLength={500}
             rows={3}
-            placeholder="Ej: Personas que buscan una pausa cercana y de calidad"
+            placeholder={copy.audiencePlaceholder}
           />
         </label>
         <label>
-          Descripción del negocio
+          {copy.description}
           <textarea
             name="business-description"
             value={data.description}
@@ -127,7 +129,7 @@ export function StepBusiness({ data, onChange }: Props) {
           />
         </label>
         <label>
-          Sitio web <span className="onboarding-optional">Opcional</span>
+          {copy.website} <span className="onboarding-optional">{copy.optional}</span>
           <input
             name="business-website"
             type="url"

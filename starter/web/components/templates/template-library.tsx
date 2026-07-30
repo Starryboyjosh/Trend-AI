@@ -11,14 +11,17 @@ import {
   type TemplatePresentation,
 } from "@/lib/template-catalog";
 import type { Template } from "@/types/template";
+import type { AppLocale } from "@/lib/i18n";
+import { surfaceCopy } from "@/lib/i18n";
 
 interface Props {
   templates: Template[];
   onUse: (template: Template) => Promise<void>;
   compact?: boolean;
+  copy: (typeof surfaceCopy)[AppLocale]["templates"];
 }
 
-export function TemplateLibrary({ templates, onUse, compact = false }: Props) {
+export function TemplateLibrary({ templates, onUse, compact = false, copy }: Props) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<TemplateCategory>("all");
   const [usingTemplateId, setUsingTemplateId] = useState<string | null>(null);
@@ -39,36 +42,36 @@ export function TemplateLibrary({ templates, onUse, compact = false }: Props) {
   return (
     <section
       className={`template-library ${compact ? "template-library--compact" : ""}`}
-      aria-label="Biblioteca de plantillas"
+      aria-label={copy.library}
     >
       {!compact ? (
         <>
           <div className="template-library-heading">
             <div>
-              <p className="eyebrow">BIBLIOTECA CREATIVA</p>
-              <h1>Explora plantillas</h1>
-              <p>Encuentra una base por formato, categoría o tema.</p>
+              <p className="eyebrow">{copy.eyebrow}</p>
+              <h1>{copy.title}</h1>
+              <p>{copy.lead}</p>
             </div>
             <span className="template-count" role="status">
               {matching.length}{" "}
-              {matching.length === 1 ? "plantilla" : "plantillas"}
+              {matching.length === 1 ? copy.singular : copy.plural}
             </span>
           </div>
           <div className="template-toolbar">
             <label className="template-search" htmlFor="template-search">
               <span aria-hidden="true">⌕</span>
-              <span className="visually-hidden">Buscar plantillas</span>
+              <span className="visually-hidden">{copy.search}</span>
               <input
                 id="template-search"
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Buscar por nombre, formato o tema..."
+                placeholder={copy.searchPlaceholder}
               />
             </label>
             <div
               className="template-filter-row"
-              aria-label="Categorías de plantillas"
+              aria-label={copy.categories}
             >
               {templateCategories.map((item) => (
                 <button
@@ -94,7 +97,7 @@ export function TemplateLibrary({ templates, onUse, compact = false }: Props) {
                 className="visual-template-media"
                 style={{ aspectRatio: template.aspectRatio }}
               >
-                <TemplateThumbnail template={template} compact={compact} />
+                <TemplateThumbnail template={template} compact={compact} copy={copy} />
                 <span>{template.displayCategory}</span>
               </div>
               <div className="visual-template-copy">
@@ -109,8 +112,8 @@ export function TemplateLibrary({ templates, onUse, compact = false }: Props) {
                   disabled={usingTemplateId !== null}
                 >
                   {usingTemplateId === template.id
-                    ? "Preparando…"
-                    : "Usar plantilla"}{" "}
+                    ? copy.preparing
+                    : copy.use}{" "}
                   <span aria-hidden="true">→</span>
                 </button>
               </div>
@@ -119,9 +122,9 @@ export function TemplateLibrary({ templates, onUse, compact = false }: Props) {
         </div>
       ) : (
         <div className="template-empty" role="status">
-          <strong>No encontramos plantillas</strong>
+          <strong>{copy.empty}</strong>
           <span>
-            Prueba otra búsqueda o selecciona una categoría diferente.
+            {copy.emptyHint}
           </span>
         </div>
       )}
@@ -132,9 +135,11 @@ export function TemplateLibrary({ templates, onUse, compact = false }: Props) {
 function TemplateThumbnail({
   template,
   compact,
+  copy,
 }: {
   template: TemplatePresentation;
   compact: boolean;
+  copy: (typeof surfaceCopy)[AppLocale]["templates"];
 }) {
   const [failed, setFailed] = useState(false);
 
@@ -143,10 +148,10 @@ function TemplateThumbnail({
       <div
         className="template-thumbnail-fallback"
         role="img"
-        aria-label={`Vista previa no disponible: ${template.title}`}
+        aria-label={`${copy.unavailable}: ${template.title}`}
       >
         <span aria-hidden="true">HT</span>
-        <small>Vista previa no disponible</small>
+        <small>{copy.unavailable}</small>
       </div>
     );
   }
@@ -154,7 +159,7 @@ function TemplateThumbnail({
   return (
     <Image
       src={template.thumbnail_url}
-      alt={`Vista previa: ${template.title}`}
+      alt={`${copy.preview}: ${template.title}`}
       fill
       onError={() => setFailed(true)}
       sizes={

@@ -7,6 +7,8 @@ export const routes = {
   templates: "/templates",
   studioNew: "/studio/new",
   settings: "/settings",
+  // Public on purpose: it is reached after the session has been revoked.
+  accountDeletionStatus: "/account-deletion-status",
 } as const;
 
 const protectedExactPaths = new Set<string>([

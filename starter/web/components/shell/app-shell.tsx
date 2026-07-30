@@ -2,22 +2,27 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { Logo } from "@/components/brand/logo";
 import { api } from "@/lib/api";
 import { routes } from "@/lib/routes";
+import { appCopy, isSupportedLocale, readStoredLocale, type AppLocale } from "@/lib/i18n";
 
 type IconName = "studio" | "dashboard" | "templates" | "settings" | "logout" | "bell";
 type NavItem = { href: string; label: string; icon: IconName };
 
-const navigation: NavItem[] = [
-  { href: routes.studioNew, label: "Studio", icon: "studio" },
-  { href: routes.dashboard, label: "Dashboard", icon: "dashboard" },
-  { href: routes.templates, label: "Plantillas", icon: "templates" },
-  { href: routes.settings, label: "Configuración", icon: "settings" },
-];
+function navigationFor(copy: ReturnType<typeof getCopy>): NavItem[] {
+  return [
+    { href: routes.studioNew, label: copy.nav.studio, icon: "studio" },
+    { href: routes.dashboard, label: copy.nav.dashboard, icon: "dashboard" },
+    { href: routes.templates, label: copy.nav.templates, icon: "templates" },
+    { href: routes.settings, label: copy.nav.settings, icon: "settings" },
+  ];
+}
+
+function getCopy(locale: AppLocale) { return appCopy[locale]; }
 
 function AppIcon({ name }: { name: IconName }) {
   const common = { width: 22, height: 22, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
@@ -35,12 +40,12 @@ function isCurrentPath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function sectionLabel(pathname: string) {
-  if (pathname.startsWith("/studio")) return "Studio";
-  if (pathname.startsWith("/dashboard")) return "Dashboard";
-  if (pathname.startsWith("/templates")) return "Plantillas";
-  if (pathname.startsWith("/settings")) return "Configuración";
-  if (pathname.startsWith("/onboarding")) return "Mi negocio";
+function sectionLabel(pathname: string, copy: ReturnType<typeof getCopy>) {
+  if (pathname.startsWith("/studio")) return copy.nav.studio;
+  if (pathname.startsWith("/dashboard")) return copy.nav.dashboard;
+  if (pathname.startsWith("/templates")) return copy.nav.templates;
+  if (pathname.startsWith("/settings")) return copy.nav.settings;
+  if (pathname.startsWith("/onboarding")) return copy.nav.dashboard;
   return "HiTrendy";
 }
 
@@ -48,6 +53,17 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [locale, setLocale] = useState<AppLocale>(readStoredLocale);
+  const copy = appCopy[locale];
+  const navigation = navigationFor(copy);
+  useEffect(() => {
+    const onLocale = (event: Event) => {
+      const next = (event as CustomEvent<AppLocale>).detail;
+      if (isSupportedLocale(next)) setLocale(next);
+    };
+    window.addEventListener("hitrendy:locale", onLocale);
+    return () => window.removeEventListener("hitrendy:locale", onLocale);
+  }, []);
 
   async function logout() {
     setLoggingOut(true);
@@ -61,9 +77,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <ProtectedRoute>
       <div className="app-shell">
-        <aside className="app-sidebar" aria-label="Navegación principal">
-          <Link href={routes.home} className="brand-lockup" aria-label="HiTrendy, inicio"><Logo /></Link>
-          <nav className="desktop-nav" aria-label="Secciones">
+        <aside className="app-sidebar" aria-label={copy.nav.main}>
+          <Link href={routes.home} className="brand-lockup" aria-label={copy.nav.home}><Logo /></Link>
+          <nav className="desktop-nav" aria-label={copy.nav.sections}>
             {navigation.map((item) => {
               const current = isCurrentPath(pathname, item.href);
               return (
@@ -75,28 +91,28 @@ export function AppShell({ children }: { children: ReactNode }) {
             })}
           </nav>
           <div className="sidebar-footer">
-            <button type="button" className="nav-link nav-link-button" data-label="Cerrar sesión" onClick={logout} disabled={loggingOut}>
-              <span className="nav-mark"><AppIcon name="logout" /></span><span className="nav-label">{loggingOut ? "Saliendo…" : "Cerrar sesión"}</span>
+            <button type="button" className="nav-link nav-link-button" data-label={copy.nav.logout} onClick={logout} disabled={loggingOut}>
+              <span className="nav-mark"><AppIcon name="logout" /></span><span className="nav-label">{loggingOut ? copy.nav.loggingOut : copy.nav.logout}</span>
             </button>
           </div>
         </aside>
 
         <div className="app-main">
           <header className="app-topbar">
-            <div className="app-breadcrumb"><span>HiTrendy</span><b aria-hidden="true">›</b><strong>{sectionLabel(pathname)}</strong></div>
-            <div className="top-actions"><button type="button" className="top-icon-button" aria-label="Notificaciones"><AppIcon name="bell" /></button><button type="button" className="profile-button"><span>Hola, Trendy</span><b>HT</b></button></div>
+            <div className="app-breadcrumb"><span>HiTrendy</span><b aria-hidden="true">›</b><strong>{sectionLabel(pathname, copy)}</strong></div>
+            <div className="top-actions"><button type="button" className="top-icon-button" aria-label={copy.nav.notifications}><AppIcon name="bell" /></button><button type="button" className="profile-button"><span>Hi, Trendy</span><b>HT</b></button></div>
           </header>
           <div className="app-content">{children}</div>
         </div>
 
-        <nav className="mobile-nav" aria-label="Navegación móvil">
+        <nav className="mobile-nav" aria-label={copy.nav.mobile}>
           {navigation.map((item) => {
             const current = isCurrentPath(pathname, item.href);
             return <Link key={item.href} href={item.href} className="mobile-nav-link" aria-current={current ? "page" : undefined} data-active={current || undefined}><AppIcon name={item.icon}/><span>{item.label}</span></Link>;
           })}
           <button type="button" className="mobile-nav-link mobile-nav-button" onClick={logout} disabled={loggingOut}>
             <AppIcon name="logout" />
-            <span>{loggingOut ? "Saliendo…" : "Salir"}</span>
+            <span>{loggingOut ? copy.nav.loggingOut : copy.nav.mobileLogout}</span>
           </button>
         </nav>
       </div>

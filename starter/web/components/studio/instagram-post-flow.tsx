@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ApiError, api, createIdempotencyKey } from "@/lib/api";
 import { instagramFlowCopy, type InstagramFlowLocale } from "@/lib/instagram-flow-copy";
+import { useInterfaceLocale } from "@/lib/i18n";
 import type { GeneratedSocialPost } from "@/types/artifact";
 import type { BrandProfile } from "@/types/brand";
 import type { BusinessProfile, Objective } from "@/types/business";
@@ -36,6 +37,7 @@ export function validateInstagramDraft(draft: EditablePost, copy: typeof instagr
 
 export function InstagramPostFlow() {
   const router = useRouter();
+  const interfaceLocale = useInterfaceLocale();
   const searchParams = useSearchParams();
   const requestedProjectId = searchParams.get("project");
   const operationRef = useRef(false);
@@ -68,6 +70,10 @@ export function InstagramPostFlow() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [flowId, setFlowId] = useState<string | null>(null);
   const isDirty = useMemo(() => Boolean(draft && generated && JSON.stringify(draft) !== JSON.stringify(generated)), [draft, generated]);
+
+  useEffect(() => {
+    setLocale(interfaceLocale);
+  }, [interfaceLocale]);
 
   useEffect(() => {
     function warn(event: BeforeUnloadEvent) {

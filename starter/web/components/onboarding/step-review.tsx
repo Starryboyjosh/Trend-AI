@@ -3,6 +3,7 @@
 import type { BusinessFormData } from "@/components/onboarding/step-business";
 import type { Objective, Platform } from "@/types/business";
 import type { Tone } from "@/types/brand";
+import { optionLabel, surfaceCopy, useInterfaceLocale } from "@/lib/i18n";
 
 interface Props {
   business: BusinessFormData;
@@ -32,38 +33,39 @@ export function StepReview({
   onConfirm,
   submitting,
 }: Props) {
+  const locale = useInterfaceLocale();
+  const copy = surfaceCopy[locale].onboarding;
   return (
     <section aria-labelledby="review-step-title">
-      <h2 id="review-step-title">Revisa tu información</h2>
+      <h2 id="review-step-title">{copy.reviewTitle}</h2>
       <p className="onboarding-step-description">
-        Esto es lo que entendimos de tu negocio. Podrás editarlo después desde
-        Configuración.
+        {copy.reviewLead}
       </p>
       <div className="onboarding-review-grid">
-        <ReviewCard title="Negocio">
-          <ReviewRow label="Nombre" value={business.name} />
-          <ReviewRow label="Categoría" value={business.category} />
+        <ReviewCard title={copy.business}>
+          <ReviewRow label={copy.businessName} value={business.name} />
+          <ReviewRow label={copy.category} value={optionLabel(locale, "category", business.category)} />
           <ReviewRow
-            label="Ubicación"
+            label={copy.location}
             value={[business.city, business.country].filter(Boolean).join(", ")}
           />
-          <ReviewRow label="Producto o servicio" value={business.primary_product} />
-          <ReviewRow label="Audiencia" value={business.target_audience} />
-          <ReviewRow label="Sitio web" value={business.website_url || "—"} />
+          <ReviewRow label={copy.product} value={business.primary_product} />
+          <ReviewRow label={copy.audience} value={business.target_audience} />
+          <ReviewRow label={copy.website} value={business.website_url || "—"} />
         </ReviewCard>
-        <ReviewCard title="Canales y objetivo">
+        <ReviewCard title={copy.channels}>
           <ReviewRow
-            label="Canales"
+            label={copy.channels}
             value={channels.preferred_platforms.join(", ")}
           />
-          <ReviewRow label="Objetivo" value={channels.primary_objective} />
+          <ReviewRow label={copy.objective} value={optionLabel(locale, "objective", channels.primary_objective)} />
         </ReviewCard>
-        <ReviewCard title="Marca">
-          <ReviewRow label="Tonos" value={brand.voice_tones.join(", ")} />
-          <ReviewRow label="Propuesta" value={brand.value_proposition} />
-          <ReviewRow label="Idioma del contenido" value={brand.content_locale} />
-          <ReviewRow label="Palabras preferidas" value={brand.preferred_words || "—"} />
-          <ReviewRow label="Palabras prohibidas" value={brand.forbidden_words || "—"} />
+        <ReviewCard title={copy.brand}>
+          <ReviewRow label={copy.tones} value={brand.voice_tones.map((tone) => optionLabel(locale, "tone", tone)).join(", ")} />
+          <ReviewRow label={copy.proposition} value={brand.value_proposition} />
+          <ReviewRow label={copy.contentLocale} value={brand.content_locale} />
+          <ReviewRow label={copy.preferred} value={brand.preferred_words || "—"} />
+          <ReviewRow label={copy.forbidden} value={brand.forbidden_words || "—"} />
         </ReviewCard>
       </div>
       <label className="onboarding-confirmation">
@@ -72,10 +74,10 @@ export function StepReview({
           checked={confirmed}
           onChange={(event) => onConfirm(event.target.checked)}
         />
-        Confirmo que la información es correcta.
+        {copy.confirm}
       </label>
       <button type="submit" disabled={submitting || !confirmed}>
-        {submitting ? "Finalizando…" : "Finalizar y entrar a HiTrendy"}
+        {submitting ? copy.finishing : copy.finish}
       </button>
     </section>
   );

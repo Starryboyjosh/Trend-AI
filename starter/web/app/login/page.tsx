@@ -10,9 +10,11 @@ import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { PublicAuthRoute } from "@/components/auth/public-auth-route";
 import { api, ApiError } from "@/lib/api";
 import { resolveNextPath, routes } from "@/lib/routes";
+import { surfaceCopy, useInterfaceLocale } from "@/lib/i18n";
 
 function LoginForm() {
   const router = useRouter();
+  const copy = surfaceCopy[useInterfaceLocale()].auth;
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -42,7 +44,7 @@ function LoginForm() {
       setError(
         reason instanceof ApiError
           ? reason.message
-          : "No pudimos iniciar sesión."
+          : copy.loginFallback
       );
     } finally {
       setSubmitting(false);
@@ -54,14 +56,11 @@ function LoginForm() {
       <div className="auth-frame">
         <section
           className="auth-panel"
-          aria-label="Contenido de ejemplo de HiTrendy"
+          aria-label={copy.demoLabel}
         >
           <Logo inverse />
-          <h2>Convierte una idea en algo que la gente quiera compartir.</h2>
-          <p>
-            Publicaciones, campañas y guiones que parten de la identidad de tu
-            negocio.
-          </p>
+          <h2>{copy.heroTitle}</h2>
+          <p>{copy.heroLead}</p>
           <div className="auth-visual-rail" aria-hidden="true">
             <Image
               src="/templates/flores.png"
@@ -82,9 +81,9 @@ function LoginForm() {
           <div className="auth-brand">
             <Logo />
           </div>
-          <h1 id="auth-title">Bienvenido de vuelta</h1>
+          <h1 id="auth-title">{copy.welcome}</h1>
           <p className="auth-description">
-            Ingresa tus datos para seguir creando.
+            {copy.loginLead}
           </p>
           {oauthError ? (
             <p role="alert" className="auth-error">
@@ -93,11 +92,11 @@ function LoginForm() {
           ) : null}
           <GoogleSignInButton />
           <div className="auth-divider" aria-hidden="true">
-            <span>o</span>
+            <span>{copy.divider}</span>
           </div>
           <form onSubmit={submit} className="auth-form">
             <label htmlFor="email">
-              Correo electrónico
+              {copy.email}
               <input
                 id="email"
                 type="email"
@@ -108,7 +107,7 @@ function LoginForm() {
               />
             </label>
             <label htmlFor="password">
-              Contraseña
+              {copy.password}
               <input
                 id="password"
                 type="password"
@@ -124,11 +123,11 @@ function LoginForm() {
               </p>
             ) : null}
             <button type="submit" disabled={submitting}>
-              {submitting ? "Iniciando sesión…" : "Iniciar sesión"}
+              {submitting ? copy.loggingIn : copy.login}
             </button>
           </form>
           <p className="auth-register-prompt">
-            ¿No tienes cuenta? <Link href={routes.register}>Regístrate</Link>
+            {copy.noAccount} <Link href={routes.register}>{copy.registerLink}</Link>
           </p>
         </section>
       </div>
@@ -141,7 +140,7 @@ export default function LoginPage() {
     <PublicAuthRoute>
       <Suspense
         fallback={
-          <main className="route-status">Preparando inicio de sesión…</main>
+          <main className="route-status">{surfaceCopy.es.auth.loginLoading}</main>
         }
       >
         <LoginForm />

@@ -3,12 +3,14 @@
 import { useEffect, useState } from "react";
 
 import { api, ApiError } from "@/lib/api";
+import { surfaceCopy, useInterfaceLocale } from "@/lib/i18n";
 
 type GoogleButtonState = "checking" | "ready" | "unavailable" | "starting";
 
 export function GoogleSignInButton() {
   const [state, setState] = useState<GoogleButtonState>("checking");
   const [error, setError] = useState("");
+  const copy = surfaceCopy[useInterfaceLocale()].auth;
 
   useEffect(() => {
     let active = true;
@@ -36,7 +38,7 @@ export function GoogleSignInButton() {
       setError(
         reason instanceof ApiError
           ? reason.message
-          : "No pudimos iniciar el acceso con Google."
+          : copy.googleFallback
       );
       setState("ready");
     }
@@ -58,13 +60,13 @@ export function GoogleSignInButton() {
           G
         </span>
         {starting
-          ? "Abriendo Google…"
+          ? copy.googleOpening
           : state === "checking"
-            ? "Comprobando Google…"
-            : "Continuar con Google"}
+            ? copy.googleChecking
+            : copy.googleContinue}
       </button>
       {unavailable ? (
-        <p className="google-sign-in__hint">Google no está disponible en este momento.</p>
+        <p className="google-sign-in__hint">{copy.googleUnavailable}</p>
       ) : null}
       {error ? (
         <p role="alert" className="auth-error">

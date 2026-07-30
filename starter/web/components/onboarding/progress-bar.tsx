@@ -1,13 +1,16 @@
 "use client";
 
+import { surfaceCopy, useInterfaceLocale } from "@/lib/i18n";
+
 interface Props {
-  steps: string[];
+  steps: readonly string[];
   current: number;
 }
 
 export function ProgressBar({ steps, current }: Props) {
+  const copy = surfaceCopy[useInterfaceLocale()].onboarding;
   return (
-    <nav aria-label="Progreso de registro" style={{ marginBottom: 32 }}>
+    <nav aria-label={copy.progress} style={{ marginBottom: 32 }}>
       <ol
         style={{
           display: "flex",
@@ -46,7 +49,7 @@ export function ProgressBar({ steps, current }: Props) {
           marginTop: 8,
         }}
       >
-        Paso {current + 1} de {steps.length}: {steps[current]}
+        {copy.step} {current + 1} de {steps.length}: {steps[current]}
       </p>
     </nav>
   );

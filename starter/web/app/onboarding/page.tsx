@@ -24,15 +24,9 @@ import {
   type SignupStep,
 } from "@/lib/api";
 import { routes } from "@/lib/routes";
+import { surfaceCopy, useInterfaceLocale } from "@/lib/i18n";
 import type { Category, Objective, Platform } from "@/types/business";
 import type { Tone } from "@/types/brand";
-
-const STEPS = [
-  "Tu negocio",
-  "Canales y objetivo",
-  "Identidad de marca",
-  "Confirmación",
-];
 
 type InterfaceLocale = "es" | "en" | "pt";
 
@@ -131,6 +125,8 @@ function isMissingSignup(error: unknown) {
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const copy = surfaceCopy[useInterfaceLocale()].onboarding;
+  const steps = copy.steps;
   const [step, setStep] = useState(0);
   const [data, setData] = useState<OnboardingData>(INITIAL);
   const [version, setVersion] = useState(1);
@@ -374,7 +370,7 @@ export default function OnboardingPage() {
   }
 
   if (!loaded) {
-    return <main className="route-status">Recuperando tu registro…</main>;
+    return <main className="route-status">{copy.loading}</main>;
   }
 
   return (
@@ -383,24 +379,24 @@ export default function OnboardingPage() {
         <header className="onboarding-header">
           <Logo />
           <div>
-            <p className="eyebrow">PRIMEROS PASOS</p>
-            <h1>Configura tu negocio</h1>
+            <p className="eyebrow">{copy.eyebrow}</p>
+            <h1>{copy.title}</h1>
           </div>
           <button type="button" className="onboarding-cancel" onClick={() => void cancel()} disabled={saving || submitting}>
-            Salir
+            {copy.exit}
           </button>
         </header>
 
-        <section className="onboarding-card" aria-label="Configuración inicial">
-          <ProgressBar steps={STEPS} current={step} />
+        <section className="onboarding-card" aria-label={copy.label}>
+          <ProgressBar steps={steps} current={step} />
           <div className="onboarding-status" aria-live="polite">
             {retrying
-              ? "Hubo un problema temporal. Reintentando…"
+              ? copy.retrying
               : saving
-                ? "Guardando este paso…"
+                ? copy.saving
                 : submitting
-                  ? "Creando tu cuenta…"
-                  : "Tus datos se guardan en tu cuenta."}
+                  ? copy.creating
+                  : copy.saved}
           </div>
           {error ? (
             <div className="onboarding-error" role="alert">
@@ -431,19 +427,19 @@ export default function OnboardingPage() {
 
             <div className="onboarding-actions">
               <button type="button" className="button-secondary" onClick={back} disabled={step === 0 || saving || submitting}>
-                Anterior
+                {copy.back}
               </button>
               {step < 3 ? (
                 <button type="submit" className="button-primary" disabled={!canProceed() || saving || submitting}>
-                  {saving ? "Guardando…" : "Siguiente"}
+                  {saving ? copy.saving : copy.next}
                 </button>
               ) : null}
             </div>
           </form>
           <p className="onboarding-keyboard-help">
-            Puedes usar <kbd>Enter</kbd> para avanzar y <kbd>Tab</kbd> para recorrer los campos.
+            {copy.keyboard}
           </p>
-          <p className="onboarding-version">Versión guardada: {version}</p>
+          <p className="onboarding-version">{copy.version}: {version}</p>
         </section>
       </main>
     </SignupRoute>

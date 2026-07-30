@@ -1,6 +1,7 @@
 "use client";
 
 import type { Tone } from "@/types/brand";
+import { optionLabel, surfaceCopy, useInterfaceLocale } from "@/lib/i18n";
 
 interface Props {
   data: {
@@ -27,6 +28,8 @@ const TONES: { value: Tone; label: string }[] = [
 ];
 
 export function StepBrand({ data, onChange, showContentLocale = false }: Props) {
+  const locale = useInterfaceLocale();
+  const copy = surfaceCopy[locale].onboarding;
   function toggleTone(t: Tone) {
     const current = data.voice_tones;
     const next = current.includes(t)
@@ -38,11 +41,11 @@ export function StepBrand({ data, onChange, showContentLocale = false }: Props) 
   return (
     <section>
       <h2 style={{ fontFamily: "var(--font-heading)", marginTop: 0 }}>
-        Identidad de marca
+        {copy.brandTitle}
       </h2>
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <fieldset>
-          <legend>Tonos de voz (máx. 3) *</legend>
+          <legend>{copy.tones} *</legend>
           <div
             style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}
           >
@@ -75,13 +78,13 @@ export function StepBrand({ data, onChange, showContentLocale = false }: Props) 
                   }
                   style={{ accentColor: "var(--primary)" }}
                 />
-                {t.label}
+                {optionLabel(locale, "tone", t.value) || t.label}
               </label>
             ))}
           </div>
         </fieldset>
         <div>
-          <label htmlFor="brand-value-prop">Propuesta de valor *</label>
+          <label htmlFor="brand-value-prop">{copy.proposition} *</label>
           <textarea
             id="brand-value-prop"
             value={data.value_proposition}
@@ -89,35 +92,35 @@ export function StepBrand({ data, onChange, showContentLocale = false }: Props) 
             required
             maxLength={500}
             rows={3}
-            placeholder="Ej: Café artesanal de origen responsable"
+            placeholder={copy.propositionPlaceholder}
             style={{ display: "block", width: "100%", marginTop: 4 }}
           />
         </div>
         <div>
-          <label htmlFor="brand-preferred">Palabras preferidas</label>
+          <label htmlFor="brand-preferred">{copy.preferred}</label>
           <input
             id="brand-preferred"
             type="text"
             value={data.preferred_words}
             onChange={(e) => onChange("preferred_words", e.target.value)}
-            placeholder="Separadas por comas"
+            placeholder={copy.wordsPlaceholder}
             style={{ display: "block", width: "100%", marginTop: 4 }}
           />
         </div>
         <div>
-          <label htmlFor="brand-forbidden">Palabras prohibidas</label>
+          <label htmlFor="brand-forbidden">{copy.forbidden}</label>
           <input
             id="brand-forbidden"
             type="text"
             value={data.forbidden_words}
             onChange={(e) => onChange("forbidden_words", e.target.value)}
-            placeholder="Separadas por comas"
+            placeholder={copy.wordsPlaceholder}
             style={{ display: "block", width: "100%", marginTop: 4 }}
           />
         </div>
         <div style={{ display: "flex", gap: 16 }}>
           <div>
-            <label htmlFor="brand-primary-color">Color primario</label>
+            <label htmlFor="brand-primary-color">{copy.primaryColor}</label>
             <input
               id="brand-primary-color"
               type="color"
@@ -127,7 +130,7 @@ export function StepBrand({ data, onChange, showContentLocale = false }: Props) 
             />
           </div>
           <div>
-            <label htmlFor="brand-secondary-color">Color secundario</label>
+            <label htmlFor="brand-secondary-color">{copy.secondaryColor}</label>
             <input
               id="brand-secondary-color"
               type="color"
@@ -139,7 +142,7 @@ export function StepBrand({ data, onChange, showContentLocale = false }: Props) 
         </div>
         {showContentLocale ? (
           <label htmlFor="brand-content-locale">
-            Idioma predeterminado del contenido
+            {copy.contentLocale}
             <select
               id="brand-content-locale"
               value={data.content_locale || "es"}
