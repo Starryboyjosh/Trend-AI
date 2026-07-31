@@ -17,6 +17,10 @@ class EphemeralStore(Protocol):
 
     async def delete(self, *, key: str) -> None: ...
 
+    async def acquire_lease(self, *, key: str, token: str, ttl_seconds: int) -> bool | None: ...
+
+    async def release_lease(self, *, key: str, token: str) -> None: ...
+
     async def ensure_available(self) -> None: ...
 
 
@@ -32,6 +36,13 @@ class DisabledEphemeralStore:
 
     async def delete(self, *, key: str) -> None:
         del key
+
+    async def acquire_lease(self, *, key: str, token: str, ttl_seconds: int) -> bool | None:
+        del key, token, ttl_seconds
+        return None
+
+    async def release_lease(self, *, key: str, token: str) -> None:
+        del key, token
 
     async def ensure_available(self) -> None:
         return None
@@ -66,6 +77,22 @@ class MemoryEphemeralStore:
 
     async def delete(self, *, key: str) -> None:
         self._values.pop(self._key(key), None)
+
+    async def acquire_lease(self, *, key: str, token: str, ttl_seconds: int) -> bool | None:
+        if ttl_seconds <= 0:
+            raise ValueError("El TTL debe ser positivo.")
+        lease_key = self._key(key)
+        current = self._values.get(lease_key)
+        if current is not None and current[1] > self._now():
+            return False
+        self._values[lease_key] = (token, self._now() + ttl_seconds)
+        return True
+
+    async def release_lease(self, *, key: str, token: str) -> None:
+        lease_key = self._key(key)
+        current = self._values.get(lease_key)
+        if current is not None and current[0] == token:
+            self._values.pop(lease_key, None)
 
     async def ensure_available(self) -> None:
         return None
@@ -109,6 +136,24 @@ class RedisEphemeralStore:
     async def delete(self, *, key: str) -> None:
         try:
             await self._client.delete(self._key(key))
+        except Exception as exc:
+            raise _redis_error(exc) from exc
+
+    async def acquire_lease(self, *, key: str, token: str, ttl_seconds: int) -> bool | None:
+        if ttl_seconds <= 0:
+            raise ValueError("El TTL debe ser positivo.")
+        try:
+            return bool(await self._client.set(self._key(key), token, nx=True, ex=ttl_seconds))
+        except Exception as exc:
+            raise _redis_error(exc) from exc
+
+    async def release_lease(self, *, key: str, token: str) -> None:
+        script = (
+            "if redis.call('get', KEYS[1]) == ARGV[1] then "
+            "return redis.call('del', KEYS[1]) else return 0 end"
+        )
+        try:
+            await self._client.eval(script, 1, self._key(key), token)
         except Exception as exc:
             raise _redis_error(exc) from exc
 
@@ -173,6 +218,19 @@ class UpstashRestEphemeralStore:
 
     async def delete(self, *, key: str) -> None:
         await self._command("DEL", self._key(key))
+
+    async def acquire_lease(self, *, key: str, token: str, ttl_seconds: int) -> bool | None:
+        if ttl_seconds <= 0:
+            raise ValueError("El TTL debe ser positivo.")
+        result = await self._command("SET", self._key(key), token, "NX", "EX", str(ttl_seconds))
+        return result == "OK"
+
+    async def release_lease(self, *, key: str, token: str) -> None:
+        script = (
+            "if redis.call('get', KEYS[1]) == ARGV[1] then "
+            "return redis.call('del', KEYS[1]) else return 0 end"
+        )
+        await self._command("EVAL", script, "1", self._key(key), token)
 
     async def ensure_available(self) -> None:
         await self._command("PING")

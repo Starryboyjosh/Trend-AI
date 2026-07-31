@@ -8,6 +8,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     String,
     Text,
     UniqueConstraint,
@@ -127,4 +128,29 @@ class WorkspaceTrendRelevance(Base):
     calculated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     __table_args__ = (
         UniqueConstraint("workspace_id", "trend_item_id", name="uq_workspace_trend_relevance"),
+    )
+
+
+class TrendProviderBudget(Base):
+    """Global, UTC-scoped reservation ledger for paid/limited source calls."""
+
+    __tablename__ = "trend_provider_budgets"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_uuid)
+    provider: Mapped[str] = mapped_column(String(80), nullable=False)
+    operation: Mapped[str] = mapped_column(String(80), nullable=False)
+    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    budget: Mapped[int] = mapped_column(nullable=False)
+    consumed: Mapped[int] = mapped_column(nullable=False, server_default=text("0"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    __table_args__ = (
+        Index("ix_trend_provider_budgets_provider_operation", "provider", "operation"),
+        UniqueConstraint(
+            "provider", "operation", "period_start", name="uq_trend_provider_budget_period"
+        ),
+        CheckConstraint("budget > 0", name="ck_trend_provider_budget_positive"),
+        CheckConstraint("consumed >= 0 AND consumed <= budget", name="ck_trend_provider_budget_consumed"),
     )

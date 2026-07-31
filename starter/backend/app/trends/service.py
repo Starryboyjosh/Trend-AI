@@ -20,7 +20,14 @@ from app.core.capabilities import (
 from app.core.config import settings
 from app.core.errors import AppError, ConflictError
 from app.trends.adapters import default_fake_sources
-from app.trends.contracts import SourceCandidate, SourceResultStatus, TrendSource, valid_result
+from app.trends.contracts import (
+    SourceCandidate,
+    SourceResultStatus,
+    TrendSource,
+    source_applies,
+    valid_result,
+)
+from app.trends.factory import configured_trend_sources, record_source_outcome
 from app.trends.models import (
     TrendEvidence,
     TrendItem,
@@ -111,9 +118,12 @@ class TrendService:
         self.db, self.now = db, (now or datetime.now(UTC)).astimezone(UTC)
         # Explicit injected sources are reserved for deterministic tests.  The
         # production path never installs demo sources automatically.
-        raw_sources = sources if sources is not None else (
-            default_fake_sources() if fake_sources_enabled() else ()
-        )
+        if sources is not None:
+            raw_sources = sources
+        else:
+            raw_sources = configured_trend_sources(db, now=self.now)
+            if not raw_sources and fake_sources_enabled():
+                raw_sources = default_fake_sources()
         seen: set[str] = set()
         self.sources = tuple(
             source
@@ -156,7 +166,15 @@ class TrendService:
                     "La recopilación equivalente sigue en proceso. Inténtalo nuevamente en un momento.",
                     retryable=True,
                 )
-        attempted = json.dumps([source.identifier for source in self.sources])
+        # A source that does not declare this region or category is skipped
+        # before any work happens.  Skipping is represented only by absence:
+        # it is not attempted, so it cannot succeed or fail in this run.
+        applicable = tuple(
+            source
+            for source in self.sources
+            if source_applies(source, region=region, category=category)
+        )
+        attempted = json.dumps([source.identifier for source in applicable])
         run = existing or TrendRun(
             fingerprint=fingerprint,
             region=region,
@@ -190,13 +208,16 @@ class TrendService:
 
         successful: set[str] = set()
         failed: set[str] = set()
+        source_outcomes: dict[str, tuple[SourceResultStatus, datetime | None]] = {}
         failure_statuses: list[SourceResultStatus] = []
+        quota_resets: list[datetime] = []
         candidates: list[tuple[str, SourceCandidate]] = []
         source_candidates: set[str] = set()
-        for source in self.sources:
-            if not source.available or region not in {_region(item) for item in source.supported_regions}:
+        for source in applicable:
+            if not source.available:
                 failed.add(source.identifier)
                 failure_statuses.append(SourceResultStatus.ERROR)
+                source_outcomes[source.identifier] = (SourceResultStatus.ERROR, None)
                 continue
             fetch_failure: SourceResultStatus | None = None
             try:
@@ -209,19 +230,28 @@ class TrendService:
                 fetch_failure = SourceResultStatus.ERROR
             if validated is None:
                 failed.add(source.identifier)
-                failure_statuses.append(fetch_failure or SourceResultStatus.INVALID)
+                status = fetch_failure or SourceResultStatus.INVALID
+                failure_statuses.append(status)
+                source_outcomes[source.identifier] = (status, None)
             elif validated.result.status == SourceResultStatus.SUCCESS:
                 source_candidates.add(source.identifier)
                 candidates.extend((source.identifier, item) for item in validated.result.candidates)
                 if validated.invalid_candidates:
                     failed.add(source.identifier)
                     failure_statuses.append(SourceResultStatus.INVALID)
+                    source_outcomes[source.identifier] = (SourceResultStatus.INVALID, None)
             else:
                 # A response with no usable evidence is not an effective
                 # source success.  It remains auditable in attempted while
                 # the final source status is mutually exclusive.
                 failed.add(source.identifier)
                 failure_statuses.append(validated.result.status)
+                source_outcomes[source.identifier] = (
+                    validated.result.status,
+                    validated.result.next_reset_at,
+                )
+                if validated.result.next_reset_at is not None:
+                    quota_resets.append(validated.result.next_reset_at)
 
         evidence_sources: set[str] = set()
         invalid_sources: set[str] = set()
@@ -237,9 +267,14 @@ class TrendService:
             if source not in evidence_sources or source in invalid_sources:
                 failed.add(source)
                 failure_statuses.append(SourceResultStatus.INVALID)
+                source_outcomes[source] = (SourceResultStatus.INVALID, None)
             else:
                 successful.add(source)
         successful.difference_update(failed)
+        for source in successful:
+            source_outcomes[source] = (SourceResultStatus.SUCCESS, None)
+        for source, (status, reset) in source_outcomes.items():
+            await record_source_outcome(source, status, reset)
         successful_ordered, failed_ordered = sorted(successful), sorted(failed)
         run.sources_succeeded, run.sources_failed = (
             json.dumps(successful_ordered), json.dumps(failed_ordered)
@@ -253,30 +288,48 @@ class TrendService:
             else "failed"
         )
         run.public_error = (
-            "Algunas fuentes demo no estuvieron disponibles."
+            "Algunas fuentes no estuvieron disponibles."
             if failed_ordered and has_valid_evidence
             else ("No se pudo obtener evidencia de tendencias." if not has_valid_evidence else None)
         )
         run.finished_at = self.now
         await self._compute_workspace_relevance(workspace_id)
         await self.db.commit()
-        await self._record_capability_outcome(run.status, failure_statuses)
+        # An empty applicable set is not a provider outcome: no provider was
+        # attempted, so the prior global capability health must remain intact.
+        if applicable:
+            await self._record_capability_outcome(
+                run.status, failure_statuses, min(quota_resets) if quota_resets else None
+            )
         return run
 
     async def _record_capability_outcome(
-        self, run_status: str, failures: list[SourceResultStatus]
+        self,
+        run_status: str,
+        failures: list[SourceResultStatus],
+        next_reset_at: datetime | None = None,
     ) -> None:
         if run_status == "completed":
             outcome = CapabilityOutcome.SUCCESS
         elif run_status == "partial":
-            outcome = CapabilityOutcome.TIMEOUT if SourceResultStatus.TIMEOUT in failures else CapabilityOutcome.INVALID_RESPONSE
+            outcome = (
+                CapabilityOutcome.TIMEOUT
+                if SourceResultStatus.TIMEOUT in failures
+                else CapabilityOutcome.INVALID_RESPONSE
+            )
+        elif SourceResultStatus.QUOTA_EXHAUSTED in failures:
+            outcome = CapabilityOutcome.QUOTA_EXHAUSTED
+        elif SourceResultStatus.RATE_LIMITED in failures:
+            outcome = CapabilityOutcome.RATE_LIMITED
         elif SourceResultStatus.TIMEOUT in failures:
             outcome = CapabilityOutcome.TIMEOUT
         elif SourceResultStatus.INVALID in failures:
             outcome = CapabilityOutcome.INVALID_RESPONSE
         else:
             outcome = CapabilityOutcome.PROVIDER_ERROR
-        await self.capability_registry.record_outcome_for(Capability.TREND_ANALYSIS, outcome)
+        await self.capability_registry.record_outcome_for(
+            Capability.TREND_ANALYSIS, outcome, next_reset_at
+        )
 
     async def _publish_candidate(
         self,

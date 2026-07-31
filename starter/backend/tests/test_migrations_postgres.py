@@ -86,7 +86,7 @@ def _public_template_ids(engine) -> list[str]:
 def test_upgrade_empty_postgres_to_head(postgres_engine) -> None:
     _upgrade("head")
     with postgres_engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "019"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "020"
     assert set(_public_template_ids(postgres_engine)) == EXPECTED_TEMPLATE_IDS
 
 
@@ -123,6 +123,23 @@ def test_trend_framework_schema_matches_the_sqlalchemy_models(postgres_engine) -
         diffs = _flatten_diffs(compare_metadata(context, Base.metadata))
     divergences = [entry for entry in diffs if _diff_table(entry) in owned_tables]
     assert divergences == [], f"019 no coincide con los modelos: {divergences}"
+
+
+def test_real_trend_budget_upgrade_downgrade_and_schema(postgres_engine) -> None:
+    _upgrade("019")
+    with postgres_engine.connect() as connection:
+        assert connection.scalar(text("SELECT to_regclass('public.trend_provider_budgets')")) is None
+    _upgrade("020")
+    with postgres_engine.connect() as connection:
+        assert connection.scalar(text("SELECT to_regclass('public.trend_provider_budgets')"))
+        context = MigrationContext.configure(connection)
+        diffs = _flatten_diffs(compare_metadata(context, Base.metadata))
+    divergences = [entry for entry in diffs if _diff_table(entry) == "trend_provider_budgets"]
+    assert divergences == [], f"020 no coincide con los modelos: {divergences}"
+    command.downgrade(_alembic_config(), "019")
+    _upgrade("020")
+    with postgres_engine.connect() as connection:
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "020"
 
 
 def test_phase1_templates_are_seeded_once_and_upgrade_is_repeatable(postgres_engine) -> None:
@@ -286,7 +303,7 @@ def test_upgrade_from_017_adds_account_lifecycle_schema(postgres_engine) -> None
         assert connection.scalar(text("SELECT to_regclass('public.admin_audit_events')"))
         assert connection.scalar(text("SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='deletion_requested_at'"))
 
-    # 019 -> 018 must leave no trace behind, so a redeploy can replay it.
+    # 020 -> 018 must leave no trace behind, so a redeploy can replay it.
     command.downgrade(_alembic_config(), "017")
     with postgres_engine.connect() as connection:
         assert connection.scalar(text("SELECT to_regclass('public.account_purge_jobs')")) is None
@@ -295,7 +312,7 @@ def test_upgrade_from_017_adds_account_lifecycle_schema(postgres_engine) -> None
 
     _upgrade("head")
     with postgres_engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "019"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "020"
         assert connection.scalar(text("SELECT to_regclass('public.account_purge_jobs')"))
 
 

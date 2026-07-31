@@ -10,6 +10,7 @@ class FakeTrendSource:
 
     source_type = "demo"
     supported_regions = ("HN", "GLOBAL")
+    supported_categories: tuple[str, ...] = ()
     available = True
 
     def __init__(self, identifier: str, mode: str = "success") -> None:

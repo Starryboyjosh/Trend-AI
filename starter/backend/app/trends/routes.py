@@ -17,6 +17,7 @@ from app.conversations.idempotency import (
 from app.core.capabilities import Capability, CapabilityStatus, get_runtime_capability_registry
 from app.core.errors import AppError
 from app.dependencies import get_db, require_workspace
+from app.trends.factory import source_availability
 from app.trends.models import TrendEvidence, TrendItem, TrendItemEvidence, WorkspaceTrendRelevance
 from app.trends.service import TrendService
 
@@ -146,6 +147,28 @@ async def list_trends(
         ).all()
     }
     return {"items": [_item(item, relevances.get(item.id)) for item in items]}
+
+
+@router.get("/sources")
+async def trend_sources(workspace_id: str = Depends(require_workspace)) -> dict:
+    """Authenticated, safe source configuration/runtime summary."""
+
+    del workspace_id
+    return {
+        "sources": [
+            {
+                "identifier": source.identifier,
+                "public_name": source.public_name,
+                "source_type": source.source_type,
+                "configured": source.configured,
+                "status": source.status,
+                "next_reset_at": source.next_reset_at.isoformat()
+                if source.next_reset_at is not None
+                else None,
+            }
+            for source in await source_availability()
+        ]
+    }
 
 
 @router.get("/{trend_id}")

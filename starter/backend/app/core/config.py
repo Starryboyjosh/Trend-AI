@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import json
+import re
 from collections.abc import Mapping
 from ipaddress import ip_address, ip_network
 from os import environ
 from pathlib import Path
 from urllib.parse import urlparse
+
+# A feed identifier becomes part of stable cache, runtime-health and metric
+# keys, so it stays short, lowercase and free of separators or whitespace.
+RSS_IDENTIFIER = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 
 
 def _as_bool(value: str, *, name: str) -> bool:
@@ -44,6 +50,82 @@ def _positive_float(value: str, *, name: str) -> float:
     if parsed <= 0:
         raise RuntimeError(f"{name} debe ser mayor que cero.")
     return parsed
+
+
+def _bounded_positive_int(value: str, *, name: str, maximum: int) -> int:
+    parsed = _positive_int(value, name=name)
+    if parsed > maximum:
+        raise RuntimeError(f"{name} debe ser menor o igual que {maximum}.")
+    return parsed
+
+
+def _bounded_positive_float(value: str, *, name: str, maximum: float) -> float:
+    parsed = _positive_float(value, name=name)
+    if parsed > maximum:
+        raise RuntimeError(f"{name} debe ser menor o igual que {maximum}.")
+    return parsed
+
+
+def _parse_rss_allowlist(value: str) -> tuple[dict[str, object], ...]:
+    try:
+        entries = json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("RSS_TRENDS_ALLOWLIST debe ser JSON válido.") from exc
+    if not isinstance(entries, list) or len(entries) > 20:
+        raise RuntimeError("RSS_TRENDS_ALLOWLIST debe ser una lista de hasta 20 feeds.")
+    normalized: list[dict[str, object]] = []
+    identifiers: set[str] = set()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise RuntimeError("Cada feed RSS debe ser un objeto válido.")
+        identifier = entry.get("identifier")
+        # Normalize before every check so that "feed-a" and " feed-a " are the
+        # same feed and are rejected as duplicates instead of colliding later.
+        normalized_identifier = identifier.strip() if isinstance(identifier, str) else ""
+        public_name = entry.get("public_name")
+        feed_url = entry.get("feed_url")
+        regions = entry.get("regions")
+        categories = entry.get("categories")
+        enabled = entry.get("enabled")
+        if (
+            not isinstance(identifier, str)
+            or not RSS_IDENTIFIER.fullmatch(normalized_identifier)
+            or normalized_identifier in identifiers
+            or not isinstance(public_name, str)
+            or not public_name.strip()
+            or not isinstance(feed_url, str)
+            or not isinstance(regions, list)
+            or not regions
+            or not isinstance(categories, list)
+            or not isinstance(enabled, bool)
+        ):
+            raise RuntimeError(
+                "RSS_TRENDS_ALLOWLIST contiene un feed incompleto o duplicado. "
+                "El identificador debe usar minúsculas, dígitos o guiones "
+                "(máximo 63 caracteres) y no puede repetirse."
+            )
+        _validate_http_url(feed_url, name="RSS_TRENDS_ALLOWLIST feed_url", require_https=True)
+        parsed = urlparse(feed_url)
+        try:
+            port = parsed.port
+        except ValueError as exc:
+            raise RuntimeError("Los feeds RSS deben usar un puerto válido.") from exc
+        if parsed.username or parsed.password or port not in {None, 443}:
+            raise RuntimeError("Los feeds RSS no pueden usar credenciales ni puertos no estándar.")
+        if not all(isinstance(item, str) and item.strip() for item in [*regions, *categories]):
+            raise RuntimeError("Las regiones y categorías RSS deben ser texto no vacío.")
+        identifiers.add(normalized_identifier)
+        normalized.append(
+            {
+                "identifier": normalized_identifier,
+                "public_name": public_name.strip(),
+                "feed_url": feed_url.strip(),
+                "regions": tuple(item.strip().upper() for item in regions),
+                "categories": tuple(item.strip().casefold() for item in categories),
+                "enabled": enabled,
+            }
+        )
+    return tuple(normalized)
 
 
 def _validate_http_url(value: str, *, name: str, require_https: bool) -> None:
@@ -309,6 +391,73 @@ class Settings:
             values.get("TREND_ANALYSIS_ENABLED", "0"),
             name="TREND_ANALYSIS_ENABLED",
         )
+        self.run_real_trends_smoke: bool = _as_bool(
+            values.get("RUN_REAL_TRENDS_SMOKE", "0"), name="RUN_REAL_TRENDS_SMOKE"
+        )
+        self.youtube_trends_enabled: bool = _as_bool(
+            values.get("YOUTUBE_TRENDS_ENABLED", "0"), name="YOUTUBE_TRENDS_ENABLED"
+        )
+        self.youtube_api_key: str = values.get("YOUTUBE_API_KEY", "").strip()
+        self.youtube_search_daily_budget: int = _bounded_positive_int(
+            values.get("YOUTUBE_SEARCH_DAILY_BUDGET", "80"),
+            name="YOUTUBE_SEARCH_DAILY_BUDGET",
+            maximum=10_000,
+        )
+        self.youtube_cache_ttl_seconds: int = _bounded_positive_int(
+            values.get("YOUTUBE_CACHE_TTL_SECONDS", "900"),
+            name="YOUTUBE_CACHE_TTL_SECONDS",
+            maximum=86_400,
+        )
+        self.serpapi_trends_enabled: bool = _as_bool(
+            values.get("SERPAPI_TRENDS_ENABLED", "0"), name="SERPAPI_TRENDS_ENABLED"
+        )
+        self.serpapi_api_key: str = values.get("SERPAPI_API_KEY", "").strip()
+        self.serpapi_monthly_budget: int = _bounded_positive_int(
+            values.get("SERPAPI_MONTHLY_BUDGET", "200"),
+            name="SERPAPI_MONTHLY_BUDGET",
+            maximum=10_000,
+        )
+        self.serpapi_cache_ttl_seconds: int = _bounded_positive_int(
+            values.get("SERPAPI_CACHE_TTL_SECONDS", "1800"),
+            name="SERPAPI_CACHE_TTL_SECONDS",
+            maximum=86_400,
+        )
+        self.rss_trends_enabled: bool = _as_bool(
+            values.get("RSS_TRENDS_ENABLED", "0"), name="RSS_TRENDS_ENABLED"
+        )
+        self.rss_trends_allowlist = _parse_rss_allowlist(
+            values.get("RSS_TRENDS_ALLOWLIST", "[]")
+        )
+        self.rss_cache_ttl_seconds: int = _bounded_positive_int(
+            values.get("RSS_CACHE_TTL_SECONDS", "900"),
+            name="RSS_CACHE_TTL_SECONDS",
+            maximum=86_400,
+        )
+        self.trends_http_timeout_seconds: float = _bounded_positive_float(
+            values.get("TRENDS_HTTP_TIMEOUT_SECONDS", "10"),
+            name="TRENDS_HTTP_TIMEOUT_SECONDS",
+            maximum=60,
+        )
+        self.trends_max_results_per_source: int = _bounded_positive_int(
+            values.get("TRENDS_MAX_RESULTS_PER_SOURCE", "10"),
+            name="TRENDS_MAX_RESULTS_PER_SOURCE",
+            maximum=25,
+        )
+        self.trends_negative_cache_ttl_seconds: int = _bounded_positive_int(
+            values.get("TRENDS_NEGATIVE_CACHE_TTL_SECONDS", "60"),
+            name="TRENDS_NEGATIVE_CACHE_TTL_SECONDS",
+            maximum=3_600,
+        )
+        self.rss_max_response_bytes: int = _bounded_positive_int(
+            values.get("RSS_MAX_RESPONSE_BYTES", "524288"),
+            name="RSS_MAX_RESPONSE_BYTES",
+            maximum=2_000_000,
+        )
+        self.rss_dns_timeout_seconds: float = _bounded_positive_float(
+            values.get("RSS_DNS_TIMEOUT_SECONDS", "3"),
+            name="RSS_DNS_TIMEOUT_SECONDS",
+            maximum=10,
+        )
         self.allow_paid_model_fallback: bool = _as_bool(
             values.get("ALLOW_PAID_MODEL_FALLBACK", "0"),
             name="ALLOW_PAID_MODEL_FALLBACK",
@@ -341,6 +490,14 @@ class Settings:
     def google_sign_in_configured(self) -> bool:
         return self.google_sign_in_enabled and all(
             [self.google_client_id, self.google_client_secret, self.google_redirect_uri]
+        )
+
+    @property
+    def configured_real_trend_sources(self) -> bool:
+        return (
+            (self.youtube_trends_enabled and bool(self.youtube_api_key))
+            or (self.serpapi_trends_enabled and bool(self.serpapi_api_key))
+            or (self.rss_trends_enabled and any(feed["enabled"] for feed in self.rss_trends_allowlist))
         )
 
     def validate_runtime_configuration(self) -> None:
@@ -457,7 +614,6 @@ class Settings:
                 name="OPENROUTER_BASE_URL",
                 require_https=self.is_production_like,
             )
-
         if self.vision_provider == "openai-compatible":
             if not self.vision_base_url or not self.vision_api_key or not self.vision_model:
                 raise RuntimeError(

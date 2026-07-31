@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from typing import Any, Protocol
 
@@ -136,7 +137,13 @@ class CapabilityRoute:
 
 class OutcomeStore(Protocol):
     def get(self, capability: Capability) -> CapabilityOutcome | None: ...
-    def set(self, capability: Capability, outcome: CapabilityOutcome) -> None: ...
+    def get_next_reset_at(self, capability: Capability) -> datetime | None: ...
+    def set(
+        self,
+        capability: Capability,
+        outcome: CapabilityOutcome,
+        next_reset_at: datetime | None = None,
+    ) -> None: ...
     def clear(self, capability: Capability | None = None) -> None: ...
 
 
@@ -144,7 +151,12 @@ class NullCapabilityOutcomeStore:
     def get(self, capability: Capability) -> CapabilityOutcome | None:
         return None
 
-    def set(self, capability: Capability, outcome: CapabilityOutcome) -> None:
+    def get_next_reset_at(self, capability: Capability) -> datetime | None:
+        return None
+
+    def set(
+        self, capability: Capability, outcome: CapabilityOutcome, next_reset_at: datetime | None = None
+    ) -> None:
         return None
 
     def clear(self, capability: Capability | None = None) -> None:
@@ -154,18 +166,30 @@ class NullCapabilityOutcomeStore:
 class MemoryCapabilityOutcomeStore:
     def __init__(self) -> None:
         self._data: dict[str, CapabilityOutcome] = {}
+        self._next_reset_at: dict[str, datetime] = {}
 
     def get(self, capability: Capability) -> CapabilityOutcome | None:
         return self._data.get(capability.value)
 
-    def set(self, capability: Capability, outcome: CapabilityOutcome) -> None:
+    def get_next_reset_at(self, capability: Capability) -> datetime | None:
+        return self._next_reset_at.get(capability.value)
+
+    def set(
+        self, capability: Capability, outcome: CapabilityOutcome, next_reset_at: datetime | None = None
+    ) -> None:
         self._data[capability.value] = outcome
+        if next_reset_at is not None:
+            self._next_reset_at[capability.value] = next_reset_at
+        elif outcome == CapabilityOutcome.SUCCESS:
+            self._next_reset_at.pop(capability.value, None)
 
     def clear(self, capability: Capability | None = None) -> None:
         if capability:
             self._data.pop(capability.value, None)
+            self._next_reset_at.pop(capability.value, None)
         else:
             self._data.clear()
+            self._next_reset_at.clear()
 
 
 def _sanitized_message(capability: Capability, status: CapabilityStatus) -> str | None:
@@ -281,12 +305,9 @@ class CapabilityRegistry:
             )
 
         if capability == Capability.TREND_ANALYSIS:
-            # WAVE-010A exposes only deterministic demo adapters.  They are
-            # useful in development/tests when explicitly enabled, but never
-            # claim a real production source is configured.
             if not settings.trend_analysis_enabled:
                 status = CapabilityStatus.DISABLED
-            elif settings.app_env in {"development", "test"}:
+            elif settings.configured_real_trend_sources or settings.app_env in {"development", "test"}:
                 status = CapabilityStatus.AVAILABLE
             else:
                 status = CapabilityStatus.UNCONFIGURED
@@ -310,6 +331,7 @@ class CapabilityRegistry:
         capability: Capability,
         info: PublicCapability,
         outcome: CapabilityOutcome | None,
+        next_reset_at: datetime | None,
     ) -> PublicCapability:
         if outcome is None:
             return info
@@ -333,6 +355,7 @@ class CapabilityRegistry:
                 tier=info.tier,
                 quality_levels=[],
                 message="La cuota de esta función se agotó.",
+                next_reset_at=next_reset_at.isoformat() if next_reset_at else None,
                 fallback=info.fallback,
             )
 
@@ -374,14 +397,16 @@ class CapabilityRegistry:
         for cap in Capability.all():
             info = self._base_capability(cap)
             outcome = self._outcome_store.get(cap)
-            info = self._apply_outcome(cap, info, outcome)
+            info = self._apply_outcome(cap, info, outcome, self._outcome_store.get_next_reset_at(cap))
             caps[cap.value] = _public_to_dict(info)
         return caps
 
     def get_capability(self, capability: Capability) -> PublicCapability:
         info = self._base_capability(capability)
         outcome = self._outcome_store.get(capability)
-        return self._apply_outcome(capability, info, outcome)
+        return self._apply_outcome(
+            capability, info, outcome, self._outcome_store.get_next_reset_at(capability)
+        )
 
     def get_base_capability(self, capability: Capability) -> PublicCapability:
         """Return configuration state without applying transient provider outcomes."""
@@ -446,11 +471,14 @@ class CapabilityRegistry:
         self._outcome_store.set(route.capability, outcome)
 
     async def record_outcome_for(
-        self, capability: Capability, outcome: CapabilityOutcome
+        self,
+        capability: Capability,
+        outcome: CapabilityOutcome,
+        next_reset_at: datetime | None = None,
     ) -> None:
         """Record a safe runtime outcome when a capability has no provider route."""
 
-        self._outcome_store.set(capability, outcome)
+        self._outcome_store.set(capability, outcome, next_reset_at)
 
 
 _runtime_outcome_store = MemoryCapabilityOutcomeStore()
