@@ -128,6 +128,40 @@ def _parse_rss_allowlist(value: str) -> tuple[dict[str, object], ...]:
     return tuple(normalized)
 
 
+def _parse_trend_scopes(value: str) -> tuple[dict[str, str | None], ...]:
+    try:
+        entries = json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("TRENDS_SCHEDULED_SCOPES debe ser JSON válido.") from exc
+    if not isinstance(entries, list) or len(entries) > 20:
+        raise RuntimeError("TRENDS_SCHEDULED_SCOPES debe ser una lista de hasta 20 scopes.")
+    normalized: list[dict[str, str | None]] = []
+    seen: set[tuple[str, str | None]] = set()
+    for entry in entries:
+        if not isinstance(entry, dict) or set(entry) != {"region", "category"}:
+            raise RuntimeError(
+                "Cada scope de tendencias debe contener únicamente region y category."
+            )
+        raw_region = entry.get("region")
+        raw_category = entry.get("category")
+        region = raw_region.strip().upper() if isinstance(raw_region, str) else ""
+        category = raw_category.strip().casefold() if isinstance(raw_category, str) else None
+        if (
+            not re.fullmatch(r"(?:[A-Z]{2,3}|GLOBAL)", region)
+            or (raw_category is not None and not isinstance(raw_category, str))
+            or (category is not None and not re.fullmatch(r"[a-z_]{2,40}", category))
+        ):
+            raise RuntimeError(
+                "Los scopes requieren una región ISO/GLOBAL y una categoría segura o null."
+            )
+        scope = (region, category)
+        if scope in seen:
+            raise RuntimeError("TRENDS_SCHEDULED_SCOPES no puede contener scopes duplicados.")
+        seen.add(scope)
+        normalized.append({"region": region, "category": category})
+    return tuple(normalized)
+
+
 def _validate_http_url(value: str, *, name: str, require_https: bool) -> None:
     parsed = urlparse(value)
     allowed_schemes = {"https"} if require_https else {"http", "https"}
@@ -447,6 +481,22 @@ class Settings:
             values.get("TRENDS_NEGATIVE_CACHE_TTL_SECONDS", "60"),
             name="TRENDS_NEGATIVE_CACHE_TTL_SECONDS",
             maximum=3_600,
+        )
+        self.trends_scheduled_scopes = _parse_trend_scopes(
+            values.get(
+                "TRENDS_SCHEDULED_SCOPES",
+                '[{"region":"HN","category":null}]',
+            )
+        )
+        self.trends_manual_cooldown_seconds: int = _bounded_positive_int(
+            values.get("TRENDS_MANUAL_COOLDOWN_SECONDS", "3600"),
+            name="TRENDS_MANUAL_COOLDOWN_SECONDS",
+            maximum=86_400,
+        )
+        self.trends_stale_after_seconds: int = _bounded_positive_int(
+            values.get("TRENDS_STALE_AFTER_SECONDS", "86400"),
+            name="TRENDS_STALE_AFTER_SECONDS",
+            maximum=604_800,
         )
         self.rss_max_response_bytes: int = _bounded_positive_int(
             values.get("RSS_MAX_RESPONSE_BYTES", "524288"),

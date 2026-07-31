@@ -750,10 +750,11 @@ async def test_authenticated_source_availability_is_safe_and_keeps_per_source_qu
     monkeypatch.setattr(settings, "youtube_api_key", "test-key")
     monkeypatch.setattr(settings, "serpapi_trends_enabled", True)
     monkeypatch.setattr(settings, "serpapi_api_key", "test-key")
+    future_reset = datetime.now(UTC) + timedelta(days=1)
     await record_source_outcome(
         "serpapi-google-trends",
         SourceResultStatus.QUOTA_EXHAUSTED,
-        NOW + timedelta(days=1),
+        future_reset,
     )
     try:
         response = await client.get("/api/v1/trends/sources", headers={"X-Workspace-Id": "ws_test_001"})

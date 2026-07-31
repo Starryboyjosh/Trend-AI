@@ -45,6 +45,8 @@ OBSERVATION_WINDOW = timedelta(days=7)
 OBSERVATION_WINDOW_VERSION = "utc-week-v1"
 ABANDONED_PROCESSING_AFTER = timedelta(minutes=15)
 FUTURE_TOLERANCE = timedelta(minutes=5)
+EMPTY_RUN_MESSAGE = "Las fuentes consultadas no encontraron tendencias nuevas."
+NO_APPLICABLE_SOURCES_MESSAGE = "No había fuentes aplicables para esta región o categoría."
 
 
 def canonical_url(value: str) -> str | None:
@@ -77,6 +79,11 @@ def _category(value: str | None) -> str | None:
     """Normalize an optional category before it enters any stable identity."""
 
     return value.strip().casefold() if value is not None else None
+
+
+def _daily_window(value: datetime) -> datetime:
+    normalized = value.astimezone(UTC)
+    return normalized.replace(hour=0, minute=0, second=0, microsecond=0)
 
 
 def _utc(value: datetime, now: datetime) -> datetime | None:
@@ -133,6 +140,16 @@ class TrendService:
         self.capability_registry = capability_registry or get_runtime_capability_registry()
 
     async def refresh(self, *, workspace_id: str, region: str, category: str | None) -> TrendRun:
+        """Compatibility facade: one global collection plus private relevance."""
+
+        run = await self.collect(region=region, category=category)
+        await self.compute_workspace_relevance(workspace_id)
+        await self.db.commit()
+        return run
+
+    async def collect(self, *, region: str, category: str | None) -> TrendRun:
+        """Collect one global scope without inventing a workspace owner."""
+
         if not fake_sources_enabled() and (
             not self.sources or any(source.source_type == "demo" for source in self.sources)
         ):
@@ -145,18 +162,27 @@ class TrendService:
         category = _category(category)
         # The daily scope is deliberately bounded: equivalent requests share
         # one global collection in a window, while tomorrow can collect anew.
-        bucket = self.now.date().isoformat()
+        window_start = _daily_window(self.now)
         fingerprint = _hash(
-            bucket,
+            window_start.date().isoformat(),
             region.casefold(),
             category or "",
-            ",".join(sorted(s.identifier for s in self.sources)),
+        )
+        category_condition = (
+            TrendRun.category.is_(None)
+            if category is None
+            else TrendRun.category == category
         )
         existing = await self.db.scalar(
-            select(TrendRun).where(TrendRun.fingerprint == fingerprint).with_for_update()
+            select(TrendRun)
+            .where(
+                TrendRun.window_start == window_start,
+                TrendRun.region == region,
+                category_condition,
+            )
+            .with_for_update()
         )
         if existing is not None and existing.status in {"completed", "partial"}:
-            await self._compute_workspace_relevance(workspace_id)
             await self.db.commit()
             return existing
         if existing is not None and existing.status == "processing":
@@ -177,6 +203,7 @@ class TrendService:
         attempted = json.dumps([source.identifier for source in applicable])
         run = existing or TrendRun(
             fingerprint=fingerprint,
+            window_start=window_start,
             region=region,
             category=category,
             status="processing",
@@ -198,12 +225,14 @@ class TrendService:
             except IntegrityError:
                 await self.db.rollback()
                 existing = await self.db.scalar(
-                    select(TrendRun).where(TrendRun.fingerprint == fingerprint)
+                    select(TrendRun).where(
+                        TrendRun.window_start == window_start,
+                        TrendRun.region == region,
+                        category_condition,
+                    )
                 )
                 if existing is None:
                     raise
-                await self._compute_workspace_relevance(workspace_id)
-                await self.db.commit()
                 return existing
 
         successful: set[str] = set()
@@ -287,13 +316,23 @@ class TrendService:
             if has_valid_evidence
             else "failed"
         )
-        run.public_error = (
-            "Algunas fuentes no estuvieron disponibles."
-            if failed_ordered and has_valid_evidence
-            else ("No se pudo obtener evidencia de tendencias." if not has_valid_evidence else None)
-        )
+        if failed_ordered and has_valid_evidence:
+            run.public_error = "Algunas fuentes no estuvieron disponibles."
+        elif not has_valid_evidence and not applicable:
+            run.public_error = NO_APPLICABLE_SOURCES_MESSAGE
+        elif (
+            not has_valid_evidence
+            and failure_statuses
+            and all(status == SourceResultStatus.EMPTY for status in failure_statuses)
+        ):
+            run.public_error = EMPTY_RUN_MESSAGE
+        else:
+            run.public_error = (
+                "No se pudo obtener evidencia de tendencias."
+                if not has_valid_evidence
+                else None
+            )
         run.finished_at = self.now
-        await self._compute_workspace_relevance(workspace_id)
         await self.db.commit()
         # An empty applicable set is not a provider outcome: no provider was
         # attempted, so the prior global capability health must remain intact.
@@ -469,7 +508,9 @@ class TrendService:
         )
         return True, invalid
 
-    async def _compute_workspace_relevance(self, workspace_id: str) -> None:
+    async def compute_workspace_relevance(self, workspace_id: str) -> None:
+        """Recalculate private relevance using persisted global evidence only."""
+
         business = await self.db.scalar(
             select(Business).where(Business.workspace_id == workspace_id).order_by(Business.created_at)
         )
@@ -497,7 +538,83 @@ class TrendService:
                     total, RELEVANCE_VERSION, json.dumps(components, sort_keys=True), self.now
                 )
 
-    async def list(self, *, workspace_id: str, region: str | None, category: str | None, limit: int) -> list[TrendItem]:
+    async def latest_run(
+        self,
+        *,
+        region: str,
+        category: str | None,
+    ) -> TrendRun | None:
+        return await self.db.scalar(
+            select(TrendRun)
+            .where(
+                TrendRun.region == _region(region),
+                TrendRun.category == _category(category),
+            )
+            .order_by(TrendRun.window_start.desc(), TrendRun.started_at.desc(), TrendRun.id)
+            .limit(1)
+        )
+
+    async def latest_successful_run(
+        self,
+        *,
+        region: str,
+        category: str | None,
+    ) -> TrendRun | None:
+        return await self.db.scalar(
+            select(TrendRun)
+            .where(
+                TrendRun.region == _region(region),
+                TrendRun.category == _category(category),
+                TrendRun.status.in_(("completed", "partial")),
+            )
+            .order_by(TrendRun.window_start.desc(), TrendRun.finished_at.desc(), TrendRun.id)
+            .limit(1)
+        )
+
+    async def manual_refresh_availability(
+        self,
+        *,
+        region: str,
+        category: str | None,
+    ) -> tuple[bool, datetime | None, TrendRun | None]:
+        """Return the global scope cooldown without touching providers or quota."""
+
+        run = await self.latest_run(region=region, category=category)
+        if run is None:
+            return True, None, None
+        started_at = _stored_utc(run.started_at)
+        if run.status == "processing" and started_at > self.now - ABANDONED_PROCESSING_AFTER:
+            return False, started_at + ABANDONED_PROCESSING_AFTER, run
+        if run.status not in {"completed", "partial"} or run.finished_at is None:
+            return True, None, run
+        finished_at = _stored_utc(run.finished_at)
+        next_window = datetime.combine(
+            finished_at.date() + timedelta(days=1),
+            datetime.min.time(),
+            tzinfo=UTC,
+        )
+        next_refresh_at = max(
+            finished_at + timedelta(seconds=settings.trends_manual_cooldown_seconds),
+            next_window,
+        )
+        return self.now >= next_refresh_at, next_refresh_at, run
+
+    async def list(
+        self,
+        *,
+        workspace_id: str,
+        region: str | None,
+        category: str | None,
+        limit: int,
+        private_ranked: bool = False,
+    ) -> list[TrendItem]:
+        """List visible items with a deterministic public or Home ranking.
+
+        Home opts into private ranking: workspace relevance DESC, global score
+        DESC, then trend ID. Other callers retain the established global-first
+        order.
+        """
+
         statement = select(TrendItem).join(WorkspaceTrendRelevance).where(
             WorkspaceTrendRelevance.workspace_id == workspace_id
         )
@@ -505,7 +622,26 @@ class TrendService:
             statement = statement.where(TrendItem.region == region)
         if category:
             statement = statement.where(TrendItem.category == category)
-        return list((await self.db.scalars(statement.order_by(TrendItem.total_score.desc(), TrendItem.id).limit(limit))).all())
+        ordering = (
+            (
+                WorkspaceTrendRelevance.score.desc(),
+                TrendItem.total_score.desc(),
+                TrendItem.id,
+            )
+            if private_ranked
+            else (
+                TrendItem.total_score.desc(),
+                WorkspaceTrendRelevance.score.desc(),
+                TrendItem.id,
+            )
+        )
+        return list(
+            (
+                await self.db.scalars(
+                    statement.order_by(*ordering).limit(limit)
+                )
+            ).all()
+        )
 
     async def detail(self, *, workspace_id: str, trend_id: str) -> TrendItem | None:
         return await self.db.scalar(select(TrendItem).join(WorkspaceTrendRelevance).where(

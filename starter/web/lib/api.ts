@@ -7,6 +7,14 @@ import {
 import type { Category, Objective, Platform } from "@/types/business";
 import type { Tone } from "@/types/brand";
 import type { PublicCapabilities } from "@/types/capabilities";
+import type {
+  TrendCard,
+  TrendDetail,
+  TrendHome,
+  TrendRefreshResult,
+  TrendRefreshScope,
+  TrendSource,
+} from "@/types/trends";
 
 let _csrfToken: string | null = null;
 let _csrfTokenPromise: Promise<string | null> | null = null;
@@ -467,6 +475,30 @@ async function demoRequest<T>(
     } as T;
   }
 
+  if (pathname === "/api/v1/trends/home" && method === "GET") {
+    return {
+      status: "disabled",
+      refresh_scope: { region: "HN", category: null },
+      updated_at: null,
+      refresh_allowed: false,
+      next_refresh_at: null,
+      sources: {
+        total: 0,
+        available: 0,
+        degraded: 0,
+        quota_exhausted: 0,
+        unavailable: 0,
+        unconfigured: 0,
+        disabled: 0,
+      },
+      items: [],
+    } as T;
+  }
+
+  if (pathname === "/api/v1/trends/sources" && method === "GET") {
+    return { sources: [] } as T;
+  }
+
   const demoProjects = readDemoProjects(
     cloneDemo(demoData.projects)
   );
@@ -721,6 +753,36 @@ export const api = {
   capabilities: {
     get(): Promise<PublicCapabilities> {
       return request<PublicCapabilities>(`${BASE}/capabilities`);
+    },
+  },
+
+  trends: {
+    home(): Promise<TrendHome> {
+      return request<TrendHome>(`${BASE}/trends/home`);
+    },
+    sources(): Promise<TrendSource[]> {
+      return request<{ sources: TrendSource[] }>(
+        `${BASE}/trends/sources`
+      ).then((result) => result.sources);
+    },
+    detail(id: string): Promise<TrendDetail> {
+      return request<TrendDetail>(
+        `${BASE}/trends/${encodeURIComponent(id)}`
+      );
+    },
+    /**
+     * Collects exactly the Home `refresh_scope`. The aggregated Home cards may
+     * belong to other scopes and are never the target of this call.
+     */
+    refresh(
+      scope: TrendRefreshScope,
+      options: Pick<ApiRequestOptions, "idempotencyKey"> = {}
+    ): Promise<TrendRefreshResult> {
+      return request<TrendRefreshResult>(`${BASE}/trends/refresh`, {
+        method: "POST",
+        idempotencyKey: options.idempotencyKey || createIdempotencyKey(),
+        body: JSON.stringify({ region: scope.region, category: scope.category }),
+      });
     },
   },
 

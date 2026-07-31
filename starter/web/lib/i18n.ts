@@ -38,7 +38,7 @@ export const LOCALE_EVENT = "hitrendy:locale";
 const es = {
   nav: {
     studio: "Studio",
-    dashboard: "Dashboard",
+    dashboard: "Tendencias",
     templates: "Plantillas",
     settings: "Configuración",
     logout: "Cerrar sesión",
@@ -263,7 +263,7 @@ export type AppCopy = typeof es;
 const en: AppCopy = {
   nav: {
     studio: "Studio",
-    dashboard: "Dashboard",
+    dashboard: "Trends",
     templates: "Templates",
     settings: "Settings",
     logout: "Sign out",
@@ -486,7 +486,7 @@ const en: AppCopy = {
 const pt: AppCopy = {
   nav: {
     studio: "Studio",
-    dashboard: "Painel",
+    dashboard: "Tendências",
     templates: "Templates",
     settings: "Configurações",
     logout: "Sair",

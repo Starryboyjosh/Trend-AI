@@ -68,6 +68,32 @@ beforeEach(() => {
 });
 
 describe("API client", () => {
+  test("uses the authenticated trends Home and sends manual refresh with CSRF", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ status: "empty", items: [] }))
+      .mockResolvedValueOnce(jsonResponse({ token: "csrf-trends" }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          id: "run-1",
+          status: "completed",
+          refresh_allowed: false,
+        })
+      );
+
+    // The Home refresh scope is sent verbatim: nothing more, nothing less.
+    const refreshScope = { region: "HN", category: "gastronomy" };
+    await api.trends.home();
+    await api.trends.refresh(refreshScope, {
+      idempotencyKey: "trend-refresh-once",
+    });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/v1/trends/home");
+    expect(fetchMock.mock.calls[2]?.[0]).toBe("/api/v1/trends/refresh");
+    expect(requestHeadersAt(2).get("X-CSRF-Token")).toBe("csrf-trends");
+    expect(requestHeadersAt(2).get("Idempotency-Key")).toBe("trend-refresh-once");
+    expect(requestInitAt(2).body).toBe(JSON.stringify(refreshScope));
+  });
+
   test("crea claves de idempotencia no vacías", () => {
     const first = createIdempotencyKey();
     const second = createIdempotencyKey();

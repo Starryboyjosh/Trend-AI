@@ -1,293 +1,347 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AppShell } from "@/components/shell/app-shell";
-import { TemplateLibrary } from "@/components/templates/template-library";
-import { api, ApiError } from "@/lib/api";
-import { routes } from "@/lib/routes";
-import type { Template } from "@/types/template";
+import { api, ApiError, createIdempotencyKey } from "@/lib/api";
 import {
-  appCopy,
-  formatDate,
-  isSupportedLocale,
-  readStoredLocale,
-  surfaceCopy,
-  translate,
-  type AppLocale,
+  formatNumber,
+  localeTags,
+  optionLabel,
+  useInterfaceLocale,
 } from "@/lib/i18n";
+import { trendsCopy } from "@/lib/trends-copy";
+import type {
+  TrendHome,
+  TrendHomeStatus,
+  TrendSource,
+} from "@/types/trends";
 
-interface ProjectItem {
-  id: string;
-  name: string;
-  platform: string;
-  status: "active" | "archived";
-  updated_at: string | null;
-  artifact_snapshot?: { hook?: string } | null;
+function dateTime(locale: keyof typeof localeTags, value: string | null) {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return new Intl.DateTimeFormat(localeTags[locale], {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(parsed);
 }
 
-function dateLabel(value: string | null, locale: AppLocale, empty: string) {
-  return formatDate(locale, value) || empty;
+function StatusMark({ status }: { status: TrendHomeStatus | TrendSource["status"] }) {
+  return <span className="trend-status-mark" data-status={status} aria-hidden="true" />;
 }
 
 export default function DashboardPage() {
-  const router = useRouter();
-  const [status, setStatus] = useState<"active" | "archived">("active");
-  const [view, setView] = useState<"projects" | "templates">("projects");
-  const [projects, setProjects] = useState<ProjectItem[]>([]);
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [query, setQuery] = useState("");
+  const locale = useInterfaceLocale();
+  const copy = trendsCopy[locale];
+  const [home, setHome] = useState<TrendHome | null>(null);
+  const [sources, setSources] = useState<TrendSource[]>([]);
   const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
-  const [locale, setLocale] = useState<AppLocale>(readStoredLocale);
-  const copy = appCopy[locale];
-  const initialProjectError = useRef(copy.dashboard.loadError);
-  useEffect(() => {
-    const onLocale = (event: Event) => { const next = (event as CustomEvent<AppLocale>).detail; if (isSupportedLocale(next)) setLocale(next); };
-    window.addEventListener("hitrendy:locale", onLocale);
-    return () => window.removeEventListener("hitrendy:locale", onLocale);
-  }, []);
+  const [sourcesError, setSourcesError] = useState("");
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const closeSourcesRef = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => {
+  const loadHome = useCallback(async () => {
     setLoading(true);
     setError("");
-    void api.projects
-      .list({ status })
-      .then((items) => setProjects(items as unknown as ProjectItem[]))
-      .catch((reason) =>
-        setError(
-          reason instanceof ApiError
-            ? reason.message
-            : initialProjectError.current
-        )
-      )
-      .finally(() => setLoading(false));
-  }, [status]);
+    try {
+      setHome(await api.trends.home());
+    } catch (reason) {
+      setError(reason instanceof ApiError ? reason.message : copy.loadError);
+    } finally {
+      setLoading(false);
+    }
+  }, [copy.loadError]);
 
   useEffect(() => {
-    void api.templates
-      .list()
-      .then((items) => setTemplates(items as unknown as Template[]))
-      .catch(() => undefined);
-  }, []);
+    void loadHome();
+  }, [loadHome]);
 
-  const filteredProjects = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase("es");
-    return normalized
-      ? projects.filter((project) =>
-          `${project.name} ${project.platform}`
-            .toLocaleLowerCase("es")
-            .includes(normalized)
+  useEffect(() => {
+    if (!sourcesOpen) return;
+    setSourcesError("");
+    void api.trends
+      .sources()
+      .then(setSources)
+      .catch((reason) =>
+        setSourcesError(
+          reason instanceof ApiError ? reason.message : copy.modal.error
         )
-      : projects;
-  }, [projects, query]);
-
-  async function changeStatus(project: ProjectItem) {
-    setBusyId(project.id);
-    try {
-      await api.projects.update(project.id, {
-        status: project.status === "active" ? "archived" : "active",
-      });
-      setProjects((items) => items.filter((item) => item.id !== project.id));
-    } catch (reason) {
-      setError(
-        reason instanceof ApiError
-          ? reason.message
-          : translate(locale, "dashboard.updateError")
       );
+    requestAnimationFrame(() => closeSourcesRef.current?.focus());
+  }, [copy.modal.error, sourcesOpen]);
+
+  async function refresh() {
+    if (!home?.refresh_allowed || refreshing) return;
+    setRefreshing(true);
+    setError("");
+    try {
+      // The refresh collects exactly the declared scope, never the aggregated
+      // cards, which may belong to other scopes.
+      await api.trends.refresh(home.refresh_scope, {
+        idempotencyKey: createIdempotencyKey(),
+      });
+      await loadHome();
+    } catch (reason) {
+      setError(reason instanceof ApiError ? reason.message : copy.refreshError);
     } finally {
-      setBusyId(null);
+      setRefreshing(false);
     }
   }
 
-  async function useTemplate(template: Template) {
-    router.push(`/studio/new?template=${encodeURIComponent(template.id)}`);
-  }
+  const stateHint =
+    home?.status === "empty" ||
+    home?.status === "disabled" ||
+    home?.status === "unconfigured" ||
+    home?.status === "failed"
+      ? copy.stateHint[home.status]
+      : null;
 
   return (
     <AppShell>
-      <main className="app-page dashboard-page">
-        <header className="dashboard-head">
+      <main className="app-page trends-home">
+        <header className="trends-home-header">
           <div>
-            <p className="eyebrow">{copy.dashboard.eyebrow}</p>
-            <h1>{copy.dashboard.title}</h1>
-            <p>{copy.dashboard.subtitle}</p>
+            <p className="eyebrow">{copy.eyebrow}</p>
+            <h1>{copy.title}</h1>
+            <p className="trends-home-lead">{copy.subtitle}</p>
+            <p className="trend-updated">
+              <span>{copy.lastUpdated}</span>
+              <strong>
+                {home?.updated_at
+                  ? dateTime(locale, home.updated_at)
+                  : copy.noUpdate}
+              </strong>
+            </p>
           </div>
-          <div
-            className="dashboard-tabs"
-            role="tablist"
-            aria-label={copy.dashboard.tabsLabel}
-          >
+          <div className="trends-home-actions">
             <button
               type="button"
-              role="tab"
-              aria-selected={view === "projects"}
-              onClick={() => setView("projects")}
+              className="button-secondary"
+              onClick={() => setSourcesOpen(true)}
             >
-              {copy.dashboard.projects}
+              {copy.sources}
+              {home ? <span className="trend-source-count">{home.sources.total}</span> : null}
             </button>
             <button
               type="button"
-              role="tab"
-              aria-selected={view === "templates"}
-              onClick={() => setView("templates")}
+              className="button-primary"
+              onClick={() => void refresh()}
+              disabled={!home?.refresh_allowed || refreshing}
+              aria-describedby={home?.next_refresh_at ? "trend-cooldown" : undefined}
             >
-              {copy.dashboard.templates}
+              {refreshing ? copy.refreshing : copy.refresh}
             </button>
           </div>
         </header>
-        <section className="dashboard-hero">
-          <div className="dashboard-hero-rail" aria-hidden="true">
-            <Image src="/templates/flores.png" alt="" width={92} height={122} />
-            <Image src="/templates/coffee.png" alt="" width={92} height={122} />
-            <Image src="/templates/amor.png" alt="" width={92} height={122} />
-          </div>
-          <p className="eyebrow">{copy.dashboard.startEyebrow}</p>
-          <h2>
-            {view === "projects"
-              ? copy.dashboard.projectsHeadline
-              : copy.dashboard.templatesHeadline}
-          </h2>
-          <p>
-            {view === "projects"
-              ? copy.dashboard.projectsLead
-              : copy.dashboard.templatesLead}
+
+        {home ? (
+          <p className="trend-refresh-scope">
+            <span>{copy.refreshScope}</span>
+            <strong>
+              {home.refresh_scope.region}
+              {home.refresh_scope.category
+                ? ` · ${optionLabel(locale, "category", home.refresh_scope.category)}`
+                : ""}
+            </strong>
           </p>
-          <Link href={routes.studioNew} className="button-secondary">
-            {copy.dashboard.createCta} <span aria-hidden="true">→</span>
-          </Link>
-        </section>
-        {view === "templates" ? (
-          <TemplateLibrary templates={templates} onUse={useTemplate} copy={surfaceCopy[locale].templates} />
-        ) : (
-          <>
-            <div className="content-title dashboard-project-title"><h2>{copy.dashboard.yourProjects}</h2></div>
-            <div className="dashboard-toolbar">
-              <div role="tablist" aria-label={copy.dashboard.statusLabel}>
-                {(["active", "archived"] as const).map((value) => (
-                  <button
-                    key={value}
-                    type="button"
-                    role="tab"
-                    aria-selected={status === value}
-                    className="filter-tab"
-                    onClick={() => setStatus(value)}
-                  >
-                    {value === "active"
-                      ? copy.dashboard.statusActive
-                      : copy.dashboard.statusArchived}
-                  </button>
-                ))}
-              </div>
-              <label className="search-field" htmlFor="project-search">
-                {copy.dashboard.search}
-                <input
-                  id="project-search"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder={copy.dashboard.searchPlaceholder}
-                />
-              </label>
+        ) : null}
+
+        {home?.next_refresh_at ? (
+          <p className="trend-cooldown" id="trend-cooldown" role="status">
+            {copy.cooldown}:{" "}
+            <time dateTime={home.next_refresh_at}>
+              {dateTime(locale, home.next_refresh_at)}
+            </time>
+          </p>
+        ) : null}
+
+        {error ? (
+          <section className="trend-state trend-state--error" role="alert">
+            <div>
+              <h2>{copy.loadError}</h2>
+              <p>{error}</p>
             </div>
-            {error ? (
-              <p className="page-error" role="alert">
-                {error}
-              </p>
-            ) : null}
-            {loading ? (
-              <div className="folder-grid" aria-label={copy.dashboard.loadingProjects}>
-                {[0, 1, 2].map((index) => (
-                  <article
-                    className="folder-card folder-card--loading"
-                    key={index}
-                  >
-                    <span className="skeleton-line" />
-                    <span className="skeleton-line skeleton-line--short" />
+            <button type="button" className="button-secondary" onClick={() => void loadHome()}>
+              {copy.retry}
+            </button>
+          </section>
+        ) : null}
+
+        {loading ? (
+          <section className="trend-grid" aria-label={copy.loading} aria-busy="true">
+            {[0, 1, 2].map((item) => (
+              <article className="trend-card trend-card--loading" key={item} aria-label={copy.loadingCard}>
+                <span className="skeleton-line" />
+                <span className="skeleton-line skeleton-line--short" />
+                <span className="skeleton-line" />
+              </article>
+            ))}
+          </section>
+        ) : null}
+
+        {!loading && !error && home ? (
+          <>
+            <section
+              className="trend-state"
+              data-status={home.status}
+              role={home.status === "failed" ? "alert" : "status"}
+            >
+              <StatusMark status={home.status} />
+              <div>
+                <h2>{copy.state[home.status]}</h2>
+                {stateHint ? <p>{stateHint}</p> : null}
+              </div>
+            </section>
+
+            {home.items.length ? (
+              <section className="trend-grid" aria-label={copy.title}>
+                {home.items.map((trend) => (
+                  <article className="trend-card" key={trend.id}>
+                    <header className="trend-card-header">
+                      <span className="trend-freshness" data-status={trend.freshness}>
+                        <StatusMark status={trend.freshness} />
+                        {trend.freshness === "fresh" ? copy.fresh : copy.stale}
+                      </span>
+                      <span className="trend-scope">
+                        {trend.region}
+                        {trend.category
+                          ? ` · ${optionLabel(locale, "category", trend.category)}`
+                          : ""}
+                      </span>
+                    </header>
+                    <div className="trend-card-copy">
+                      <h2>{trend.title}</h2>
+                      <p>{trend.summary}</p>
+                    </div>
+                    <dl className="trend-scores">
+                      <div>
+                        <dt>{copy.globalScore}</dt>
+                        <dd>
+                          {formatNumber(locale, trend.total_score, {
+                            maximumFractionDigits: 2,
+                          })}
+                        </dd>
+                      </div>
+                      {trend.workspace_relevance ? (
+                        <div>
+                          <dt>{copy.relevance}</dt>
+                          <dd>
+                            {formatNumber(locale, trend.workspace_relevance.score, {
+                              style: "percent",
+                              maximumFractionDigits: 0,
+                            })}
+                          </dd>
+                        </div>
+                      ) : null}
+                    </dl>
+                    <section className="trend-evidence">
+                      <h3>{copy.evidence}</h3>
+                      <ul>
+                        {trend.evidence.map((evidence) => (
+                          <li key={`${evidence.source}-${evidence.source_url}`}>
+                            <a
+                              href={evidence.source_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              {evidence.source_name}
+                            </a>
+                            <span>
+                              {copy.observed}{" "}
+                              <time dateTime={evidence.observed_at}>
+                                {dateTime(locale, evidence.observed_at)}
+                              </time>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                    <footer className="trend-card-footer">
+                      <p>{copy.basedOnSignal}</p>
+                      <Link
+                        href={`/studio/new?trend=${encodeURIComponent(trend.id)}`}
+                        className="button-primary"
+                      >
+                        {copy.create}
+                      </Link>
+                    </footer>
                   </article>
                 ))}
-              </div>
-            ) : null}
-            {!loading && !error && filteredProjects.length === 0 ? (
-              <section className="empty-state">
-                <h2>
-                  {projects.length
-                    ? copy.dashboard.noResults
-                    : status === "archived"
-                      ? copy.dashboard.emptyArchived
-                      : copy.dashboard.emptyActive}
-                </h2>
-                <p>
-                  {projects.length
-                    ? copy.dashboard.noResultsHint
-                    : copy.dashboard.emptyHint}
-                </p>
-                {!projects.length ? (
-                  <Link href={routes.templates} className="button-primary">
-                    {copy.dashboard.startCta}
-                  </Link>
-                ) : null}
               </section>
             ) : null}
-            <section className="folder-grid" aria-label={copy.dashboard.projectsList}>
-              {filteredProjects.map((project) => (
-                <article className="folder-card" key={project.id}>
-                  <div className="folder-art" aria-hidden="true">
-                    <Image
-                      src="/icons/folder-violet-papirus-hitrendy.svg"
-                      alt=""
-                      width={128}
-                      height={128}
-                    />
-                    <span>{project.artifact_snapshot?.hook ? 1 : 0}</span>
-                  </div>
-                  <div className="folder-card-copy">
-                    <Link href={`/projects/${project.id}`}>
-                      <h2>{project.name}</h2>
-                    </Link>
-                    <p>
-                      {project.platform} · {copy.dashboard.updatedAt}{" "}
-                      {dateLabel(project.updated_at, locale, copy.dashboard.noActivity)}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className="button-secondary button-small"
-                    onClick={() => changeStatus(project)}
-                    disabled={busyId === project.id}
-                  >
-                    {busyId === project.id
-                      ? copy.common.saving
-                      : project.status === "active"
-                        ? copy.dashboard.archive
-                        : copy.dashboard.restore}
-                  </button>
-                </article>
-              ))}
-              <Link href={routes.studioNew} className="folder-card folder-card--new">
-                <span className="folder-new-plus" aria-hidden="true">+</span>
-                <strong>{copy.dashboard.newProject}</strong>
-                <small>{copy.dashboard.newProjectHint}</small>
-              </Link>
-            </section>
-            <section className="dashboard-recommended">
-              <div className="content-title">
-                <h2>{copy.dashboard.recommended}</h2>
-                <Link href={routes.templates}>{copy.dashboard.seeAll}</Link>
-              </div>
-              <TemplateLibrary
-                templates={templates.slice(0, 4)}
-                onUse={useTemplate}
-                compact
-                copy={surfaceCopy[locale].templates}
-              />
-            </section>
           </>
-        )}
+        ) : null}
       </main>
+
+      {sourcesOpen ? (
+        <div
+          className="trend-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.currentTarget === event.target) setSourcesOpen(false);
+          }}
+        >
+          <section
+            className="trend-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="trend-sources-title"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setSourcesOpen(false);
+            }}
+          >
+            <header>
+              <div>
+                <h2 id="trend-sources-title">{copy.modal.title}</h2>
+                <p>{copy.modal.lead}</p>
+              </div>
+              <button
+                ref={closeSourcesRef}
+                type="button"
+                className="trend-modal-close"
+                aria-label={copy.modal.close}
+                onClick={() => setSourcesOpen(false)}
+              >
+                ×
+              </button>
+            </header>
+            {sourcesError ? <p className="page-error" role="alert">{sourcesError}</p> : null}
+            {!sourcesError && !sources.length ? <p>{copy.modal.empty}</p> : null}
+            <ul className="trend-source-list">
+              {sources.map((source) => (
+                <li key={source.identifier}>
+                  <div>
+                    <strong>{source.public_name}</strong>
+                    <span>
+                      {source.source_type.toUpperCase()} ·{" "}
+                      {source.configured
+                        ? copy.modal.configured
+                        : copy.modal.notConfigured}
+                    </span>
+                  </div>
+                  <div className="trend-source-state">
+                    <span>
+                      <StatusMark status={source.status} />
+                      {copy.modal.status[source.status]}
+                    </span>
+                    {source.next_reset_at ? (
+                      <small>
+                        {copy.modal.nextReset}:{" "}
+                        <time dateTime={source.next_reset_at}>
+                          {dateTime(locale, source.next_reset_at)}
+                        </time>
+                      </small>
+                    ) : null}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </div>
+      ) : null}
     </AppShell>
   );
 }

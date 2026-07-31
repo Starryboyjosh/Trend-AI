@@ -145,7 +145,7 @@ describe("template surface uses the common catalog", () => {
 });
 
 describe("remaining primary surfaces use persisted interface copy", () => {
-  test("settings loads its persisted English locale and dashboard preserves a user project name", async () => {
+  test("settings loads its persisted English locale and dashboard renders trend copy", async () => {
     vi.spyOn(api.auth, "me").mockResolvedValue({ user: { id: "u", name: "Ana", email: "ana@example.test", interface_locale: "en" } } as never);
     vi.spyOn(api.auth, "usage").mockResolvedValue({ items: [] } as never);
     vi.spyOn(api.businesses, "list").mockResolvedValue([] as never);
@@ -154,12 +154,16 @@ describe("remaining primary surfaces use persisted interface copy", () => {
     expect(await screen.findByRole("heading", { name: "Settings" })).toBeInTheDocument();
     expect(window.localStorage.getItem(LOCALE_STORAGE_KEY)).toBe("en");
 
-    vi.spyOn(api.projects, "list").mockResolvedValue([{ id: "p", name: "Nombre de usuario", platform: "instagram", status: "active", updated_at: null }] as never);
-    vi.spyOn(api.templates, "list").mockResolvedValue([] as never);
+    vi.spyOn(api.trends, "home").mockResolvedValue({
+      status: "empty", refresh_scope: { region: "HN", category: null }, updated_at: null,
+      refresh_allowed: false, next_refresh_at: null,
+      sources: { total: 0, available: 0, degraded: 0, quota_exhausted: 0, unavailable: 0, unconfigured: 0, disabled: 0 },
+      items: [],
+    });
     const { default: DashboardPage } = await import("@/app/dashboard/page");
     render(<DashboardPage />);
-    expect(await screen.findByText("Nombre de usuario")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Your creative space" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Signals for your next post" })).toBeInTheDocument();
+    expect(screen.getByText("No new trends were found for this scope.")).toBeInTheDocument();
   });
 
   test("onboarding business and channels steps render Portuguese labels", async () => {

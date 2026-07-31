@@ -109,6 +109,7 @@ async def test_quota_reservation_is_durable_and_concurrent_across_postgres_sessi
             db.add(
                 TrendRun(
                     fingerprint=uuid4().hex,
+                    window_start=now.replace(hour=0, minute=0, second=0, microsecond=0),
                     region="HN",
                     category=None,
                     status="processing",

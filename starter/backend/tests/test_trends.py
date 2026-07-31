@@ -4,6 +4,7 @@ import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
+import pytest_asyncio
 from sqlalchemy import delete, select
 
 from app.trends.contracts import SourceCandidate, SourceEvidence, SourceFetchResult, valid_result
@@ -17,6 +18,25 @@ from app.trends.models import (
 )
 from app.trends.scoring import score
 from app.trends.service import TrendService, canonical_url
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def clean_global_trend_state() -> None:
+    """Daily scope identity makes cross-test global runs intentionally reusable."""
+
+    from tests.conftest import _TestingSessionFactory
+
+    async with _TestingSessionFactory() as db:
+        for model in (
+            TrendRunEvidence,
+            TrendItemEvidence,
+            TrendEvidence,
+            WorkspaceTrendRelevance,
+            TrendItem,
+            TrendRun,
+        ):
+            await db.execute(delete(model))
+        await db.commit()
 
 
 @pytest.mark.asyncio
@@ -49,6 +69,31 @@ async def test_trend_refresh_publishes_verified_evidence_and_is_idempotent(clien
     assert listed.status_code == 200 and len(listed.json()["items"]) == 1
     detail = await client.get(f"/api/v1/trends/{listed.json()['items'][0]['id']}")
     assert detail.status_code == 200 and len(detail.json()["evidence"]) == 2
+    assert set(detail.json()) == {
+        "id",
+        "title",
+        "summary",
+        "region",
+        "category",
+        "observed_at",
+        "freshness_score",
+        "scoring_version",
+        "component_scores",
+        "total_score",
+        "calculated_at",
+        "workspace_relevance",
+        "evidence",
+    }
+    assert set(detail.json()["workspace_relevance"]) == {
+        "score",
+        "component_scores",
+        "calculated_at",
+    }
+    assert all(
+        set(evidence)
+        == {"source", "source_url", "observed_at", "region", "confidence"}
+        for evidence in detail.json()["evidence"]
+    )
 
 
 @pytest.mark.asyncio
@@ -521,12 +566,16 @@ async def test_http_processing_run_never_completes_idempotency_early(client, mon
     blocked = await client.post(
         "/api/v1/trends/refresh", json={"region": "HN", "category": "processing"}, headers=headers
     )
-    assert blocked.status_code == 409 and blocked.json()["error"]["retryable"] is True
+    assert blocked.status_code == 202
+    assert blocked.json()["status"] == "processing"
+    assert blocked.json()["refresh_allowed"] is False
+    assert blocked.json()["next_refresh_at"] is not None
     assert calls == 0
     async with _TestingSessionFactory() as db:
         record = await db.scalar(select(IdempotencyRecord).where(IdempotencyRecord.key == "processing-run-key"))
-        # A reserved key is released as failed, never left stuck in processing.
-        assert record is not None and record.status == "failed"
+        assert record is not None
+        assert record.status == "completed"
+        assert json.loads(record.response_json) == blocked.json()
         run = await db.get(TrendRun, first.json()["id"])
         assert run is not None
         run.status, run.finished_at = "completed", datetime.now(UTC)
@@ -582,8 +631,9 @@ async def test_temporal_grouping_reobservation_and_freshness(monkeypatch) -> Non
         await db.execute(delete(TrendRun))
         await db.commit()
         old = datetime(2026, 1, 2, 12, tzinfo=UTC)
-        recent = datetime(2026, 1, 3, 12, tzinfo=UTC)
-        first = await TrendService(db, (Source("demo-old", old, "https://demo.invalid/time-old"),), now=recent).refresh(
+        first_now = datetime(2026, 1, 3, 12, tzinfo=UTC)
+        recent = datetime(2026, 1, 4, 12, tzinfo=UTC)
+        first = await TrendService(db, (Source("demo-old", old, "https://demo.invalid/time-old"),), now=first_now).refresh(
             workspace_id="ws_test_001", region="HN", category=None
         )
         item = await db.scalar(select(TrendItem).where(TrendItem.id.is_not(None)))

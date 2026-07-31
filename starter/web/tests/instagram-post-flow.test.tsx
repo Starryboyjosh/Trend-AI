@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
     businesses: { list: vi.fn(), brandProfile: { get: vi.fn() } }, templates: { list: vi.fn() }, capabilities: { get: vi.fn() },
     projects: { startCreationFlow: vi.fn(), completeCreationFlow: vi.fn(), create: vi.fn(), get: vi.fn(), updateArtifactVersion: vi.fn(), duplicate: vi.fn() },
     conversations: { create: vi.fn(), sendMessage: vi.fn() }, artifacts: { createVariation: vi.fn() },
+    trends: { detail: vi.fn() },
   },
 }));
 const { api, push, replace } = mocks;
@@ -42,6 +43,7 @@ function configure() {
   api.projects.updateArtifactVersion.mockResolvedValue({});
   api.projects.duplicate.mockResolvedValue({ id: "project-copy" });
   api.artifacts.createVariation.mockResolvedValue({ artifact: { ...post, caption: "Variación" } });
+  api.trends.detail.mockResolvedValue(null);
 }
 
 beforeEach(() => { mocks.query = "template=tpl_instagram_01"; replace.mockReset(); push.mockReset(); Object.values(api).forEach((group) => Object.values(group).forEach((value) => { if (typeof value === "function" && "mockReset" in value) value.mockReset(); })); configure(); });
@@ -109,5 +111,48 @@ describe("InstagramPostFlow", () => {
     fireEvent.change(screen.getByLabelText("2. Objetivo o tema"), { target: { value: "Promoción" } });
     fireEvent.click(screen.getByRole("button", { name: "Generar post" }));
     await waitFor(() => expect(api.projects.completeCreationFlow).toHaveBeenCalledWith("flow-1", "failed"));
+  });
+
+  test("loads an authorized trend ID into an editable draft without generating", async () => {
+    mocks.query = "trend=trend-visible-1";
+    api.trends.detail.mockResolvedValue({
+      id: "trend-visible-1",
+      title: "Café frío local",
+      summary: "Interés observado esta semana.",
+      region: "HN",
+      category: "gastronomy",
+      observed_at: "2026-07-30T10:00:00Z",
+      freshness_score: 0.9,
+      scoring_version: "trend-v1",
+      component_scores: {
+        freshness: 0.9,
+        evidence: 0.33,
+        source_diversity: 0.5,
+      },
+      total_score: 0.8,
+      calculated_at: "2026-07-30T10:05:00Z",
+      workspace_relevance: {
+        score: 1,
+        component_scores: {
+          business_category: 1,
+          regional_match: 1,
+        },
+        calculated_at: "2026-07-30T10:05:00Z",
+      },
+      evidence: [
+        {
+          source: "rss-local",
+          source_url: "https://example.test/trends/cafe-frio",
+          observed_at: "2026-07-30T10:00:00Z",
+          region: "HN",
+          confidence: 0.8,
+        },
+      ],
+    });
+    render(<InstagramPostFlow />);
+    expect(await screen.findByText("Contexto de tendencia")).toBeInTheDocument();
+    expect(screen.getByDisplayValue(/Café frío local/)).toBeInTheDocument();
+    expect(api.trends.detail).toHaveBeenCalledWith("trend-visible-1");
+    expect(api.conversations.sendMessage).not.toHaveBeenCalled();
   });
 });

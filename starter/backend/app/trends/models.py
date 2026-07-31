@@ -28,6 +28,7 @@ class TrendRun(Base):
     __tablename__ = "trend_runs"
     id: Mapped[str] = mapped_column(String(64), primary_key=True, default=_uuid)
     fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     region: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     category: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, server_default=text("'pending'"), index=True)
@@ -41,6 +42,13 @@ class TrendRun(Base):
         CheckConstraint(
             "status IN ('pending','processing','completed','partial','failed')",
             name="ck_trend_run_status",
+        ),
+        UniqueConstraint(
+            "window_start",
+            "region",
+            "category",
+            name="uq_trend_run_daily_scope",
+            postgresql_nulls_not_distinct=True,
         ),
     )
 

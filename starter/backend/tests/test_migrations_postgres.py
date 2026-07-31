@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -9,6 +12,7 @@ from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
 from sqlalchemy import create_engine, text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 import app.assets.models  # noqa: F401
 import app.business.models  # noqa: F401
@@ -20,6 +24,7 @@ import app.trends.models  # noqa: F401
 from alembic import command
 from app.core.config import settings
 from app.db.base import Base
+from app.trends.service import TrendService
 
 POSTGRES_URL = os.environ.get(
     "POSTGRES_MIGRATION_DATABASE_URL",
@@ -86,7 +91,7 @@ def _public_template_ids(engine) -> list[str]:
 def test_upgrade_empty_postgres_to_head(postgres_engine) -> None:
     _upgrade("head")
     with postgres_engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "020"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "021"
     assert set(_public_template_ids(postgres_engine)) == EXPECTED_TEMPLATE_IDS
 
 
@@ -107,7 +112,7 @@ def test_trend_framework_upgrade_downgrade_and_reupgrade(postgres_engine) -> Non
 
 
 def test_trend_framework_schema_matches_the_sqlalchemy_models(postgres_engine) -> None:
-    """019 owns these tables; compare only its declarative surface."""
+    """019/021 own these tables; compare their combined declarative surface."""
 
     _upgrade("head")
     owned_tables = {
@@ -122,7 +127,303 @@ def test_trend_framework_schema_matches_the_sqlalchemy_models(postgres_engine) -
         context = MigrationContext.configure(connection)
         diffs = _flatten_diffs(compare_metadata(context, Base.metadata))
     divergences = [entry for entry in diffs if _diff_table(entry) in owned_tables]
-    assert divergences == [], f"019 no coincide con los modelos: {divergences}"
+    assert divergences == [], f"019/021 no coinciden con los modelos: {divergences}"
+
+
+#: Deleted duplicate whose id a stored idempotent refresh response returned.
+CONSOLIDATED_RUN_RESPONSE = (
+    '{"id": "legacy-failed", "status": "failed", "region": "HN", '
+    '"category": "gastronomy", "sources_attempted": ["legacy-rss", "legacy-api"], '
+    '"sources_succeeded": [], "sources_failed": ["legacy-rss", "legacy-api"], '
+    '"started_at": "2026-07-30T11:00:00+00:00", '
+    '"finished_at": "2026-07-30T11:00:00+00:00", "error": null, '
+    '"refresh_allowed": true, "next_refresh_at": null, "retry_after_seconds": null}'
+)
+
+
+def _idempotency_records(engine) -> dict[str, dict]:
+    with engine.connect() as connection:
+        return {
+            row["id"]: dict(row)
+            for row in connection.execute(
+                text(
+                    """
+                    SELECT id, workspace_id, endpoint, key, payload_hash, status,
+                           response_json
+                    FROM idempotency_records
+                    """
+                )
+            ).mappings()
+        }
+
+
+def test_daily_scope_upgrade_reuses_legacy_run_and_preserves_evidence(
+    postgres_engine,
+) -> None:
+    _upgrade("020")
+    observed = datetime(2026, 7, 30, 10, tzinfo=UTC)
+    with postgres_engine.begin() as connection:
+        # Three duplicates of the same scope/day, each with different sources
+        # and its own evidence. `legacy-partial` also carries a malformed
+        # legacy array that must degrade instead of aborting the migration.
+        connection.execute(
+            text(
+                """
+                INSERT INTO trend_runs (
+                    id, fingerprint, region, category, status,
+                    sources_attempted, sources_succeeded, sources_failed,
+                    started_at, finished_at
+                ) VALUES
+                    (
+                        'legacy-completed', 'legacy-fingerprint-completed',
+                        ' hn ', ' Gastronomy ', 'completed',
+                        '["legacy-rss"]', '["legacy-rss"]', '[]',
+                        :observed, :observed
+                    ),
+                    (
+                        'legacy-failed', 'legacy-fingerprint-failed',
+                        'HN', 'gastronomy', 'failed',
+                        '["legacy-rss", "legacy-api"]', '[]',
+                        '["legacy-rss", "legacy-api"]',
+                        :later, :later
+                    ),
+                    (
+                        'legacy-partial', 'legacy-fingerprint-partial',
+                        'HN', 'gastronomy', 'partial',
+                        '["legacy-video"]', '["legacy-video"]', 'no-es-json',
+                        :earlier, :earlier
+                    )
+                """
+            ),
+            {
+                "observed": observed,
+                "later": observed.replace(hour=11),
+                "earlier": observed.replace(hour=9),
+            },
+        )
+        evidence_sources = {
+            "completed": "legacy-rss",
+            "failed": "legacy-rss",
+            "partial": "legacy-social",
+        }
+        for suffix, source in evidence_sources.items():
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO trend_evidence (
+                        id, source, source_url, canonical_url, observed_at,
+                        region, observation_window, confidence,
+                        evidence_fingerprint
+                    ) VALUES (
+                        :id, :source, :url, :url, :observed,
+                        'HN', 'utc-week-v1:2026-W31', 0.8, :fingerprint
+                    )
+                    """
+                ),
+                {
+                    "id": f"evidence-{suffix}",
+                    "source": source,
+                    "url": f"https://example.test/{suffix}",
+                    "observed": observed,
+                    "fingerprint": f"evidence-fingerprint-{suffix}",
+                },
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO trend_run_evidence (trend_run_id, trend_evidence_id)
+                    VALUES (:run_id, :evidence_id)
+                    """
+                ),
+                {
+                    "run_id": f"legacy-{suffix}",
+                    "evidence_id": f"evidence-{suffix}",
+                },
+            )
+        # Durable idempotent replays: only the completed refresh response that
+        # returned a deleted run may change, and only in its "id" member.
+        connection.execute(
+            text(
+                """
+                INSERT INTO idempotency_records (
+                    id, workspace_id, endpoint, key, payload_hash, status,
+                    response_json
+                ) VALUES
+                    (
+                        'idem-consolidated', 'ws_legacy', 'POST:/trends/refresh',
+                        'key-consolidated', 'hash-consolidated', 'completed',
+                        :consolidated
+                    ),
+                    (
+                        'idem-survivor', 'ws_legacy', 'POST:/trends/refresh',
+                        'key-survivor', 'hash-survivor', 'completed',
+                        '{"id": "legacy-completed", "status": "completed"}'
+                    ),
+                    (
+                        'idem-other-endpoint', 'ws_legacy', 'POST:/conversations',
+                        'key-other', 'hash-other', 'completed',
+                        '{"id": "legacy-failed", "status": "completed"}'
+                    ),
+                    (
+                        'idem-processing', 'ws_legacy', 'POST:/trends/refresh',
+                        'key-processing', 'hash-processing', 'processing', NULL
+                    ),
+                    (
+                        'idem-invalid-json', 'ws_legacy', 'POST:/trends/refresh',
+                        'key-invalid', 'hash-invalid', 'completed',
+                        'no es json'
+                    )
+                """
+            ),
+            {"consolidated": CONSOLIDATED_RUN_RESPONSE},
+        )
+    before = _idempotency_records(postgres_engine)
+
+    _upgrade("021")
+    with postgres_engine.connect() as connection:
+        runs = connection.execute(
+            text(
+                """
+                SELECT id, region, category, window_start,
+                       sources_attempted, sources_succeeded, sources_failed
+                FROM trend_runs
+                """
+            )
+        ).mappings().all()
+        assert len(runs) == 1
+        survivor = runs[0]
+        assert survivor["id"] == "legacy-completed"
+        assert survivor["region"] == "HN"
+        assert survivor["category"] == "gastronomy"
+        assert survivor["window_start"] == datetime(2026, 7, 30, tzinfo=UTC)
+        # Merged traceability: ordered unions without duplicates, failures
+        # exclude whatever ultimately succeeded, and every source behind the
+        # evidence linked to the survivor is attempted and succeeded.
+        assert json.loads(survivor["sources_attempted"]) == [
+            "legacy-api",
+            "legacy-rss",
+            "legacy-social",
+            "legacy-video",
+        ]
+        assert json.loads(survivor["sources_succeeded"]) == [
+            "legacy-rss",
+            "legacy-social",
+            "legacy-video",
+        ]
+        assert json.loads(survivor["sources_failed"]) == ["legacy-api"]
+        linked_sources = connection.execute(
+            text(
+                """
+                SELECT DISTINCT trend_evidence.source
+                FROM trend_run_evidence
+                JOIN trend_evidence
+                  ON trend_evidence.id = trend_run_evidence.trend_evidence_id
+                WHERE trend_run_evidence.trend_run_id = 'legacy-completed'
+                """
+            )
+        ).scalars().all()
+        assert set(linked_sources) <= set(json.loads(survivor["sources_attempted"]))
+        assert set(linked_sources) <= set(json.loads(survivor["sources_succeeded"]))
+        # No evidence row was deleted, renumbered or orphaned.
+        assert (
+            connection.execute(
+                text("SELECT id FROM trend_evidence ORDER BY id")
+            ).scalars().all()
+            == ["evidence-completed", "evidence-failed", "evidence-partial"]
+        )
+        assert (
+            connection.execute(
+                text(
+                    """
+                    SELECT trend_evidence_id FROM trend_run_evidence
+                    WHERE trend_run_id = 'legacy-completed'
+                    ORDER BY trend_evidence_id
+                    """
+                )
+            ).scalars().all()
+            == ["evidence-completed", "evidence-failed", "evidence-partial"]
+        )
+        assert connection.scalar(text("SELECT count(*) FROM trend_run_evidence")) == 3
+
+    after = _idempotency_records(postgres_engine)
+    assert set(after) == set(before)
+    # Every column except the rewritten response stays untouched everywhere.
+    for record_id, row in after.items():
+        for column in ("workspace_id", "endpoint", "key", "payload_hash", "status"):
+            assert row[column] == before[record_id][column], record_id
+    # Foreign endpoints and non-completed or non-JSON records are never touched.
+    for untouched in ("idem-survivor", "idem-other-endpoint", "idem-processing", "idem-invalid-json"):
+        assert after[untouched]["response_json"] == before[untouched]["response_json"]
+    # The consolidated replay keeps its exact shape except for the run id.
+    rewritten = after["idem-consolidated"]["response_json"]
+    assert json.loads(rewritten) == {
+        **json.loads(CONSOLIDATED_RUN_RESPONSE),
+        "id": "legacy-completed",
+    }
+    assert list(json.loads(rewritten)) == list(json.loads(CONSOLIDATED_RUN_RESPONSE))
+    assert rewritten != CONSOLIDATED_RUN_RESPONSE
+    with postgres_engine.connect() as connection:
+        # The replayed id really exists after the consolidation.
+        assert (
+            connection.scalar(
+                text("SELECT count(*) FROM trend_runs WHERE id = :id"),
+                {"id": json.loads(rewritten)["id"]},
+            )
+            == 1
+        )
+        context = MigrationContext.configure(connection)
+        diffs = _flatten_diffs(compare_metadata(context, Base.metadata))
+    trend_divergences = [entry for entry in diffs if _diff_table(entry) == "trend_runs"]
+    assert trend_divergences == [], f"021 no coincide con los modelos: {trend_divergences}"
+
+    class NeverFetchSource:
+        identifier = "legacy-rss"
+        public_name = "Legacy RSS"
+        source_type = "rss"
+        supported_regions = ("HN",)
+        supported_categories = ("gastronomy",)
+        available = True
+        calls = 0
+
+        async def fetch(self, *, region: str, category: str | None):
+            del region, category
+            self.calls += 1
+            raise AssertionError("El run legado debía reutilizarse.")
+
+    async def collect_legacy() -> str:
+        engine = create_async_engine(POSTGRES_URL)
+        factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        source = NeverFetchSource()
+        try:
+            async with factory() as db:
+                run = await TrendService(
+                    db,
+                    (source,),
+                    now=datetime(2026, 7, 30, 18, tzinfo=UTC),
+                ).collect(region="HN", category="gastronomy")
+                assert source.calls == 0
+                return run.id
+        finally:
+            await engine.dispose()
+
+    assert asyncio.run(collect_legacy()) == "legacy-completed"
+
+    command.downgrade(_alembic_config(), "020")
+    with postgres_engine.connect() as connection:
+        assert (
+            connection.scalar(
+                text(
+                    """
+                    SELECT count(*) FROM information_schema.columns
+                    WHERE table_name = 'trend_runs' AND column_name = 'window_start'
+                    """
+                )
+            )
+            == 0
+        )
+    _upgrade("021")
+    with postgres_engine.connect() as connection:
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "021"
 
 
 def test_real_trend_budget_upgrade_downgrade_and_schema(postgres_engine) -> None:
@@ -303,7 +604,7 @@ def test_upgrade_from_017_adds_account_lifecycle_schema(postgres_engine) -> None
         assert connection.scalar(text("SELECT to_regclass('public.admin_audit_events')"))
         assert connection.scalar(text("SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='deletion_requested_at'"))
 
-    # 020 -> 018 must leave no trace behind, so a redeploy can replay it.
+    # 021 -> 017 must leave no trace behind, so a redeploy can replay it.
     command.downgrade(_alembic_config(), "017")
     with postgres_engine.connect() as connection:
         assert connection.scalar(text("SELECT to_regclass('public.account_purge_jobs')")) is None
@@ -312,7 +613,7 @@ def test_upgrade_from_017_adds_account_lifecycle_schema(postgres_engine) -> None
 
     _upgrade("head")
     with postgres_engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "020"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "021"
         assert connection.scalar(text("SELECT to_regclass('public.account_purge_jobs')"))
 
 

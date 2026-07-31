@@ -7,11 +7,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, api, createIdempotencyKey } from "@/lib/api";
 import { instagramFlowCopy, type InstagramFlowLocale } from "@/lib/instagram-flow-copy";
 import { useInterfaceLocale } from "@/lib/i18n";
+import { trendsCopy } from "@/lib/trends-copy";
 import type { GeneratedSocialPost } from "@/types/artifact";
 import type { BrandProfile } from "@/types/brand";
 import type { BusinessProfile, Objective } from "@/types/business";
 import type { QualityLevel } from "@/types/capabilities";
 import type { Template } from "@/types/template";
+import type { TrendDetail } from "@/types/trends";
 
 const objectives: Objective[] = ["engagement", "sales", "reach", "store_visits", "launch", "brand_awareness", "community"];
 const allowedCanvaUrls = new Set(["https://canva.link/jxr6r3xdtdx3p18", "https://canva.link/d5gnf0tsot7t70m", "https://canva.link/2hk1wscap0jikce", "https://canva.link/9667338l5l4mgwg", "https://canva.link/7ped4en1xal5yk7"]);
@@ -40,6 +42,7 @@ export function InstagramPostFlow() {
   const interfaceLocale = useInterfaceLocale();
   const searchParams = useSearchParams();
   const requestedProjectId = searchParams.get("project");
+  const requestedTrendId = searchParams.get("trend");
   const operationRef = useRef(false);
   const saveRef = useRef(false);
   const duplicateRef = useRef(false);
@@ -69,6 +72,7 @@ export function InstagramPostFlow() {
   const [projectId, setProjectId] = useState<string | null>(requestedProjectId);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [flowId, setFlowId] = useState<string | null>(null);
+  const [trendContext, setTrendContext] = useState<TrendDetail | null>(null);
   const isDirty = useMemo(() => Boolean(draft && generated && JSON.stringify(draft) !== JSON.stringify(generated)), [draft, generated]);
 
   useEffect(() => {
@@ -85,8 +89,14 @@ export function InstagramPostFlow() {
 
   useEffect(() => {
     let active = true;
-    void Promise.all([api.businesses.list(), api.templates.list({ platform: "instagram", format: "static_post" }), api.capabilities.get(), requestedProjectId ? api.projects.get(requestedProjectId) : Promise.resolve(null)])
-      .then(async ([businesses, items, capabilities, stored]) => {
+    void Promise.all([
+      api.businesses.list(),
+      api.templates.list({ platform: "instagram", format: "static_post" }),
+      api.capabilities.get(),
+      requestedProjectId ? api.projects.get(requestedProjectId) : Promise.resolve(null),
+      requestedTrendId ? api.trends.detail(requestedTrendId) : Promise.resolve(null),
+    ])
+      .then(async ([businesses, items, capabilities, stored, observedTrend]) => {
         if (!active) return;
         const first = businesses[0] as unknown as BusinessProfile | undefined;
         if (!first) throw new ApiError(400, "NO_BUSINESS", copy.noBusiness, false);
@@ -97,6 +107,13 @@ export function InstagramPostFlow() {
         const available = capabilities.copywriter?.quality_levels || [];
         setLevels(available); setQuality(available.includes("fast") ? "fast" : available[0] || "fast");
         const project = stored as unknown as StoredProject | null;
+        const trend = observedTrend as TrendDetail | null;
+        if (trend) {
+          setTrendContext(trend);
+          setTheme(
+            `${trendsCopy[interfaceLocale].draftPrefix}: “${trend.title}”. ${trend.summary}`
+          );
+        }
         if (project?.artifact_snapshot?.artifact_type === "social_post") {
           const post = project.artifact_snapshot;
           setProjectId(project.id); setArtifactId(project.artifact_id || null); setArtifact(post); setGenerated(editable(post)); setDraft(editable(post));
@@ -112,7 +129,7 @@ export function InstagramPostFlow() {
     return () => { active = false; };
   // Reloading a saved project must not start another flow; all other source data loads once.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestedProjectId]);
+  }, [requestedProjectId, requestedTrendId]);
 
   function updateDraft(field: keyof EditablePost, value: string) {
     setDraft((current) => current ? { ...current, [field]: field === "hashtags" ? value.split(",").map((tag) => tag.trim()) : value } : current);
@@ -180,6 +197,7 @@ export function InstagramPostFlow() {
     <header><div><p className="eyebrow">INSTAGRAM 4:5</p><h1>{copy.title}</h1><p>{copy.subtitle}</p></div><label>{copy.locale}<select value={locale} onChange={(event) => setLocale(event.target.value as InstagramFlowLocale)}>{(["es", "en", "pt"] as const).map((item) => <option key={item} value={item}>{item.toUpperCase()}</option>)}</select></label></header>
     {error ? <p className="page-error" role="alert">{error}</p> : null}{notice ? <p className="flow-notice" role="status">{notice}</p> : null}
     <section><h2>{copy.template}</h2><div className="instagram-template-grid">{templates.map((template) => <article key={template.id} data-selected={selected?.id === template.id}><button type="button" onClick={() => setSelected(template)} aria-pressed={selected?.id === template.id}><Image src={template.thumbnail_url} alt="" width={160} height={200} /><strong>{template.title}</strong><span>{copy.format}</span></button>{isApprovedCanvaUrl(template.canva_url) ? <button type="button" className="button-link" onClick={() => { const target = window.open(template.canva_url!, "_blank", "noopener,noreferrer"); if (target) target.opener = null; }}>{copy.openCanva}</button> : null}</article>)}</div></section>
+    {trendContext ? <section className="flow-context trend-studio-context"><p className="eyebrow">{trendsCopy[locale].studioContext}</p><h2>{trendContext.title}</h2><p>{trendContext.summary}</p><small>{trendsCopy[locale].basedOnSignal}</small></section> : null}
     {business && brand ? <section className="flow-context"><h2>{copy.context}</h2><p><strong>{business.name}</strong> · {business.primary_product} · {business.target_audience}</p><p>{brand.value_proposition} · {brand.voice_tones.join(", ")}</p></section> : null}
     {!projectId ? <section className="flow-controls"><label>{copy.theme}<textarea value={theme} onChange={(event) => setTheme(event.target.value)} maxLength={4000} placeholder={copy.theme} /></label><label>{copy.quality}<select value={quality} onChange={(event) => setQuality(event.target.value as QualityLevel)}>{levels.map((level) => <option key={level} value={level}>{copy.qualityLabels[level]}</option>)}</select></label><label>{copy.objective}<select value={objective} onChange={(event) => setObjective(event.target.value as Objective)}>{objectives.map((item) => <option key={item} value={item}>{copy.objectiveLabels[item]}</option>)}</select></label><button type="button" className="button-primary" onClick={() => void generate()} disabled={!selected || !theme.trim() || !levels.includes(quality) || generating}>{generating ? copy.generating : copy.generate}</button></section> : null}
     {artifact && draft ? <section className="flow-result"><div><p className="eyebrow">{copy.result}</p><h2>{artifact.hook}</h2><span>{copy.format}</span></div><label>{copy.caption}<textarea value={draft.caption} onChange={(event) => updateDraft("caption", event.target.value)} maxLength={2200} /></label><label>{copy.cta}<input value={draft.call_to_action} onChange={(event) => updateDraft("call_to_action", event.target.value)} maxLength={240} /></label><label>{copy.hashtags}<input value={draft.hashtags.join(", ")} onChange={(event) => updateDraft("hashtags", event.target.value)} /></label><label>{copy.visualBrief}<textarea value={draft.visual_direction} onChange={(event) => updateDraft("visual_direction", event.target.value)} maxLength={700} /><small>{copy.visualNote}</small></label>{isDirty ? <p role="status">{copy.unsaved}</p> : null}<div className="flow-actions"><button type="button" className="button-primary" onClick={() => void save()} disabled={saving}>{saving ? copy.saving : copy.save}</button><button type="button" onClick={() => generated && setDraft(generated)}>{copy.restore}</button>{projectId ? <button type="button" onClick={() => void duplicate()} disabled={duplicating}>{duplicating ? copy.duplicating : copy.duplicate}</button> : null}<button type="button" onClick={() => void variation()} disabled={generating}>{copy.variation}</button></div></section> : null}
