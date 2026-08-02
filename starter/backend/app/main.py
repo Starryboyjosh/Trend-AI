@@ -28,6 +28,7 @@ from app.db.session import get_session_factory
 from app.identity.routes import router as identity_router
 from app.images.routes import router as images_router
 from app.projects.routes import router as project_router
+from app.social.routes import router as social_router
 from app.templates.routes import router as template_router
 from app.trends.routes import router as trends_router
 
@@ -93,6 +94,9 @@ def _requires_rate_limit(path: str) -> bool:
         or path.endswith("/variations")
         or path.endswith("/analyses")
         or path.endswith("/auth/account/deletion-status")
+        # Starting an OAuth handshake writes to the shared state store, so it is
+        # limited like the other handshake starts above.
+        or path.endswith("/authorize")
     )
 
 
@@ -343,6 +347,7 @@ app.include_router(asset_router, prefix=settings.api_prefix)
 app.include_router(template_router, prefix=settings.api_prefix)
 app.include_router(trends_router, prefix=settings.api_prefix)
 app.include_router(images_router, prefix=settings.api_prefix)
+app.include_router(social_router, prefix=settings.api_prefix)
 
 
 @app.get("/health/live")

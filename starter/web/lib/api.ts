@@ -22,6 +22,11 @@ import type {
   TrendRefreshScope,
   TrendSource,
 } from "@/types/trends";
+import type {
+  SocialAuthorizeResult,
+  SocialConnection,
+  SocialConnectionsResponse,
+} from "@/types/social";
 
 let _csrfToken: string | null = null;
 let _csrfTokenPromise: Promise<string | null> | null = null;
@@ -506,6 +511,34 @@ async function demoRequest<T>(
     return { sources: [] } as T;
   }
 
+  if (pathname === "/api/v1/social/connections" && method === "GET") {
+    return {
+      enabled: true,
+      providers: [
+        {
+          name: "instagram",
+          status: "unconfigured",
+          reason_code: "not_configured",
+        },
+        {
+          name: "tiktok",
+          status: "unconfigured",
+          reason_code: "not_configured",
+        },
+        { name: "x", status: "unconfigured", reason_code: "not_configured" },
+        { name: "demo", status: "available", reason_code: null },
+      ],
+      connections: [],
+    } as T;
+  }
+
+  if (pathname === "/api/v1/social/demo/authorize" && method === "POST") {
+    return {
+      provider: "demo",
+      authorization_url: "/settings?social=connected&provider=demo",
+    } as T;
+  }
+
   /*
    * Demo mode has no provider and no budget of its own, so it answers with the
    * documented fallback: a usable visual brief and a capability that is
@@ -823,6 +856,43 @@ export const api = {
   capabilities: {
     get(): Promise<PublicCapabilities> {
       return request<PublicCapabilities>(`${BASE}/capabilities`);
+    },
+  },
+
+  social: {
+    connections(): Promise<SocialConnectionsResponse> {
+      return request<SocialConnectionsResponse>(
+        `${BASE}/social/connections`
+      );
+    },
+
+    authorize(
+      provider: string,
+      returnPath?: string
+    ): Promise<SocialAuthorizeResult> {
+      return request<SocialAuthorizeResult>(
+        `${BASE}/social/${encodeURIComponent(provider)}/authorize`,
+        {
+          method: "POST",
+          body: JSON.stringify(
+            returnPath === undefined ? {} : { return_path: returnPath }
+          ),
+        }
+      );
+    },
+
+    check(connectionId: string): Promise<SocialConnection> {
+      return request<{ connection: SocialConnection }>(
+        `${BASE}/social/connections/${encodeURIComponent(connectionId)}/check`,
+        { method: "POST" }
+      ).then((result) => result.connection);
+    },
+
+    disconnect(connectionId: string): Promise<SocialConnection> {
+      return request<{ connection: SocialConnection }>(
+        `${BASE}/social/connections/${encodeURIComponent(connectionId)}`,
+        { method: "DELETE" }
+      ).then((result) => result.connection);
     },
   },
 

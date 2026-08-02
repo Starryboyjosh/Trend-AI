@@ -20,6 +20,8 @@ Instagram/TikTok/X tienen permisos y términos diferentes.
 - import own posts;
 - revoke.
 
+**Fuera de alcance:** la selección de múltiples cuentas se difiere; si un proveedor devuelve más de una, se rechaza de forma segura.
+
 
 ## Inspección obligatoria
 

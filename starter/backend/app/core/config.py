@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import re
 from collections.abc import Mapping
@@ -258,6 +260,30 @@ def _validate_host(value: str, *, name: str) -> str:
     if not value or value.startswith(".") or ".." in value:
         raise RuntimeError(f"{name} no es un host válido.")
     return value
+
+
+#: AES-256-GCM takes a 32 byte key and nothing else.
+ENCRYPTION_KEY_BYTES = 32
+
+
+def validate_encryption_key(value: str, *, name: str) -> bytes:
+    """Return the raw key behind a base64 value, or explain why it is unusable.
+
+    A password, a client secret or an API key is not accepted here, and not by
+    convention: the value has to decode to exactly the length the cipher needs,
+    which a human-chosen string practically never does. Rejecting it at boot is
+    the only moment where the mistake is still cheap.
+    """
+
+    try:
+        key = base64.b64decode(value, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise RuntimeError(f"{name} debe ser una clave base64 válida.") from exc
+    if len(key) != ENCRYPTION_KEY_BYTES:
+        raise RuntimeError(
+            f"{name} debe decodificar exactamente {ENCRYPTION_KEY_BYTES} bytes."
+        )
+    return key
 
 
 VALID_ENVS = {"development", "test", "staging", "production"}
@@ -592,6 +618,52 @@ class Settings:
             name="ALLOW_PAID_MODEL_FALLBACK",
         )
 
+        # Social connections. Connecting an account is not publishing: nothing
+        # configured here grants write access to a network. It only decides
+        # whether the server may finish an OAuth handshake and keep the token.
+        self.social_connections_enabled: bool = _as_bool(
+            values.get("SOCIAL_CONNECTIONS_ENABLED", "0"),
+            name="SOCIAL_CONNECTIONS_ENABLED",
+        )
+        # The offline provider lets the whole flow be exercised without touching
+        # a network. It is a development affordance, and staging and production
+        # refuse it rather than presenting a fake account as a real one.
+        self.social_demo_provider_enabled: bool = _as_bool(
+            values.get("SOCIAL_DEMO_PROVIDER_ENABLED", "0"),
+            name="SOCIAL_DEMO_PROVIDER_ENABLED",
+        )
+        self.social_oauth_state_ttl_seconds: int = _bounded_positive_int(
+            values.get("SOCIAL_OAUTH_STATE_TTL_SECONDS", "600"),
+            name="SOCIAL_OAUTH_STATE_TTL_SECONDS",
+            maximum=3_600,
+        )
+        # Base64 key for the token cipher. Read here so a bad value is a boot
+        # failure and not a runtime surprise on the first connection.
+        self.social_token_encryption_key: str = values.get(
+            "SOCIAL_TOKEN_ENCRYPTION_KEY", ""
+        ).strip()
+        # The public origin this backend answers on. Every provider redirect URI
+        # must live under it, so a leaked client id cannot send an authorization
+        # code to a host we do not control.
+        self.social_public_backend_url: str = (
+            values.get("SOCIAL_PUBLIC_BACKEND_URL", "http://localhost:8000").strip().rstrip("/")
+        )
+        self.social_http_timeout_seconds: float = _bounded_positive_float(
+            values.get("SOCIAL_HTTP_TIMEOUT_SECONDS", "10"),
+            name="SOCIAL_HTTP_TIMEOUT_SECONDS",
+            maximum=60,
+        )
+        self.instagram_connections_enabled: bool = _as_bool(
+            values.get("INSTAGRAM_CONNECTIONS_ENABLED", "0"),
+            name="INSTAGRAM_CONNECTIONS_ENABLED",
+        )
+        self.instagram_client_id: str = values.get("INSTAGRAM_CLIENT_ID", "").strip()
+        self.instagram_client_secret: str = values.get("INSTAGRAM_CLIENT_SECRET", "").strip()
+        self.instagram_redirect_uri: str = values.get("INSTAGRAM_REDIRECT_URI", "").strip()
+        self.run_real_social_smoke: bool = _as_bool(
+            values.get("RUN_REAL_SOCIAL_SMOKE", "0"), name="RUN_REAL_SOCIAL_SMOKE"
+        )
+
     @property
     def is_demo(self) -> bool:
         return self.app_env == "development" and self.ai_provider == "demo"
@@ -646,6 +718,37 @@ class Settings:
                 and self.image_generation_model in self.image_generation_allowed_models
             )
         return False
+
+    @property
+    def social_demo_provider_configured(self) -> bool:
+        """A demo connection is only ever a development affordance."""
+
+        if not self.social_connections_enabled or not self.social_demo_provider_enabled:
+            return False
+        return self.app_env in {"development", "test"}
+
+    @property
+    def instagram_connections_configured(self) -> bool:
+        """True only when a real Instagram handshake could be completed."""
+
+        return (
+            self.social_connections_enabled
+            and self.instagram_connections_enabled
+            and all(
+                [
+                    self.instagram_client_id,
+                    self.instagram_client_secret,
+                    self.instagram_redirect_uri,
+                    self.social_token_encryption_key,
+                ]
+            )
+        )
+
+    @property
+    def social_connections_configured(self) -> bool:
+        """True when at least one provider can complete a handshake right now."""
+
+        return self.instagram_connections_configured or self.social_demo_provider_configured
 
     def validate_runtime_configuration(self) -> None:
         if self.app_env not in VALID_ENVS:
@@ -731,6 +834,57 @@ class Settings:
                 name="GOOGLE_REDIRECT_URI",
                 require_https=self.is_production_like,
             )
+
+        if self.social_connections_enabled:
+            # The handshake keeps its PKCE verifier and its single-use state in
+            # the ephemeral store. Without one there is nothing to protect the
+            # exchange with, so the feature refuses to start rather than
+            # falling back to an unprotected flow.
+            if self.redis_provider == "disabled":
+                raise RuntimeError(
+                    "SOCIAL_CONNECTIONS_ENABLED requiere REDIS_PROVIDER=memory o redis."
+                )
+            if not self.social_token_encryption_key:
+                raise RuntimeError(
+                    "SOCIAL_TOKEN_ENCRYPTION_KEY es obligatoria con SOCIAL_CONNECTIONS_ENABLED=1."
+                )
+            validate_encryption_key(
+                self.social_token_encryption_key, name="SOCIAL_TOKEN_ENCRYPTION_KEY"
+            )
+            _validate_http_url(
+                self.social_public_backend_url,
+                name="SOCIAL_PUBLIC_BACKEND_URL",
+                require_https=self.is_production_like,
+            )
+            _validate_http_url(
+                self.frontend_url,
+                name="FRONTEND_URL",
+                require_https=self.is_production_like,
+            )
+            if self.frontend_url not in self.allowed_origin_list:
+                raise RuntimeError(
+                    "FRONTEND_URL debe estar incluida en ALLOWED_ORIGINS para conexiones sociales."
+                )
+        if self.social_connections_enabled and self.instagram_connections_enabled:
+            # Half a credential is not a configuration: the exchange needs both
+            # halves, and a client id alone would only fail after the user has
+            # already been sent to the provider.
+            if bool(self.instagram_client_id) != bool(self.instagram_client_secret):
+                raise RuntimeError(
+                    "INSTAGRAM_CLIENT_ID e INSTAGRAM_CLIENT_SECRET deben configurarse juntas."
+                )
+            if self.instagram_redirect_uri:
+                _validate_http_url(
+                    self.instagram_redirect_uri,
+                    name="INSTAGRAM_REDIRECT_URI",
+                    require_https=self.is_production_like,
+                )
+                if not self.instagram_redirect_uri.startswith(
+                    f"{self.social_public_backend_url}/"
+                ):
+                    raise RuntimeError(
+                        "INSTAGRAM_REDIRECT_URI debe apuntar a SOCIAL_PUBLIC_BACKEND_URL."
+                    )
 
         if self.ai_provider == "openai-compatible":
             if not self.ai_base_url or not self.ai_api_key or not self.ai_model:
@@ -841,6 +995,22 @@ class Settings:
             )
         if self.image_generation_enabled and self.image_provider == "demo":
             raise RuntimeError("IMAGE_PROVIDER no puede ser demo en staging ni producción.")
+        if self.social_connections_enabled:
+            if self.social_demo_provider_enabled:
+                raise RuntimeError(
+                    "SOCIAL_DEMO_PROVIDER_ENABLED no puede activarse en staging ni producción."
+                )
+            if not self.social_connections_configured:
+                raise RuntimeError(
+                    "SOCIAL_CONNECTIONS_ENABLED requiere al menos un proveedor real configurado."
+                )
+            # A process-local state store means one instance cannot finish the
+            # handshake another instance started, and the failure looks like a
+            # forged callback. Distributed state is not optional here.
+            if self.redis_provider != "redis":
+                raise RuntimeError(
+                    "SOCIAL_CONNECTIONS_ENABLED requiere REDIS_PROVIDER=redis en staging y producción."
+                )
         if not self.csrf_enabled:
             raise RuntimeError("CSRF_ENABLED debe ser true en staging y producción.")
 

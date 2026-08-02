@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from alembic import command
 from app.core.config import settings
 from app.dependencies import get_db
-from app.main import app
+from app.main import _rate_windows, app
 from tests.e2e.fake_provider import DeterministicE2EProvider
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", "").strip()
@@ -55,6 +55,13 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     if TEST_DATABASE_URL:
         _validate_test_database_url(TEST_DATABASE_URL)
     items[:] = regular_items + e2e_items
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limit_window() -> None:
+    # Limiter is process-global and keyed by constant ASGI client host.
+    # Reset per test so suite volume does not decide outcomes.
+    _rate_windows.clear()
 
 
 def _alembic_config() -> Config:

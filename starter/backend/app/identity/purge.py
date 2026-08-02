@@ -92,6 +92,10 @@ _WORKSPACE_STATEMENTS: tuple[str, ...] = (
     # stored objects.
     "DELETE FROM image_generation_jobs WHERE workspace_id = :workspace_id",
     "DELETE FROM image_generation_budgets WHERE workspace_id = :workspace_id",
+    # Social connections carry encrypted provider tokens. Deleting the workspace
+    # destroys the only copy of the key material's plaintext target, which is the
+    # point: a purge must not leave a credential behind that still works.
+    "DELETE FROM social_connections WHERE workspace_id = :workspace_id",
     "DELETE FROM asset_analyses WHERE asset_id IN (SELECT id FROM assets WHERE workspace_id = :workspace_id)",
     "DELETE FROM assets WHERE workspace_id = :workspace_id",
     "DELETE FROM brand_profiles WHERE business_id IN (SELECT id FROM businesses WHERE workspace_id = :workspace_id)",

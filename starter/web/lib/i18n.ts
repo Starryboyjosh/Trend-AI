@@ -63,16 +63,19 @@ const es = {
   dashboard: {
     eyebrow: "DASHBOARD",
     title: "Tu espacio creativo",
-    subtitle: "Organiza proyectos y encuentra una plantilla para tu próxima idea.",
+    subtitle:
+      "Organiza proyectos y encuentra una plantilla para tu próxima idea.",
     tabsLabel: "Contenido del dashboard",
     projects: "Proyectos",
     templates: "Plantillas",
     yourProjects: "Tus proyectos",
     startEyebrow: "EMPIEZA A DISEÑAR",
     projectsHeadline: "Todo tu contenido, en un solo lugar.",
-    projectsLead: "Retoma una campaña, organiza tus borradores o continúa el trabajo pendiente.",
+    projectsLead:
+      "Retoma una campaña, organiza tus borradores o continúa el trabajo pendiente.",
     templatesHeadline: "Elige una base y hazla completamente tuya.",
-    templatesLead: "Usa una plantilla como punto de partida y personalízala con ayuda del Studio.",
+    templatesLead:
+      "Usa una plantilla como punto de partida y personalízala con ayuda del Studio.",
     createCta: "Crear con HiTrendy",
     startCta: "Comenzar a crear",
     statusLabel: "Estado de proyectos",
@@ -104,6 +107,7 @@ const es = {
       account: "Cuenta",
       business: "Negocio",
       brand: "Marca",
+      social: "Conexiones sociales",
       language: "Idioma",
       usage: "Uso",
       privacy: "Privacidad",
@@ -113,7 +117,8 @@ const es = {
     saved: "Cambios guardados.",
     loadError: "No pudimos cargar la configuración.",
     saveError: "No pudimos guardar los cambios.",
-    partialSave: "Guardamos una parte de los cambios; el resto sigue pendiente.",
+    partialSave:
+      "Guardamos una parte de los cambios; el resto sigue pendiente.",
     noBusiness: "Todavía no hay un negocio configurado.",
     account: {
       name: "Nombre",
@@ -147,6 +152,83 @@ const es = {
       secondaryColor: "Color secundario",
       colorFormat: "Usa un color en formato #RRGGBB.",
     },
+    social: {
+      title: "Conexiones sociales",
+      description:
+        "Conecta tus cuentas propias para tenerlas disponibles en HiTrendy.",
+      loading: "Cargando conexiones sociales…",
+      empty: "Aún no hay cuentas sociales conectadas.",
+      loadError: "No pudimos cargar las conexiones sociales.",
+      connectError: "No se pudo iniciar la conexión. Vuelve a intentarlo.",
+      checkError: "No se pudo comprobar la conexión. Vuelve a intentarlo.",
+      disconnectError:
+        "No se pudo desconectar la cuenta. Vuelve a intentarlo.",
+      disabled:
+        "Las conexiones sociales están desactivadas en esta instalación.",
+      providers: {
+        instagram: "Instagram",
+        tiktok: "TikTok",
+        x: "X",
+        demo: "Demo",
+      },
+      providerStatus: {
+        available: "Disponible",
+        unconfigured: "Sin configurar",
+        disabled: "Desactivado",
+      },
+      providerReason: {
+        requires_platform_approval: "Requiere aprobación de la plataforma.",
+        requires_paid_plan: "Requiere un plan de pago.",
+        not_configured: "Este proveedor no está configurado.",
+      },
+      connectionStatus: {
+        connected: "Conectada",
+        expired: "Expirada",
+        revoked: "Revocada",
+        degraded: "Degradada",
+        error: "Con error",
+        disconnected: "Desconectada",
+      },
+      accountTypeLabel: "Tipo de cuenta",
+      statusLabel: "Estado",
+      accountType: {
+        business: "Empresa",
+        creator: "Creador",
+        personal: "Personal",
+        unknown: "Desconocida",
+      },
+      errors: {
+        provider_unavailable: "Proveedor no disponible",
+        token_unreadable: "Credencial ilegible",
+        revoke_unconfirmed: "Revocación no confirmada",
+        invalid_grant: "Autorización inválida",
+        token_expired: "Credencial expirada",
+        token_revoked: "Credencial revocada",
+        insufficient_scope: "Permisos insuficientes",
+        unexpected_scope: "Permisos inesperados",
+        no_eligible_account: "No hay una cuenta elegible",
+        provider_error: "Error del proveedor",
+      },
+      connect: "Conectar",
+      connecting: "Conectando…",
+      checking: "Comprobando…",
+      disconnecting: "Desconectando…",
+      check: "Comprobar conexión",
+      disconnect: "Desconectar",
+      disconnectQuestion: "¿Desconectar esta cuenta?",
+      confirm: "Confirmar desconexión",
+      cancel: "Cancelar",
+      connectedAt: "Conectada el",
+      lastCheckedAt: "Última comprobación",
+      callback: {
+        connected: "La cuenta de {provider} se conectó correctamente.",
+        invalid_request:
+          "No pudimos completar la conexión. Vuelve a intentarlo.",
+        denied: "La conexión fue cancelada en el proveedor.",
+        provider_error: "El proveedor no pudo completar la conexión.",
+        unavailable: "Este proveedor no está disponible ahora.",
+      },
+    },
     language: {
       interface: "Idioma de interfaz",
       content: "Idioma de contenido",
@@ -164,7 +246,8 @@ const es = {
       knownCost: "con costo reportado",
       unknownCost: "sin costo reportado",
       unknown: "Sin dato",
-      unknownHint: "Un costo desconocido no es cero: el proveedor no lo informó.",
+      unknownHint:
+        "Un costo desconocido no es cero: el proveedor no lo informó.",
     },
     privacy: {
       title: "Privacidad",
@@ -192,7 +275,8 @@ const es = {
       pending: "En cola. La eliminación empezará en breve.",
       processing: "En proceso. Estamos eliminando tus datos.",
       completed: "Completada. Tus datos fueron eliminados.",
-      failed: "No pudo completarse. Nuestro equipo debe intervenir; tu acceso sigue bloqueado.",
+      failed:
+        "No pudo completarse. Nuestro equipo debe intervenir; tu acceso sigue bloqueado.",
     },
   },
   surfaces: {
@@ -295,9 +379,11 @@ const en: AppCopy = {
     yourProjects: "Your projects",
     startEyebrow: "START DESIGNING",
     projectsHeadline: "All your content, in one place.",
-    projectsLead: "Pick up a campaign, organize drafts, or continue pending work.",
+    projectsLead:
+      "Pick up a campaign, organize drafts, or continue pending work.",
     templatesHeadline: "Pick a starting point and make it yours.",
-    templatesLead: "Use a template as a base and personalize it with the Studio.",
+    templatesLead:
+      "Use a template as a base and personalize it with the Studio.",
     createCta: "Create with HiTrendy",
     startCta: "Start creating",
     statusLabel: "Project status",
@@ -329,6 +415,7 @@ const en: AppCopy = {
       account: "Account",
       business: "Business",
       brand: "Brand",
+      social: "Social connections",
       language: "Language",
       usage: "Usage",
       privacy: "Privacy",
@@ -367,10 +454,86 @@ const en: AppCopy = {
       preferred: "Preferred words",
       forbidden: "Forbidden words",
       wordsHint: "Separate them with commas.",
-      wordConflict: "A word cannot be preferred and forbidden at the same time.",
+      wordConflict:
+        "A word cannot be preferred and forbidden at the same time.",
       primaryColor: "Primary color",
       secondaryColor: "Secondary color",
       colorFormat: "Use a color in #RRGGBB format.",
+    },
+    social: {
+      title: "Social connections",
+      description:
+        "Connect your own accounts so they are available in HiTrendy.",
+      loading: "Loading social connections…",
+      empty: "No social accounts are connected yet.",
+      loadError: "We could not load social connections.",
+      connectError: "The connection could not be started. Try again.",
+      checkError: "The connection could not be checked. Try again.",
+      disconnectError: "The account could not be disconnected. Try again.",
+      disabled: "Social connections are disabled in this installation.",
+      providers: {
+        instagram: "Instagram",
+        tiktok: "TikTok",
+        x: "X",
+        demo: "Demo",
+      },
+      providerStatus: {
+        available: "Available",
+        unconfigured: "Unconfigured",
+        disabled: "Disabled",
+      },
+      providerReason: {
+        requires_platform_approval: "Platform approval is required.",
+        requires_paid_plan: "A paid plan is required.",
+        not_configured: "This provider is not configured.",
+      },
+      connectionStatus: {
+        connected: "Connected",
+        expired: "Expired",
+        revoked: "Revoked",
+        degraded: "Degraded",
+        error: "Error",
+        disconnected: "Disconnected",
+      },
+      accountTypeLabel: "Account type",
+      statusLabel: "Status",
+      accountType: {
+        business: "Business",
+        creator: "Creator",
+        personal: "Personal",
+        unknown: "Unknown",
+      },
+      errors: {
+        provider_unavailable: "Provider unavailable",
+        token_unreadable: "Credential unreadable",
+        revoke_unconfirmed: "Revocation unconfirmed",
+        invalid_grant: "Invalid authorization",
+        token_expired: "Credential expired",
+        token_revoked: "Credential revoked",
+        insufficient_scope: "Insufficient permissions",
+        unexpected_scope: "Unexpected permissions",
+        no_eligible_account: "No eligible account",
+        provider_error: "Provider error",
+      },
+      connect: "Connect",
+      connecting: "Connecting…",
+      checking: "Checking…",
+      disconnecting: "Disconnecting…",
+      check: "Check connection",
+      disconnect: "Disconnect",
+      disconnectQuestion: "Disconnect this account?",
+      confirm: "Confirm disconnect",
+      cancel: "Cancel",
+      connectedAt: "Connected on",
+      lastCheckedAt: "Last checked",
+      callback: {
+        connected: "The {provider} account was connected successfully.",
+        invalid_request:
+          "We could not complete the connection. Please try again.",
+        denied: "The connection was canceled at the provider.",
+        provider_error: "The provider could not complete the connection.",
+        unavailable: "This provider is not available right now.",
+      },
     },
     language: {
       interface: "Interface language",
@@ -389,7 +552,8 @@ const en: AppCopy = {
       knownCost: "with a reported cost",
       unknownCost: "without a reported cost",
       unknown: "Not reported",
-      unknownHint: "An unknown cost is not zero: the provider did not report it.",
+      unknownHint:
+        "An unknown cost is not zero: the provider did not report it.",
     },
     privacy: {
       title: "Privacy",
@@ -417,7 +581,8 @@ const en: AppCopy = {
       pending: "Queued. Deletion will start shortly.",
       processing: "In progress. We are deleting your data.",
       completed: "Completed. Your data has been deleted.",
-      failed: "It could not be completed. Our team must step in; your access stays blocked.",
+      failed:
+        "It could not be completed. Our team must step in; your access stays blocked.",
     },
   },
   surfaces: {
@@ -518,9 +683,11 @@ const pt: AppCopy = {
     yourProjects: "Seus projetos",
     startEyebrow: "COMECE A CRIAR",
     projectsHeadline: "Todo o seu conteúdo em um só lugar.",
-    projectsLead: "Retome uma campanha, organize rascunhos ou continue o trabalho pendente.",
+    projectsLead:
+      "Retome uma campanha, organize rascunhos ou continue o trabalho pendente.",
     templatesHeadline: "Escolha uma base e deixe-a com a sua cara.",
-    templatesLead: "Use um template como ponto de partida e personalize com o Studio.",
+    templatesLead:
+      "Use um template como ponto de partida e personalize com o Studio.",
     createCta: "Criar com a HiTrendy",
     startCta: "Começar a criar",
     statusLabel: "Status dos projetos",
@@ -552,6 +719,7 @@ const pt: AppCopy = {
       account: "Conta",
       business: "Negócio",
       brand: "Marca",
+      social: "Conexões sociais",
       language: "Idioma",
       usage: "Uso",
       privacy: "Privacidade",
@@ -561,7 +729,8 @@ const pt: AppCopy = {
     saved: "Alterações salvas.",
     loadError: "Não foi possível carregar as configurações.",
     saveError: "Não foi possível salvar as alterações.",
-    partialSave: "Parte das alterações foi salva; o restante continua pendente.",
+    partialSave:
+      "Parte das alterações foi salva; o restante continua pendente.",
     noBusiness: "Ainda não há um negócio configurado.",
     account: {
       name: "Nome",
@@ -590,10 +759,88 @@ const pt: AppCopy = {
       preferred: "Palavras preferidas",
       forbidden: "Palavras proibidas",
       wordsHint: "Separe por vírgulas.",
-      wordConflict: "Uma palavra não pode ser preferida e proibida ao mesmo tempo.",
+      wordConflict:
+        "Uma palavra não pode ser preferida e proibida ao mesmo tempo.",
       primaryColor: "Cor principal",
       secondaryColor: "Cor secundária",
       colorFormat: "Use uma cor no formato #RRGGBB.",
+    },
+    social: {
+      title: "Conexões sociais",
+      description:
+        "Conecte suas contas próprias para deixá-las disponíveis na HiTrendy.",
+      loading: "Carregando conexões sociais…",
+      empty: "Ainda não há contas sociais conectadas.",
+      loadError: "Não foi possível carregar as conexões sociais.",
+      connectError:
+        "Não foi possível iniciar a conexão. Tente novamente.",
+      checkError: "Não foi possível verificar a conexão. Tente novamente.",
+      disconnectError:
+        "Não foi possível desconectar a conta. Tente novamente.",
+      disabled: "As conexões sociais estão desativadas nesta instalação.",
+      providers: {
+        instagram: "Instagram",
+        tiktok: "TikTok",
+        x: "X",
+        demo: "Demo",
+      },
+      providerStatus: {
+        available: "Disponível",
+        unconfigured: "Não configurado",
+        disabled: "Desativado",
+      },
+      providerReason: {
+        requires_platform_approval: "É necessária a aprovação da plataforma.",
+        requires_paid_plan: "É necessário um plano pago.",
+        not_configured: "Este provedor não está configurado.",
+      },
+      connectionStatus: {
+        connected: "Conectada",
+        expired: "Expirada",
+        revoked: "Revogada",
+        degraded: "Degradada",
+        error: "Com erro",
+        disconnected: "Desconectada",
+      },
+      accountTypeLabel: "Tipo de conta",
+      statusLabel: "Status",
+      accountType: {
+        business: "Empresa",
+        creator: "Criador",
+        personal: "Pessoal",
+        unknown: "Desconhecida",
+      },
+      errors: {
+        provider_unavailable: "Provedor indisponível",
+        token_unreadable: "Credencial ilegível",
+        revoke_unconfirmed: "Revogação não confirmada",
+        invalid_grant: "Autorização inválida",
+        token_expired: "Credencial expirada",
+        token_revoked: "Credencial revogada",
+        insufficient_scope: "Permissões insuficientes",
+        unexpected_scope: "Permissões inesperadas",
+        no_eligible_account: "Nenhuma conta elegível",
+        provider_error: "Erro do provedor",
+      },
+      connect: "Conectar",
+      connecting: "Conectando…",
+      checking: "Verificando…",
+      disconnecting: "Desconectando…",
+      check: "Verificar conexão",
+      disconnect: "Desconectar",
+      disconnectQuestion: "Desconectar esta conta?",
+      confirm: "Confirmar desconexão",
+      cancel: "Cancelar",
+      connectedAt: "Conectada em",
+      lastCheckedAt: "Última verificação",
+      callback: {
+        connected: "A conta do {provider} foi conectada com sucesso.",
+        invalid_request:
+          "Não foi possível concluir a conexão. Tente novamente.",
+        denied: "A conexão foi cancelada no provedor.",
+        provider_error: "O provedor não conseguiu concluir a conexão.",
+        unavailable: "Este provedor não está disponível agora.",
+      },
     },
     language: {
       interface: "Idioma da interface",
@@ -640,7 +887,8 @@ const pt: AppCopy = {
       pending: "Na fila. A exclusão começará em breve.",
       processing: "Em andamento. Estamos excluindo seus dados.",
       completed: "Concluída. Seus dados foram excluídos.",
-      failed: "Não foi possível concluir. Nossa equipe precisa intervir; seu acesso segue bloqueado.",
+      failed:
+        "Não foi possível concluir. Nossa equipe precisa intervir; seu acesso segue bloqueado.",
     },
   },
   surfaces: {
@@ -709,7 +957,9 @@ const pt: AppCopy = {
 export const appCopy: Record<AppLocale, AppCopy> = { es, en, pt };
 
 export function isSupportedLocale(value: unknown): value is AppLocale {
-  return typeof value === "string" && supportedLocales.includes(value as AppLocale);
+  return (
+    typeof value === "string" && supportedLocales.includes(value as AppLocale)
+  );
 }
 
 export function copyFor(locale: string | null | undefined): AppCopy {
@@ -735,14 +985,19 @@ export function translate(
   values: Record<string, string | number> = {}
 ): string {
   const active = isSupportedLocale(locale) ? locale : defaultLocale;
-  const template = lookup(appCopy[active], path) ?? lookup(appCopy[defaultLocale], path) ?? "";
+  const template =
+    lookup(appCopy[active], path) ?? lookup(appCopy[defaultLocale], path) ?? "";
   return template.replace(/\{(\w+)\}/g, (match, key: string) =>
     key in values ? String(values[key]) : match
   );
 }
 
 /** Localized label for a backend identifier, keeping the identifier if unknown. */
-export function optionLabel(locale: AppLocale, group: string, value: string): string {
+export function optionLabel(
+  locale: AppLocale,
+  group: string,
+  value: string
+): string {
   return translate(locale, `options.${group}.${value}`) || value;
 }
 
@@ -751,15 +1006,21 @@ export function formatNumber(
   value: number | null | undefined,
   options: Intl.NumberFormatOptions = {}
 ): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) return "";
+  if (value === null || value === undefined || !Number.isFinite(value))
+    return "";
   return new Intl.NumberFormat(localeTags[locale], options).format(value);
 }
 
-export function formatDate(locale: AppLocale, value: string | Date | null | undefined): string {
+export function formatDate(
+  locale: AppLocale,
+  value: string | Date | null | undefined
+): string {
   if (!value) return "";
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat(localeTags[locale], { dateStyle: "medium" }).format(date);
+  return new Intl.DateTimeFormat(localeTags[locale], {
+    dateStyle: "medium",
+  }).format(date);
 }
 
 /**
@@ -774,7 +1035,8 @@ export function formatCost(
   if (amount === null || amount === undefined || amount === "") return "";
   const value = typeof amount === "number" ? amount : Number(amount);
   if (!Number.isFinite(value)) return "";
-  const code = typeof currency === "string" ? currency.trim().toUpperCase() : "";
+  const code =
+    typeof currency === "string" ? currency.trim().toUpperCase() : "";
   if (/^[A-Z]{3}$/.test(code)) {
     try {
       return new Intl.NumberFormat(localeTags[locale], {
@@ -799,7 +1061,9 @@ export function readStoredLocale(): AppLocale {
 export function setStoredLocale(locale: AppLocale): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(LOCALE_STORAGE_KEY, locale);
-  window.dispatchEvent(new CustomEvent<AppLocale>(LOCALE_EVENT, { detail: locale }));
+  window.dispatchEvent(
+    new CustomEvent<AppLocale>(LOCALE_EVENT, { detail: locale })
+  );
 }
 
 /** Reactive interface locale. localStorage is only the initial cache; Settings
@@ -822,18 +1086,348 @@ export function useInterfaceLocale(): AppLocale {
  * supplied values (business names, messages, URLs and IDs) out of this map. */
 export const surfaceCopy = {
   es: {
-    templates: { library: "Biblioteca de plantillas", eyebrow: "BIBLIOTECA CREATIVA", title: "Explora plantillas", lead: "Encuentra una base por formato, categoría o tema.", search: "Buscar plantillas", searchPlaceholder: "Buscar por nombre, formato o tema...", categories: "Categorías de plantillas", singular: "plantilla", plural: "plantillas", use: "Usar plantilla", preparing: "Preparando…", empty: "No encontramos plantillas", emptyHint: "Prueba otra búsqueda o selecciona una categoría diferente.", preview: "Vista previa", unavailable: "Vista previa no disponible", loading: "Preparando catálogo…", error: "No pudimos comprobar las plantillas." },
-    auth: { demoLabel: "Contenido de ejemplo de HiTrendy", heroTitle: "Convierte una idea en algo que la gente quiera compartir.", heroLead: "Publicaciones, campañas y guiones que parten de la identidad de tu negocio.", welcome: "Bienvenido de vuelta", loginLead: "Ingresa tus datos para seguir creando.", email: "Correo electrónico", password: "Contraseña", divider: "o", login: "Iniciar sesión", loggingIn: "Iniciando sesión…", noAccount: "¿No tienes cuenta?", registerLink: "Regístrate", loginFallback: "No pudimos iniciar sesión.", loginLoading: "Preparando inicio de sesión…", register: "Crea tu cuenta", registerLead: "Primero creemos tu cuenta. Después conoceremos tu negocio para preparar tu espacio en HiTrendy.", name: "Tu nombre", interfaceLocale: "Idioma de la interfaz", create: "Crear cuenta", creating: "Creando cuenta…", hasAccount: "¿Ya tienes cuenta?", loginLink: "Inicia sesión", registerFallback: "No pudimos crear tu cuenta.", googleOpening: "Abriendo Google…", googleChecking: "Comprobando Google…", googleContinue: "Continuar con Google", googleUnavailable: "Google no está disponible en este momento.", googleFallback: "No pudimos iniciar el acceso con Google." },
-    onboarding: { steps: ["Tu negocio", "Canales y objetivo", "Identidad de marca", "Confirmación"], eyebrow: "PRIMEROS PASOS", title: "Configura tu negocio", exit: "Salir", label: "Configuración inicial", loading: "Recuperando tu registro…", saving: "Guardando este paso…", creating: "Creando tu cuenta…", saved: "Tus datos se guardan en tu cuenta.", retrying: "Hubo un problema temporal. Reintentando…", back: "Anterior", next: "Siguiente", version: "Versión guardada", keyboard: "Puedes usar Enter para avanzar y Tab para recorrer los campos.", businessTitle: "Cuéntanos sobre tu negocio", businessLead: "Usaremos este contexto para que tus primeras recomendaciones sean útiles desde el inicio.", businessName: "Nombre comercial", category: "Categoría", select: "Seleccionar…", country: "País", city: "Ciudad", product: "Producto o servicio principal", audience: "¿A quién ayudas?", audiencePlaceholder: "Ej: Personas que buscan una pausa cercana y de calidad", description: "Descripción del negocio", website: "Sitio web", optional: "Opcional", channelsTitle: "Canales y objetivos", platforms: "Redes sociales que usas", objective: "Objetivo principal", brandTitle: "Identidad de marca", tones: "Tonos de voz (máx. 3)", proposition: "Propuesta de valor", propositionPlaceholder: "Ej: Café artesanal de origen responsable", preferred: "Palabras preferidas", forbidden: "Palabras prohibidas", wordsPlaceholder: "Separadas por comas", primaryColor: "Color primario", secondaryColor: "Color secundario", contentLocale: "Idioma predeterminado del contenido", reviewTitle: "Revisa tu información", reviewLead: "Esto es lo que entendimos de tu negocio. Podrás editarlo después desde Configuración.", business: "Negocio", channels: "Canales y objetivo", brand: "Marca", location: "Ubicación", confirm: "Confirmo que la información es correcta.", finish: "Finalizar y entrar a HiTrendy", finishing: "Finalizando…", progress: "Progreso de registro", step: "Paso" },
+    templates: {
+      library: "Biblioteca de plantillas",
+      eyebrow: "BIBLIOTECA CREATIVA",
+      title: "Explora plantillas",
+      lead: "Encuentra una base por formato, categoría o tema.",
+      search: "Buscar plantillas",
+      searchPlaceholder: "Buscar por nombre, formato o tema...",
+      categories: "Categorías de plantillas",
+      singular: "plantilla",
+      plural: "plantillas",
+      use: "Usar plantilla",
+      preparing: "Preparando…",
+      empty: "No encontramos plantillas",
+      emptyHint: "Prueba otra búsqueda o selecciona una categoría diferente.",
+      preview: "Vista previa",
+      unavailable: "Vista previa no disponible",
+      loading: "Preparando catálogo…",
+      error: "No pudimos comprobar las plantillas.",
+    },
+    auth: {
+      demoLabel: "Contenido de ejemplo de HiTrendy",
+      heroTitle: "Convierte una idea en algo que la gente quiera compartir.",
+      heroLead:
+        "Publicaciones, campañas y guiones que parten de la identidad de tu negocio.",
+      welcome: "Bienvenido de vuelta",
+      loginLead: "Ingresa tus datos para seguir creando.",
+      email: "Correo electrónico",
+      password: "Contraseña",
+      divider: "o",
+      login: "Iniciar sesión",
+      loggingIn: "Iniciando sesión…",
+      noAccount: "¿No tienes cuenta?",
+      registerLink: "Regístrate",
+      loginFallback: "No pudimos iniciar sesión.",
+      loginLoading: "Preparando inicio de sesión…",
+      register: "Crea tu cuenta",
+      registerLead:
+        "Primero creemos tu cuenta. Después conoceremos tu negocio para preparar tu espacio en HiTrendy.",
+      name: "Tu nombre",
+      interfaceLocale: "Idioma de la interfaz",
+      create: "Crear cuenta",
+      creating: "Creando cuenta…",
+      hasAccount: "¿Ya tienes cuenta?",
+      loginLink: "Inicia sesión",
+      registerFallback: "No pudimos crear tu cuenta.",
+      googleOpening: "Abriendo Google…",
+      googleChecking: "Comprobando Google…",
+      googleContinue: "Continuar con Google",
+      googleUnavailable: "Google no está disponible en este momento.",
+      googleFallback: "No pudimos iniciar el acceso con Google.",
+    },
+    onboarding: {
+      steps: [
+        "Tu negocio",
+        "Canales y objetivo",
+        "Identidad de marca",
+        "Confirmación",
+      ],
+      eyebrow: "PRIMEROS PASOS",
+      title: "Configura tu negocio",
+      exit: "Salir",
+      label: "Configuración inicial",
+      loading: "Recuperando tu registro…",
+      saving: "Guardando este paso…",
+      creating: "Creando tu cuenta…",
+      saved: "Tus datos se guardan en tu cuenta.",
+      retrying: "Hubo un problema temporal. Reintentando…",
+      back: "Anterior",
+      next: "Siguiente",
+      version: "Versión guardada",
+      keyboard:
+        "Puedes usar Enter para avanzar y Tab para recorrer los campos.",
+      businessTitle: "Cuéntanos sobre tu negocio",
+      businessLead:
+        "Usaremos este contexto para que tus primeras recomendaciones sean útiles desde el inicio.",
+      businessName: "Nombre comercial",
+      category: "Categoría",
+      select: "Seleccionar…",
+      country: "País",
+      city: "Ciudad",
+      product: "Producto o servicio principal",
+      audience: "¿A quién ayudas?",
+      audiencePlaceholder:
+        "Ej: Personas que buscan una pausa cercana y de calidad",
+      description: "Descripción del negocio",
+      website: "Sitio web",
+      optional: "Opcional",
+      channelsTitle: "Canales y objetivos",
+      platforms: "Redes sociales que usas",
+      objective: "Objetivo principal",
+      brandTitle: "Identidad de marca",
+      tones: "Tonos de voz (máx. 3)",
+      proposition: "Propuesta de valor",
+      propositionPlaceholder: "Ej: Café artesanal de origen responsable",
+      preferred: "Palabras preferidas",
+      forbidden: "Palabras prohibidas",
+      wordsPlaceholder: "Separadas por comas",
+      primaryColor: "Color primario",
+      secondaryColor: "Color secundario",
+      contentLocale: "Idioma predeterminado del contenido",
+      reviewTitle: "Revisa tu información",
+      reviewLead:
+        "Esto es lo que entendimos de tu negocio. Podrás editarlo después desde Configuración.",
+      business: "Negocio",
+      channels: "Canales y objetivo",
+      brand: "Marca",
+      location: "Ubicación",
+      confirm: "Confirmo que la información es correcta.",
+      finish: "Finalizar y entrar a HiTrendy",
+      finishing: "Finalizando…",
+      progress: "Progreso de registro",
+      step: "Paso",
+    },
   },
   en: {
-    templates: { library: "Template library", eyebrow: "CREATIVE LIBRARY", title: "Explore templates", lead: "Find a starting point by format, category, or theme.", search: "Search templates", searchPlaceholder: "Search by name, format, or theme...", categories: "Template categories", singular: "template", plural: "templates", use: "Use template", preparing: "Preparing…", empty: "No templates found", emptyHint: "Try another search or select a different category.", preview: "Preview", unavailable: "Preview unavailable", loading: "Preparing catalog…", error: "We could not check the templates." },
-    auth: { demoLabel: "HiTrendy sample content", heroTitle: "Turn an idea into something people want to share.", heroLead: "Posts, campaigns, and scripts rooted in your business identity.", welcome: "Welcome back", loginLead: "Enter your details to keep creating.", email: "Email", password: "Password", divider: "or", login: "Sign in", loggingIn: "Signing in…", noAccount: "Don't have an account?", registerLink: "Sign up", loginFallback: "We could not sign you in.", loginLoading: "Preparing sign in…", register: "Create your account", registerLead: "First, let's create your account. Then we'll learn about your business to prepare your HiTrendy space.", name: "Your name", interfaceLocale: "Interface language", create: "Create account", creating: "Creating account…", hasAccount: "Already have an account?", loginLink: "Sign in", registerFallback: "We could not create your account.", googleOpening: "Opening Google…", googleChecking: "Checking Google…", googleContinue: "Continue with Google", googleUnavailable: "Google is not available right now.", googleFallback: "We could not start Google sign-in." },
-    onboarding: { steps: ["Your business", "Channels and goal", "Brand identity", "Confirmation"], eyebrow: "GETTING STARTED", title: "Set up your business", exit: "Exit", label: "Initial setup", loading: "Restoring your registration…", saving: "Saving this step…", creating: "Creating your account…", saved: "Your information is saved to your account.", retrying: "There was a temporary issue. Retrying…", back: "Back", next: "Next", version: "Saved version", keyboard: "You can use Enter to continue and Tab to move through fields.", businessTitle: "Tell us about your business", businessLead: "We will use this context to make your first recommendations useful from the start.", businessName: "Business name", category: "Category", select: "Select…", country: "Country", city: "City", product: "Main product or service", audience: "Who do you help?", audiencePlaceholder: "Example: People looking for a nearby, quality break", description: "Business description", website: "Website", optional: "Optional", channelsTitle: "Channels and goals", platforms: "Social networks you use", objective: "Main goal", brandTitle: "Brand identity", tones: "Voice tones (max. 3)", proposition: "Value proposition", propositionPlaceholder: "Example: Responsibly sourced artisan coffee", preferred: "Preferred words", forbidden: "Forbidden words", wordsPlaceholder: "Separated by commas", primaryColor: "Primary color", secondaryColor: "Secondary color", contentLocale: "Default content language", reviewTitle: "Review your information", reviewLead: "This is what we understood about your business. You can edit it later in Settings.", business: "Business", channels: "Channels and goal", brand: "Brand", location: "Location", confirm: "I confirm that the information is correct.", finish: "Finish and enter HiTrendy", finishing: "Finishing…", progress: "Registration progress", step: "Step" },
+    templates: {
+      library: "Template library",
+      eyebrow: "CREATIVE LIBRARY",
+      title: "Explore templates",
+      lead: "Find a starting point by format, category, or theme.",
+      search: "Search templates",
+      searchPlaceholder: "Search by name, format, or theme...",
+      categories: "Template categories",
+      singular: "template",
+      plural: "templates",
+      use: "Use template",
+      preparing: "Preparing…",
+      empty: "No templates found",
+      emptyHint: "Try another search or select a different category.",
+      preview: "Preview",
+      unavailable: "Preview unavailable",
+      loading: "Preparing catalog…",
+      error: "We could not check the templates.",
+    },
+    auth: {
+      demoLabel: "HiTrendy sample content",
+      heroTitle: "Turn an idea into something people want to share.",
+      heroLead:
+        "Posts, campaigns, and scripts rooted in your business identity.",
+      welcome: "Welcome back",
+      loginLead: "Enter your details to keep creating.",
+      email: "Email",
+      password: "Password",
+      divider: "or",
+      login: "Sign in",
+      loggingIn: "Signing in…",
+      noAccount: "Don't have an account?",
+      registerLink: "Sign up",
+      loginFallback: "We could not sign you in.",
+      loginLoading: "Preparing sign in…",
+      register: "Create your account",
+      registerLead:
+        "First, let's create your account. Then we'll learn about your business to prepare your HiTrendy space.",
+      name: "Your name",
+      interfaceLocale: "Interface language",
+      create: "Create account",
+      creating: "Creating account…",
+      hasAccount: "Already have an account?",
+      loginLink: "Sign in",
+      registerFallback: "We could not create your account.",
+      googleOpening: "Opening Google…",
+      googleChecking: "Checking Google…",
+      googleContinue: "Continue with Google",
+      googleUnavailable: "Google is not available right now.",
+      googleFallback: "We could not start Google sign-in.",
+    },
+    onboarding: {
+      steps: [
+        "Your business",
+        "Channels and goal",
+        "Brand identity",
+        "Confirmation",
+      ],
+      eyebrow: "GETTING STARTED",
+      title: "Set up your business",
+      exit: "Exit",
+      label: "Initial setup",
+      loading: "Restoring your registration…",
+      saving: "Saving this step…",
+      creating: "Creating your account…",
+      saved: "Your information is saved to your account.",
+      retrying: "There was a temporary issue. Retrying…",
+      back: "Back",
+      next: "Next",
+      version: "Saved version",
+      keyboard: "You can use Enter to continue and Tab to move through fields.",
+      businessTitle: "Tell us about your business",
+      businessLead:
+        "We will use this context to make your first recommendations useful from the start.",
+      businessName: "Business name",
+      category: "Category",
+      select: "Select…",
+      country: "Country",
+      city: "City",
+      product: "Main product or service",
+      audience: "Who do you help?",
+      audiencePlaceholder:
+        "Example: People looking for a nearby, quality break",
+      description: "Business description",
+      website: "Website",
+      optional: "Optional",
+      channelsTitle: "Channels and goals",
+      platforms: "Social networks you use",
+      objective: "Main goal",
+      brandTitle: "Brand identity",
+      tones: "Voice tones (max. 3)",
+      proposition: "Value proposition",
+      propositionPlaceholder: "Example: Responsibly sourced artisan coffee",
+      preferred: "Preferred words",
+      forbidden: "Forbidden words",
+      wordsPlaceholder: "Separated by commas",
+      primaryColor: "Primary color",
+      secondaryColor: "Secondary color",
+      contentLocale: "Default content language",
+      reviewTitle: "Review your information",
+      reviewLead:
+        "This is what we understood about your business. You can edit it later in Settings.",
+      business: "Business",
+      channels: "Channels and goal",
+      brand: "Brand",
+      location: "Location",
+      confirm: "I confirm that the information is correct.",
+      finish: "Finish and enter HiTrendy",
+      finishing: "Finishing…",
+      progress: "Registration progress",
+      step: "Step",
+    },
   },
   pt: {
-    templates: { library: "Biblioteca de templates", eyebrow: "BIBLIOTECA CRIATIVA", title: "Explore templates", lead: "Encontre uma base por formato, categoria ou tema.", search: "Buscar templates", searchPlaceholder: "Buscar por nome, formato ou tema...", categories: "Categorias de templates", singular: "template", plural: "templates", use: "Usar template", preparing: "Preparando…", empty: "Nenhum template encontrado", emptyHint: "Tente outra busca ou selecione uma categoria diferente.", preview: "Prévia", unavailable: "Prévia indisponível", loading: "Preparando catálogo…", error: "Não foi possível verificar os templates." },
-    auth: { demoLabel: "Conteúdo de exemplo da HiTrendy", heroTitle: "Transforme uma ideia em algo que as pessoas queiram compartilhar.", heroLead: "Posts, campanhas e roteiros que partem da identidade do seu negócio.", welcome: "Boas-vindas de volta", loginLead: "Informe seus dados para continuar criando.", email: "E-mail", password: "Senha", divider: "ou", login: "Entrar", loggingIn: "Entrando…", noAccount: "Não tem uma conta?", registerLink: "Cadastre-se", loginFallback: "Não foi possível entrar.", loginLoading: "Preparando acesso…", register: "Crie sua conta", registerLead: "Primeiro, vamos criar sua conta. Depois conheceremos seu negócio para preparar seu espaço na HiTrendy.", name: "Seu nome", interfaceLocale: "Idioma da interface", create: "Criar conta", creating: "Criando conta…", hasAccount: "Já tem uma conta?", loginLink: "Entrar", registerFallback: "Não foi possível criar sua conta.", googleOpening: "Abrindo o Google…", googleChecking: "Verificando o Google…", googleContinue: "Continuar com o Google", googleUnavailable: "O Google não está disponível agora.", googleFallback: "Não foi possível iniciar o acesso pelo Google." },
-    onboarding: { steps: ["Seu negócio", "Canais e objetivo", "Identidade da marca", "Confirmação"], eyebrow: "PRIMEIROS PASSOS", title: "Configure seu negócio", exit: "Sair", label: "Configuração inicial", loading: "Recuperando seu cadastro…", saving: "Salvando esta etapa…", creating: "Criando sua conta…", saved: "Seus dados são salvos na sua conta.", retrying: "Houve um problema temporário. Tentando novamente…", back: "Voltar", next: "Próximo", version: "Versão salva", keyboard: "Você pode usar Enter para avançar e Tab para percorrer os campos.", businessTitle: "Conte-nos sobre seu negócio", businessLead: "Usaremos este contexto para que suas primeiras recomendações sejam úteis desde o início.", businessName: "Nome comercial", category: "Categoria", select: "Selecionar…", country: "País", city: "Cidade", product: "Produto ou serviço principal", audience: "Quem você ajuda?", audiencePlaceholder: "Ex.: Pessoas que procuram uma pausa próxima e de qualidade", description: "Descrição do negócio", website: "Site", optional: "Opcional", channelsTitle: "Canais e objetivos", platforms: "Redes sociais que você usa", objective: "Objetivo principal", brandTitle: "Identidade da marca", tones: "Tons de voz (máx. 3)", proposition: "Proposta de valor", propositionPlaceholder: "Ex.: Café artesanal de origem responsável", preferred: "Palavras preferidas", forbidden: "Palavras proibidas", wordsPlaceholder: "Separadas por vírgulas", primaryColor: "Cor primária", secondaryColor: "Cor secundária", contentLocale: "Idioma padrão do conteúdo", reviewTitle: "Revise suas informações", reviewLead: "Foi isso que entendemos sobre seu negócio. Você poderá editar depois em Configurações.", business: "Negócio", channels: "Canais e objetivo", brand: "Marca", location: "Localização", confirm: "Confirmo que as informações estão corretas.", finish: "Finalizar e entrar na HiTrendy", finishing: "Finalizando…", progress: "Progresso do cadastro", step: "Etapa" },
+    templates: {
+      library: "Biblioteca de templates",
+      eyebrow: "BIBLIOTECA CRIATIVA",
+      title: "Explore templates",
+      lead: "Encontre uma base por formato, categoria ou tema.",
+      search: "Buscar templates",
+      searchPlaceholder: "Buscar por nome, formato ou tema...",
+      categories: "Categorias de templates",
+      singular: "template",
+      plural: "templates",
+      use: "Usar template",
+      preparing: "Preparando…",
+      empty: "Nenhum template encontrado",
+      emptyHint: "Tente outra busca ou selecione uma categoria diferente.",
+      preview: "Prévia",
+      unavailable: "Prévia indisponível",
+      loading: "Preparando catálogo…",
+      error: "Não foi possível verificar os templates.",
+    },
+    auth: {
+      demoLabel: "Conteúdo de exemplo da HiTrendy",
+      heroTitle:
+        "Transforme uma ideia em algo que as pessoas queiram compartilhar.",
+      heroLead:
+        "Posts, campanhas e roteiros que partem da identidade do seu negócio.",
+      welcome: "Boas-vindas de volta",
+      loginLead: "Informe seus dados para continuar criando.",
+      email: "E-mail",
+      password: "Senha",
+      divider: "ou",
+      login: "Entrar",
+      loggingIn: "Entrando…",
+      noAccount: "Não tem uma conta?",
+      registerLink: "Cadastre-se",
+      loginFallback: "Não foi possível entrar.",
+      loginLoading: "Preparando acesso…",
+      register: "Crie sua conta",
+      registerLead:
+        "Primeiro, vamos criar sua conta. Depois conheceremos seu negócio para preparar seu espaço na HiTrendy.",
+      name: "Seu nome",
+      interfaceLocale: "Idioma da interface",
+      create: "Criar conta",
+      creating: "Criando conta…",
+      hasAccount: "Já tem uma conta?",
+      loginLink: "Entrar",
+      registerFallback: "Não foi possível criar sua conta.",
+      googleOpening: "Abrindo o Google…",
+      googleChecking: "Verificando o Google…",
+      googleContinue: "Continuar com o Google",
+      googleUnavailable: "O Google não está disponível agora.",
+      googleFallback: "Não foi possível iniciar o acesso pelo Google.",
+    },
+    onboarding: {
+      steps: [
+        "Seu negócio",
+        "Canais e objetivo",
+        "Identidade da marca",
+        "Confirmação",
+      ],
+      eyebrow: "PRIMEIROS PASSOS",
+      title: "Configure seu negócio",
+      exit: "Sair",
+      label: "Configuração inicial",
+      loading: "Recuperando seu cadastro…",
+      saving: "Salvando esta etapa…",
+      creating: "Criando sua conta…",
+      saved: "Seus dados são salvos na sua conta.",
+      retrying: "Houve um problema temporário. Tentando novamente…",
+      back: "Voltar",
+      next: "Próximo",
+      version: "Versão salva",
+      keyboard:
+        "Você pode usar Enter para avançar e Tab para percorrer os campos.",
+      businessTitle: "Conte-nos sobre seu negócio",
+      businessLead:
+        "Usaremos este contexto para que suas primeiras recomendações sejam úteis desde o início.",
+      businessName: "Nome comercial",
+      category: "Categoria",
+      select: "Selecionar…",
+      country: "País",
+      city: "Cidade",
+      product: "Produto ou serviço principal",
+      audience: "Quem você ajuda?",
+      audiencePlaceholder:
+        "Ex.: Pessoas que procuram uma pausa próxima e de qualidade",
+      description: "Descrição do negócio",
+      website: "Site",
+      optional: "Opcional",
+      channelsTitle: "Canais e objetivos",
+      platforms: "Redes sociais que você usa",
+      objective: "Objetivo principal",
+      brandTitle: "Identidade da marca",
+      tones: "Tons de voz (máx. 3)",
+      proposition: "Proposta de valor",
+      propositionPlaceholder: "Ex.: Café artesanal de origem responsável",
+      preferred: "Palavras preferidas",
+      forbidden: "Palavras proibidas",
+      wordsPlaceholder: "Separadas por vírgulas",
+      primaryColor: "Cor primária",
+      secondaryColor: "Cor secundária",
+      contentLocale: "Idioma padrão do conteúdo",
+      reviewTitle: "Revise suas informações",
+      reviewLead:
+        "Foi isso que entendemos sobre seu negócio. Você poderá editar depois em Configurações.",
+      business: "Negócio",
+      channels: "Canais e objetivo",
+      brand: "Marca",
+      location: "Localização",
+      confirm: "Confirmo que as informações estão corretas.",
+      finish: "Finalizar e entrar na HiTrendy",
+      finishing: "Finalizando…",
+      progress: "Progresso do cadastro",
+      step: "Etapa",
+    },
   },
 } as const;

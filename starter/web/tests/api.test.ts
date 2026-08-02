@@ -1,11 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-import {
-  ApiError,
-  api,
-  createIdempotencyKey,
-  resetCsrfToken,
-} from "@/lib/api";
+import { ApiError, api, createIdempotencyKey, resetCsrfToken } from "@/lib/api";
 import { isDemoModeEnabled } from "@/lib/demo-mode";
 
 vi.mock("@/lib/demo-mode", () => ({
@@ -18,10 +13,7 @@ type FetchMock = ReturnType<typeof vi.fn>;
 
 const fetchMock = vi.fn() as FetchMock;
 
-function jsonResponse(
-  body: unknown,
-  init: ResponseInit = {}
-): Response {
+function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), {
     status: init.status ?? 200,
     headers: {
@@ -90,7 +82,9 @@ describe("API client", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/v1/trends/home");
     expect(fetchMock.mock.calls[2]?.[0]).toBe("/api/v1/trends/refresh");
     expect(requestHeadersAt(2).get("X-CSRF-Token")).toBe("csrf-trends");
-    expect(requestHeadersAt(2).get("Idempotency-Key")).toBe("trend-refresh-once");
+    expect(requestHeadersAt(2).get("Idempotency-Key")).toBe(
+      "trend-refresh-once"
+    );
     expect(requestInitAt(2).body).toBe(JSON.stringify(refreshScope));
   });
 
@@ -142,7 +136,10 @@ describe("API client", () => {
       .mockResolvedValueOnce(jsonResponse({ token: "csrf-one" }))
       .mockResolvedValueOnce(jsonResponse({ id: "project-1" }));
 
-    await api.projects.create({ artifact_id: "artifact-1" }, { idempotencyKey: "save-once" });
+    await api.projects.create(
+      { artifact_id: "artifact-1" },
+      { idempotencyKey: "save-once" }
+    );
 
     expect(requestHeadersAt(1).get("Idempotency-Key")).toBe("save-once");
   });
@@ -205,13 +202,9 @@ describe("API client", () => {
       .mockResolvedValueOnce(errorResponse("CSRF_TOKEN_INVALID"));
 
     await expect(
-      api.conversations.sendMessage(
-        "conversation-1",
-        "Hola",
-        undefined,
-        [],
-        { maxAttempts: 1 }
-      )
+      api.conversations.sendMessage("conversation-1", "Hola", undefined, [], {
+        maxAttempts: 1,
+      })
     ).rejects.toMatchObject({
       status: 403,
       code: "CSRF_TOKEN_INVALID",
@@ -405,8 +398,16 @@ describe("API client", () => {
   describe("capabilities", () => {
     test("obtiene snapshot de capacidades vía GET", async () => {
       const snapshot = {
-        advisor: { status: "available", tier: "free", quality_levels: ["fast"] },
-        copywriter: { status: "available", tier: "free", quality_levels: ["fast"] },
+        advisor: {
+          status: "available",
+          tier: "free",
+          quality_levels: ["fast"],
+        },
+        copywriter: {
+          status: "available",
+          tier: "free",
+          quality_levels: ["fast"],
+        },
       };
       fetchMock.mockResolvedValueOnce(jsonResponse(snapshot));
 
@@ -421,12 +422,36 @@ describe("API client", () => {
 
     test("incluye las seis capacidades esperadas", async () => {
       const snapshot = {
-        advisor: { status: "available", tier: "free", quality_levels: ["fast"] },
-        copywriter: { status: "available", tier: "free", quality_levels: ["fast"] },
-        vision_review: { status: "available", tier: "free", quality_levels: ["fast"] },
-        image_generation: { status: "disabled", tier: "paid", quality_levels: [] },
-        video_generation: { status: "disabled", tier: "paid", quality_levels: [] },
-        trend_analysis: { status: "disabled", tier: "free", quality_levels: [] },
+        advisor: {
+          status: "available",
+          tier: "free",
+          quality_levels: ["fast"],
+        },
+        copywriter: {
+          status: "available",
+          tier: "free",
+          quality_levels: ["fast"],
+        },
+        vision_review: {
+          status: "available",
+          tier: "free",
+          quality_levels: ["fast"],
+        },
+        image_generation: {
+          status: "disabled",
+          tier: "paid",
+          quality_levels: [],
+        },
+        video_generation: {
+          status: "disabled",
+          tier: "paid",
+          quality_levels: [],
+        },
+        trend_analysis: {
+          status: "disabled",
+          tier: "free",
+          quality_levels: [],
+        },
       };
       fetchMock.mockResolvedValueOnce(jsonResponse(snapshot));
 
@@ -439,12 +464,36 @@ describe("API client", () => {
 
     test("parsea los ocho estados posibles", async () => {
       const snapshot = {
-        advisor: { status: "available", tier: "free", quality_levels: ["fast"] },
-        copywriter: { status: "unconfigured", tier: "free", quality_levels: [] },
-        vision_review: { status: "degraded", tier: "free", quality_levels: ["fast"] },
-        image_generation: { status: "disabled", tier: "paid", quality_levels: [] },
-        video_generation: { status: "payment_required", tier: "paid", quality_levels: [] },
-        trend_analysis: { status: "quota_exhausted", tier: "free", quality_levels: [] },
+        advisor: {
+          status: "available",
+          tier: "free",
+          quality_levels: ["fast"],
+        },
+        copywriter: {
+          status: "unconfigured",
+          tier: "free",
+          quality_levels: [],
+        },
+        vision_review: {
+          status: "degraded",
+          tier: "free",
+          quality_levels: ["fast"],
+        },
+        image_generation: {
+          status: "disabled",
+          tier: "paid",
+          quality_levels: [],
+        },
+        video_generation: {
+          status: "payment_required",
+          tier: "paid",
+          quality_levels: [],
+        },
+        trend_analysis: {
+          status: "quota_exhausted",
+          tier: "free",
+          quality_levels: [],
+        },
       };
       fetchMock.mockResolvedValueOnce(jsonResponse(snapshot));
 
@@ -485,6 +534,128 @@ describe("API client", () => {
       );
 
       await expect(api.capabilities.get()).rejects.toThrow(ApiError);
+    });
+  });
+
+  describe("social connections", () => {
+    const connection = {
+      id: "connection/1",
+      provider: "demo",
+      display_name: "Cuenta demo",
+      account_type: "business",
+      status: "connected",
+      connected_at: "2026-08-01T12:00:00Z",
+      last_checked_at: null,
+      safe_error: null,
+    };
+
+    test("obtiene el catálogo y las conexiones vía GET", async () => {
+      const payload = {
+        enabled: true,
+        providers: [{ name: "demo", status: "available", reason_code: null }],
+        connections: [connection],
+      };
+      fetchMock.mockResolvedValueOnce(jsonResponse(payload));
+
+      await expect(api.social.connections()).resolves.toEqual(payload);
+      expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/v1/social/connections");
+      expect(requestInitAt(0).method).toBeUndefined();
+    });
+
+    test("autoriza con provider codificado, return_path y POST", async () => {
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse({ token: "csrf-social" }))
+        .mockResolvedValueOnce(
+          jsonResponse({
+            provider: "demo",
+            authorization_url: "https://provider.example/authorize",
+          })
+        );
+
+      await api.social.authorize("demo/account", "/settings");
+
+      expect(fetchMock.mock.calls[1]?.[0]).toBe(
+        "/api/v1/social/demo%2Faccount/authorize"
+      );
+      expect(requestInitAt(1).method).toBe("POST");
+      expect(requestInitAt(1).body).toBe(
+        JSON.stringify({ return_path: "/settings" })
+      );
+      expect(requestHeadersAt(1).get("X-CSRF-Token")).toBe("csrf-social");
+      expect(requestHeadersAt(1).has("Idempotency-Key")).toBe(false);
+    });
+
+    test("check y disconnect codifican el id, usan su método y desenvuelven connection", async () => {
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse({ token: "csrf-check" }))
+        .mockResolvedValueOnce(jsonResponse({ connection }))
+        .mockResolvedValueOnce(jsonResponse({ connection }));
+
+      await expect(api.social.check("connection/with space")).resolves.toEqual(
+        connection
+      );
+      await expect(
+        api.social.disconnect("connection/with space")
+      ).resolves.toEqual(connection);
+
+      expect(fetchMock.mock.calls[1]?.[0]).toBe(
+        "/api/v1/social/connections/connection%2Fwith%20space/check"
+      );
+      expect(requestInitAt(1).method).toBe("POST");
+      expect(requestInitAt(1).body).toBeUndefined();
+      expect(fetchMock.mock.calls[2]?.[0]).toBe(
+        "/api/v1/social/connections/connection%2Fwith%20space"
+      );
+      expect(requestInitAt(2).method).toBe("DELETE");
+      expect(requestInitAt(2).body).toBeUndefined();
+    });
+
+    test("propaga ApiError desde cada operación social", async () => {
+      const operations: Array<{
+        run: () => Promise<unknown>;
+        responses: Response[];
+      }> = [
+        {
+          run: () => api.social.connections(),
+          responses: [errorResponse("SOCIAL_FAILURE", 409)],
+        },
+        {
+          run: () => api.social.authorize("demo"),
+          responses: [
+            jsonResponse({ token: "csrf-social" }),
+            errorResponse("SOCIAL_FAILURE", 409),
+          ],
+        },
+        {
+          run: () => api.social.check("connection-1"),
+          responses: [
+            jsonResponse({ token: "csrf-social" }),
+            errorResponse("SOCIAL_FAILURE", 409),
+          ],
+        },
+        {
+          run: () => api.social.disconnect("connection-1"),
+          responses: [
+            jsonResponse({ token: "csrf-social" }),
+            errorResponse("SOCIAL_FAILURE", 409),
+          ],
+        },
+      ];
+
+      for (const operation of operations) {
+        resetCsrfToken();
+        fetchMock.mockReset();
+        fetchMock.mockImplementationOnce(() =>
+          Promise.resolve(operation.responses[0] as Response)
+        );
+        for (const response of operation.responses.slice(1)) {
+          fetchMock.mockImplementationOnce(() => Promise.resolve(response));
+        }
+
+        await expect(operation.run()).rejects.toMatchObject({
+          code: "SOCIAL_FAILURE",
+        });
+      }
     });
   });
 });

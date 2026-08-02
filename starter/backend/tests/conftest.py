@@ -15,6 +15,7 @@ import app.business.models  # noqa: F401
 import app.conversations.models  # noqa: F401
 import app.images.models  # noqa: F401
 import app.projects.models  # noqa: F401
+import app.social.models  # noqa: F401
 import app.templates.models  # noqa: F401
 import app.trends.models  # noqa: F401
 from app.db.base import Base
@@ -32,6 +33,7 @@ from app.identity.models import (
     WorkspaceMember,
 )
 from app.main import app
+from app.social.models import SocialConnection
 from app.templates.repository import seed_templates
 
 TEST_DB_URL = "sqlite+aiosqlite:///./test_hitrendy_secure.db"
@@ -76,6 +78,7 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
         async with _TestingSessionFactory() as session:
             for model in (
                 AccountPurgeJob,
+                SocialConnection,
                 AdminAuditEvent,
                 AuthSession,
                 OAuthAuthorizationRequest,
@@ -108,6 +111,12 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
         ac.cookies.set("hitrendy_session", token)
         yield ac
     app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
+async def db_session(client: AsyncClient) -> AsyncGenerator[AsyncSession, None]:
+    async with _TestingSessionFactory() as session:
+        yield session
 
 
 @pytest_asyncio.fixture

@@ -20,6 +20,7 @@ import app.conversations.models  # noqa: F401
 import app.identity.models  # noqa: F401
 import app.images.models  # noqa: F401
 import app.projects.models  # noqa: F401
+import app.social.models  # noqa: F401
 import app.templates.models  # noqa: F401
 import app.trends.models  # noqa: F401
 from alembic import command
@@ -92,7 +93,7 @@ def _public_template_ids(engine) -> list[str]:
 def test_upgrade_empty_postgres_to_head(postgres_engine) -> None:
     _upgrade("head")
     with postgres_engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "022"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "023"
     assert set(_public_template_ids(postgres_engine)) == EXPECTED_TEMPLATE_IDS
 
 
@@ -614,7 +615,7 @@ def test_upgrade_from_017_adds_account_lifecycle_schema(postgres_engine) -> None
 
     _upgrade("head")
     with postgres_engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "022"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "023"
         assert connection.scalar(text("SELECT to_regclass('public.account_purge_jobs')"))
 
 
@@ -901,6 +902,217 @@ def test_deleting_a_workspace_takes_its_image_rows(postgres_engine) -> None:
                     "SELECT count(*) FROM image_generation_budgets "
                     "WHERE workspace_id='ws_img_drop'"
                 )
+            )
+            == 0
+        )
+
+
+def test_social_connections_upgrade_from_022_downgrade_and_reupgrade(postgres_engine) -> None:
+    """023 must be additive over 022 and fully reversible."""
+
+    _upgrade("022")
+    with postgres_engine.connect() as connection:
+        assert connection.scalar(text("SELECT to_regclass('public.social_connections')")) is None
+
+    _upgrade("023")
+    with postgres_engine.connect() as connection:
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "023"
+        assert connection.scalar(text("SELECT to_regclass('public.social_connections')"))
+        indexes = set(
+            connection.scalars(
+                text("SELECT indexname FROM pg_indexes WHERE tablename = 'social_connections'")
+            )
+        )
+    # The Settings screen lists one workspace's connections and nothing else.
+    assert "ix_social_connections_workspace_id" in indexes
+    assert "ix_social_connections_workspace_provider" in indexes
+    assert "ix_social_connections_provider" in indexes
+    assert "uq_social_connection_account" in indexes
+
+    command.downgrade(_alembic_config(), "022")
+    with postgres_engine.connect() as connection:
+        assert connection.scalar(text("SELECT to_regclass('public.social_connections')")) is None
+        # 022 keeps everything it owned before the social wave existed.
+        assert connection.scalar(text("SELECT to_regclass('public.image_generation_jobs')"))
+
+    _upgrade("023")
+    with postgres_engine.connect() as connection:
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "023"
+        assert connection.scalar(text("SELECT to_regclass('public.social_connections')"))
+
+
+def test_social_connection_schema_matches_the_sqlalchemy_models(postgres_engine) -> None:
+    """What 023 builds must equal what the ORM declares for the table it owns."""
+
+    _upgrade("head")
+    with postgres_engine.connect() as connection:
+        context = MigrationContext.configure(connection)
+        diffs = _flatten_diffs(compare_metadata(context, Base.metadata))
+    divergences = [entry for entry in diffs if _diff_table(entry) == "social_connections"]
+    assert divergences == [], f"023 no coincide con los modelos: {divergences}"
+
+
+def test_social_connection_tokens_are_never_stored_as_readable_columns(postgres_engine) -> None:
+    """The table has no column that could hold a credential in the clear.
+
+    A column named for a code, a verifier, a state or a raw provider payload is a
+    place someone will eventually write one. The absence is the control.
+    """
+
+    _upgrade("head")
+    with postgres_engine.connect() as connection:
+        columns = set(
+            connection.scalars(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = 'social_connections'"
+                )
+            )
+        )
+
+    assert {"encrypted_access_token", "encrypted_refresh_token"} <= columns
+    forbidden = {
+        "access_token",
+        "refresh_token",
+        "authorization_code",
+        "code_verifier",
+        "pkce_verifier",
+        "oauth_state",
+        "state",
+        "client_secret",
+        "provider_response",
+        "raw_response",
+    }
+    assert forbidden & columns == set(), f"Columnas prohibidas presentes: {forbidden & columns}"
+
+
+def test_social_connection_constraints_are_enforced_by_postgres(postgres_engine) -> None:
+    """The database refuses the shapes the service refuses, not only the service."""
+
+    _upgrade("head")
+    now = datetime.now(UTC)
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            text("INSERT INTO workspaces (id, name) VALUES ('ws_soc_mig', 'Migración social')")
+        )
+
+    def _insert(
+        row_id: str,
+        *,
+        workspace_id: str = "ws_soc_mig",
+        provider: str = "demo",
+        account_id: str = "acc_1",
+        status: str = "connected",
+        account_type: str = "business",
+        access_token: str | None = "v1.nonce.cipher",
+        refresh_token: str | None = None,
+        disconnected_at=None,
+    ) -> None:
+        with postgres_engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO social_connections "
+                    "(id, workspace_id, provider, provider_account_id, display_name, "
+                    "account_type, status, encrypted_access_token, encrypted_refresh_token, "
+                    "connected_at, disconnected_at) "
+                    "VALUES (:id, :workspace_id, :provider, :account_id, 'Cuenta', "
+                    ":account_type, :status, :access_token, :refresh_token, :now, :disconnected)"
+                ),
+                {
+                    "id": row_id,
+                    "workspace_id": workspace_id,
+                    "provider": provider,
+                    "account_id": account_id,
+                    "account_type": account_type,
+                    "status": status,
+                    "access_token": access_token,
+                    "refresh_token": refresh_token,
+                    "now": now,
+                    "disconnected": disconnected_at,
+                },
+            )
+
+    _insert("soc_ok")
+
+    with pytest.raises(Exception, match="ck_social_connection_status"):
+        _insert("soc_bad_status", status="pending", account_id="acc_2")
+    with pytest.raises(Exception, match="ck_social_connection_account_type"):
+        _insert("soc_bad_type", account_type="influencer", account_id="acc_3")
+    # "connected" is a claim that a usable credential exists. Without one it is a lie.
+    with pytest.raises(Exception, match="ck_social_connection_connected_token"):
+        _insert("soc_no_token", access_token=None, account_id="acc_4")
+    # A disconnected row must not keep a credential, nor hide when it was cut.
+    with pytest.raises(Exception, match="ck_social_connection_disconnected_tokens"):
+        _insert(
+            "soc_dirty_disconnect",
+            status="disconnected",
+            account_id="acc_5",
+            disconnected_at=now,
+        )
+    with pytest.raises(Exception, match="ck_social_connection_disconnected_at"):
+        _insert(
+            "soc_undated_disconnect",
+            status="disconnected",
+            account_id="acc_6",
+            access_token=None,
+            refresh_token=None,
+        )
+    _insert(
+        "soc_clean_disconnect",
+        status="disconnected",
+        account_id="acc_7",
+        access_token=None,
+        refresh_token=None,
+        disconnected_at=now,
+    )
+
+    # One external account connects once per workspace and provider. Reconnecting
+    # is an update of that row, never a second row racing the first.
+    with pytest.raises(Exception, match="uq_social_connection_account"):
+        _insert("soc_duplicate", account_id="acc_1")
+
+    # The same external account may legitimately belong to two workspaces, and to
+    # two providers, without either constraint standing in the way.
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            text("INSERT INTO workspaces (id, name) VALUES ('ws_soc_other', 'Otro espacio')")
+        )
+    _insert("soc_other_workspace", workspace_id="ws_soc_other")
+    _insert("soc_other_provider", provider="instagram")
+
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            text("DELETE FROM workspaces WHERE id IN ('ws_soc_mig', 'ws_soc_other')")
+        )
+
+
+def test_deleting_a_workspace_takes_its_social_connections(postgres_engine) -> None:
+    """A purge must not leave behind a token that still works."""
+
+    _upgrade("head")
+    now = datetime.now(UTC)
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            text("INSERT INTO workspaces (id, name) VALUES ('ws_soc_drop', 'Baja de cuenta')")
+        )
+        connection.execute(
+            text(
+                "INSERT INTO social_connections "
+                "(id, workspace_id, provider, provider_account_id, display_name, "
+                "account_type, status, encrypted_access_token, connected_at) "
+                "VALUES ('soc_drop', 'ws_soc_drop', 'demo', 'acc_drop', 'Cuenta', "
+                "'business', 'connected', 'v1.nonce.cipher', :now)"
+            ),
+            {"now": now},
+        )
+
+    with postgres_engine.begin() as connection:
+        connection.execute(text("DELETE FROM workspaces WHERE id = 'ws_soc_drop'"))
+
+    with postgres_engine.connect() as connection:
+        assert (
+            connection.scalar(
+                text("SELECT count(*) FROM social_connections WHERE workspace_id='ws_soc_drop'")
             )
             == 0
         )

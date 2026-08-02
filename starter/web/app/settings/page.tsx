@@ -1,16 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { AppShell } from "@/components/shell/app-shell";
 import {
-  api,
-  ApiError,
-  type AccountUser,
-  type UsageItem,
-} from "@/lib/api";
+  SocialConnections,
+  type SocialCallbackNotice,
+} from "@/components/settings/social-connections";
+import { api, ApiError, type AccountUser, type UsageItem } from "@/lib/api";
 import {
   clearDeletionStatusToken,
   ensureDeletionStatusToken,
@@ -36,11 +42,13 @@ import type {
   Platform,
   UpdateBusinessRequest,
 } from "@/types/business";
+import type { SocialCallbackReason, SocialProviderName } from "@/types/social";
 
 type Tab =
   | "account"
   | "business"
   | "brand"
+  | "social"
   | "language"
   | "usage"
   | "privacy"
@@ -50,6 +58,7 @@ const TABS: Tab[] = [
   "account",
   "business",
   "brand",
+  "social",
   "language",
   "usage",
   "privacy",
@@ -111,6 +120,71 @@ interface BrandDraft {
   secondary_color: string;
 }
 
+const SOCIAL_PROVIDERS = new Set<SocialProviderName>([
+  "instagram",
+  "tiktok",
+  "x",
+  "demo",
+]);
+
+const SOCIAL_CALLBACK_REASONS = new Set<SocialCallbackReason>([
+  "invalid_request",
+  "denied",
+  "provider_error",
+  "unavailable",
+]);
+
+interface SearchParamsLike {
+  getAll(name: string): string[];
+  toString(): string;
+}
+
+function singleSearchParam(
+  searchParams: SearchParamsLike,
+  name: string
+): string | null {
+  const values = searchParams.getAll(name);
+  return values.length === 1 ? (values[0] ?? null) : null;
+}
+
+function isSocialProvider(value: string): value is SocialProviderName {
+  return SOCIAL_PROVIDERS.has(value as SocialProviderName);
+}
+
+function isSocialCallbackReason(value: string): value is SocialCallbackReason {
+  return SOCIAL_CALLBACK_REASONS.has(value as SocialCallbackReason);
+}
+
+function readSocialCallback(
+  searchParams: SearchParamsLike
+): SocialCallbackNotice | null {
+  const outcome = singleSearchParam(searchParams, "social");
+  const provider = singleSearchParam(searchParams, "provider");
+  const reason = singleSearchParam(searchParams, "reason");
+
+  if (
+    outcome === "connected" &&
+    provider &&
+    isSocialProvider(provider) &&
+    reason === null
+  ) {
+    return { outcome, provider };
+  }
+  if (
+    outcome === "error" &&
+    reason &&
+    isSocialCallbackReason(reason) &&
+    (provider === null || isSocialProvider(provider))
+  ) {
+    return {
+      outcome,
+      ...(provider ? { provider } : {}),
+      reason,
+    };
+  }
+  return null;
+}
+
 function toBrandDraft(profile: BrandProfile | null): BrandDraft {
   return {
     voice_tones: profile?.voice_tones ?? [],
@@ -136,8 +210,10 @@ function splitWords(value: string): string[] {
   return words;
 }
 
-export default function SettingsPage() {
+function SettingsPageContent() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>("account");
   const [locale, setLocale] = useState<AppLocale>(readStoredLocale);
   const t = useCallback(
@@ -157,6 +233,41 @@ export default function SettingsPage() {
   const [dirty, setDirty] = useState(false);
   const [confirmation, setConfirmation] = useState("");
   const [deletionRequested, setDeletionRequested] = useState(false);
+  const [socialCallback, setSocialCallback] =
+    useState<SocialCallbackNotice | null>(null);
+  const callbackSeenRef = useRef<string | null>(null);
+
+  const parsedSocialCallback = useMemo(
+    () => readSocialCallback(searchParams),
+    [searchParams]
+  );
+  const callbackSignature = parsedSocialCallback
+    ? `${parsedSocialCallback.outcome}:${parsedSocialCallback.provider ?? ""}:${
+        parsedSocialCallback.reason ?? ""
+      }`
+    : null;
+
+  useEffect(() => {
+    if (
+      !parsedSocialCallback ||
+      callbackSeenRef.current === callbackSignature
+    ) {
+      return;
+    }
+    callbackSeenRef.current = callbackSignature;
+    setTab("social");
+    setSocialCallback(parsedSocialCallback);
+  }, [callbackSignature, parsedSocialCallback]);
+
+  const clearSocialCallback = useCallback(() => {
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("social");
+    next.delete("provider");
+    next.delete("reason");
+    const query = next.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname);
+    setSocialCallback(null);
+  }, [pathname, router, searchParams]);
 
   useEffect(() => {
     void Promise.all([api.auth.me(), api.businesses.list(), api.auth.usage()])
@@ -177,7 +288,9 @@ export default function SettingsPage() {
         }
       })
       .catch((reason) =>
-        setMessage(reason instanceof ApiError ? reason.message : loadErrorRef.current)
+        setMessage(
+          reason instanceof ApiError ? reason.message : loadErrorRef.current
+        )
       );
   }, []);
 
@@ -295,7 +408,9 @@ export default function SettingsPage() {
     if (!brand.value_proposition.trim()) return t("brand.valueRequired");
     const preferred = splitWords(brand.preferred_words);
     const forbidden = splitWords(brand.forbidden_words);
-    const forbiddenKeys = new Set(forbidden.map((word) => word.toLocaleLowerCase()));
+    const forbiddenKeys = new Set(
+      forbidden.map((word) => word.toLocaleLowerCase())
+    );
     if (preferred.some((word) => forbiddenKeys.has(word.toLocaleLowerCase()))) {
       return t("brand.wordConflict");
     }
@@ -309,7 +424,9 @@ export default function SettingsPage() {
         preferred_words: preferred,
         forbidden_words: forbidden,
         ...(brand.primary_color ? { primary_color: brand.primary_color } : {}),
-        ...(brand.secondary_color ? { secondary_color: brand.secondary_color } : {}),
+        ...(brand.secondary_color
+          ? { secondary_color: brand.secondary_color }
+          : {}),
       })) as unknown as BrandProfile;
       setBrand(toBrandDraft(saved));
       return null;
@@ -408,7 +525,9 @@ export default function SettingsPage() {
             {message}
           </p>
         ) : null}
-        {!me ? <p role="status">{translate(locale, "common.loading")}</p> : null}
+        {!me ? (
+          <p role="status">{translate(locale, "common.loading")}</p>
+        ) : null}
 
         {tab === "account" && me ? (
           <section>
@@ -433,7 +552,9 @@ export default function SettingsPage() {
               {t("language.interface")}
               <select
                 value={locale}
-                onChange={(event) => updateLocale(event.target.value as AppLocale)}
+                onChange={(event) =>
+                  updateLocale(event.target.value as AppLocale)
+                }
               >
                 {supportedLocales.map((item) => (
                   <option key={item} value={item}>
@@ -462,7 +583,9 @@ export default function SettingsPage() {
                   <input
                     value={business.name}
                     maxLength={120}
-                    onChange={(event) => editBusiness({ name: event.target.value })}
+                    onChange={(event) =>
+                      editBusiness({ name: event.target.value })
+                    }
                   />
                 </label>
                 <label>
@@ -485,7 +608,9 @@ export default function SettingsPage() {
                   <input
                     value={business.country}
                     maxLength={80}
-                    onChange={(event) => editBusiness({ country: event.target.value })}
+                    onChange={(event) =>
+                      editBusiness({ country: event.target.value })
+                    }
                   />
                 </label>
                 <label>
@@ -493,7 +618,9 @@ export default function SettingsPage() {
                   <input
                     value={business.city}
                     maxLength={80}
-                    onChange={(event) => editBusiness({ city: event.target.value })}
+                    onChange={(event) =>
+                      editBusiness({ city: event.target.value })
+                    }
                   />
                 </label>
                 <label>
@@ -532,7 +659,9 @@ export default function SettingsPage() {
                     <label key={value}>
                       <input
                         type="checkbox"
-                        checked={(business.preferred_platforms ?? []).includes(value)}
+                        checked={(business.preferred_platforms ?? []).includes(
+                          value
+                        )}
                         onChange={() => togglePlatform(value)}
                       />
                       {label}
@@ -658,6 +787,14 @@ export default function SettingsPage() {
           </section>
         ) : null}
 
+        {tab === "social" ? (
+          <SocialConnections
+            locale={locale}
+            callbackOutcome={socialCallback}
+            onCallbackProcessed={clearSocialCallback}
+          />
+        ) : null}
+
         {tab === "language" && me ? (
           <section>
             <h2>{t("tabs.language")}</h2>
@@ -665,7 +802,9 @@ export default function SettingsPage() {
               {t("language.interface")}
               <select
                 value={locale}
-                onChange={(event) => updateLocale(event.target.value as AppLocale)}
+                onChange={(event) =>
+                  updateLocale(event.target.value as AppLocale)
+                }
               >
                 {supportedLocales.map((item) => (
                   <option key={item} value={item}>
@@ -698,7 +837,11 @@ export default function SettingsPage() {
               type="button"
               disabled={saving}
               onClick={() =>
-                void save(business ? [persistAccount, persistBusiness] : [persistAccount])
+                void save(
+                  business
+                    ? [persistAccount, persistBusiness]
+                    : [persistAccount]
+                )
               }
             >
               {saveLabel}
@@ -714,13 +857,16 @@ export default function SettingsPage() {
             {usage.length ? (
               <ul>
                 {usage.map((item) => (
-                  <li key={`${item.capability}:${item.quality_level}:${item.currency ?? ""}`}>
+                  <li
+                    key={`${item.capability}:${item.quality_level}:${item.currency ?? ""}`}
+                  >
                     <strong>
                       {optionLabel(locale, "capability", item.capability)} ·{" "}
                       {optionLabel(locale, "quality", item.quality_level)}
                     </strong>
                     <span>
-                      {t("usage.generations")}: {formatNumber(locale, item.generations)}
+                      {t("usage.generations")}:{" "}
+                      {formatNumber(locale, item.generations)}
                     </span>
                     <span>
                       {t("usage.tokens")}:{" "}
@@ -793,5 +939,13 @@ export default function SettingsPage() {
         ) : null}
       </main>
     </AppShell>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={null}>
+      <SettingsPageContent />
+    </Suspense>
   );
 }
