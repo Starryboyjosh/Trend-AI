@@ -280,16 +280,43 @@ class TestResolve:
             await reg.resolve(Capability.ADVISOR, QualityLevel.BALANCED)
         assert "CAPABILITY_UNAVAILABLE" in str(exc.value)
 
-    async def test_resolve_image_generation_payment_required(self, reg: CapabilityRegistry) -> None:
+    async def test_resolve_image_generation_is_not_a_quality_route(
+        self, reg: CapabilityRegistry
+    ) -> None:
+        """WAVE-011: image generation is chosen by format, never by quality.
+
+        Before WAVE-011 the capability could only answer ``payment_required``.
+        Now it becomes available once a provider and a model are configured,
+        but it publishes no quality levels, so ``resolve`` is deliberately not
+        its entry point: the images service reads the capability directly.
+        """
+
         original = settings.image_generation_enabled
         settings.image_generation_enabled = True
         try:
+            info = reg.get_base_capability(Capability.IMAGE_GENERATION)
+            assert info.status == CapabilityStatus.AVAILABLE
+            assert info.quality_levels == []
             with pytest.raises(Exception) as exc:
                 await reg.resolve(Capability.IMAGE_GENERATION, QualityLevel.FAST)
-            error_str = str(exc.value)
-            assert "PAYMENT_REQUIRED" in error_str
+            assert "CAPABILITY_UNAVAILABLE" in str(exc.value)
         finally:
             settings.image_generation_enabled = original
+
+    async def test_resolve_image_generation_unconfigured_provider(
+        self, reg: CapabilityRegistry
+    ) -> None:
+        original_enabled = settings.image_generation_enabled
+        original_provider = settings.image_provider
+        settings.image_generation_enabled = True
+        settings.image_provider = "openrouter"
+        try:
+            info = reg.get_base_capability(Capability.IMAGE_GENERATION)
+            assert info.status == CapabilityStatus.UNCONFIGURED
+            assert info.tier == Tier.PAID
+        finally:
+            settings.image_generation_enabled = original_enabled
+            settings.image_provider = original_provider
 
 
 @pytest.mark.asyncio

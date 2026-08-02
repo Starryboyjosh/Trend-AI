@@ -243,6 +243,19 @@ class CapabilityRegistry:
             return CapabilityStatus.AVAILABLE, Tier.FREE
         return CapabilityStatus.UNCONFIGURED, Tier.UNKNOWN
 
+    def _image_status(self) -> tuple[CapabilityStatus, Tier]:
+        if not settings.image_generation_enabled:
+            return CapabilityStatus.DISABLED, Tier.PAID
+        if not settings.image_generation_configured:
+            # Enabled without a usable provider, model or key: nothing may be
+            # spent, and the caller must fall back to the visual brief.
+            return CapabilityStatus.UNCONFIGURED, Tier.PAID
+        if settings.image_provider == "demo":
+            # ``image_generation_configured`` already refuses demo outside
+            # development and test.
+            return CapabilityStatus.AVAILABLE, Tier.FREE
+        return CapabilityStatus.AVAILABLE, Tier.PAID
+
     def _levels_for(
         self, capability: Capability, status: CapabilityStatus
     ) -> list[QualityLevel]:
@@ -279,13 +292,12 @@ class CapabilityRegistry:
             )
 
         if capability == Capability.IMAGE_GENERATION:
-            if settings.image_generation_enabled:
-                status, tier = CapabilityStatus.PAYMENT_REQUIRED, Tier.PAID
-            else:
-                status, tier = CapabilityStatus.DISABLED, Tier.PAID
+            status, tier = self._image_status()
             return PublicCapability(
                 status=status,
                 tier=tier,
+                # Image generation is chosen by format, not by quality level:
+                # the server owns the model, so there is nothing to offer here.
                 quality_levels=[],
                 message=_sanitized_message(capability, status),
                 fallback=_FALLBACK_MAP.get(capability),
@@ -493,6 +505,8 @@ def get_runtime_capability_registry() -> CapabilityRegistry:
 def _resolve_provider_key(capability: Capability) -> str:
     if capability == Capability.VISION_REVIEW:
         return settings.vision_provider
+    if capability == Capability.IMAGE_GENERATION:
+        return settings.image_provider
     return settings.ai_provider
 
 

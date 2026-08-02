@@ -1,80 +1,38 @@
 from __future__ import annotations
 
 import uuid
-import warnings
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from io import BytesIO
 
 from fastapi import APIRouter, Depends, Response, UploadFile
-from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assets.analysis_service import analysis_to_dict, analyze_authorized_asset
 from app.assets.models import Asset, UploadSession
+from app.assets.validation import (
+    ALLOWED_MIME,
+    ImageMetadata,
+    read_image_metadata,
+    validate_image_bytes,
+)
 from app.core.config import settings
-from app.core.errors import NotFoundError, ValidationError_
+from app.core.errors import NotFoundError
 from app.dependencies import get_db, require_workspace
 from app.providers.factory import get_vision_provider
 from app.providers.storage import get_object_storage_provider
 
 router = APIRouter(prefix="/assets", tags=["assets"])
 
-ALLOWED_MIME = {"image/jpeg", "image/png", "image/webp"}
-
-
-@dataclass(frozen=True)
-class ImageMetadata:
-    mime_type: str
-    extension: str
-    width: int
-    height: int
+__all__ = ["ALLOWED_MIME", "ImageMetadata", "router"]
 
 
 def _validate_upload(content: bytes, declared_mime_type: str | None) -> ImageMetadata:
-    if declared_mime_type not in ALLOWED_MIME:
-        raise ValidationError_("Este tipo de archivo no es compatible. Usa PNG, JPG o WebP.")
-    if not content:
-        raise ValidationError_("No pudimos procesar este archivo.")
-    if len(content) > settings.max_upload_mb * 1024 * 1024:
-        raise ValidationError_(
-            f"El archivo supera el tamaño permitido de {settings.max_upload_mb} MB."
-        )
-    metadata = _read_image_metadata(content)
-    if metadata is None or metadata.mime_type != declared_mime_type:
-        raise ValidationError_("No pudimos procesar este archivo.")
-    if metadata.width <= 0 or metadata.height <= 0:
-        raise ValidationError_("No pudimos procesar este archivo.")
-    if metadata.width * metadata.height > settings.max_upload_pixels:
-        raise ValidationError_("La imagen supera el límite de dimensiones permitido.")
-    if metadata.width * metadata.height > len(content) * settings.max_upload_expansion_ratio:
-        raise ValidationError_("No pudimos procesar este archivo de forma segura.")
-    return metadata
+    return validate_image_bytes(content, declared_mime_type)
 
 
 def _read_image_metadata(content: bytes) -> ImageMetadata | None:
-    formats = {
-        "JPEG": ("image/jpeg", ".jpg"),
-        "PNG": ("image/png", ".png"),
-        "WEBP": ("image/webp", ".webp"),
-    }
-    try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", Image.DecompressionBombWarning)
-            with Image.open(BytesIO(content)) as image:
-                image.verify()
-                mime_type, extension = formats[image.format or ""]
-                return ImageMetadata(mime_type, extension, image.width, image.height)
-    except (
-        KeyError,
-        OSError,
-        SyntaxError,
-        UnidentifiedImageError,
-        Image.DecompressionBombError,
-    ):
-        return None
+    return read_image_metadata(content)
 
 
 class InitUploadResponse(BaseModel):
@@ -99,7 +57,7 @@ async def init_upload(
     await db.commit()
     return InitUploadResponse(
         upload_id=upload_id,
-        upload_url=f"/api/v1/assets/uploads/{upload_id}/complete",
+        upload_url=f"{settings.api_prefix}/assets/uploads/{upload_id}/complete",
         fields={},
     )
 

@@ -8,6 +8,13 @@ import type { Category, Objective, Platform } from "@/types/business";
 import type { Tone } from "@/types/brand";
 import type { PublicCapabilities } from "@/types/capabilities";
 import type {
+  ImageAspectRatio,
+  ImageBriefDraft,
+  ImageJob,
+  ImagePreflight,
+  VisualBrief,
+} from "@/types/images";
+import type {
   TrendCard,
   TrendDetail,
   TrendHome,
@@ -499,6 +506,69 @@ async function demoRequest<T>(
     return { sources: [] } as T;
   }
 
+  /*
+   * Demo mode has no provider and no budget of its own, so it answers with the
+   * documented fallback: a usable visual brief and a capability that is
+   * honestly reported as disabled. It never fabricates a generated image.
+   */
+  if (pathname === "/api/v1/images/brief" && method === "POST") {
+    return {
+      brief: {
+        subject: "Producto principal del negocio en primer plano",
+        setting: "Local del negocio con luz natural",
+        style: "Fotografía realista",
+        palette: "Colores de la marca",
+        mood: "Cercano y confiable",
+        avoid: "Texto superpuesto, logotipos de terceros",
+      },
+      aspect_ratios: ["1:1", "4:5", "9:16"],
+      capability: {
+        status: "disabled",
+        tier: "paid",
+        message: null,
+        fallback: "visual_brief",
+      },
+      budget: {
+        remaining: 0,
+        total: 0,
+        next_reset_at: new Date().toISOString(),
+      },
+    } as T;
+  }
+
+  if (pathname === "/api/v1/images/jobs" && method === "GET") {
+    // Demo mode never enqueues a job, so a reload has nothing to recover.
+    return { job: null } as T;
+  }
+
+  if (pathname === "/api/v1/images/preflight" && method === "POST") {
+    const data = parseJsonBody(options.body);
+
+    return {
+      allowed: false,
+      aspect_ratio: data.aspect_ratio || "4:5",
+      brief: data.brief || {},
+      prompt_preview: "",
+      negative_prompt_preview: null,
+      reference_asset_id: null,
+      budget: {
+        remaining: 0,
+        total: 0,
+        next_reset_at: new Date().toISOString(),
+      },
+      reason_code: "disabled",
+      message: null,
+      approval_token: null,
+      approval_expires_at: null,
+      capability: {
+        status: "disabled",
+        tier: "paid",
+        message: null,
+        fallback: "visual_brief",
+      },
+    } as T;
+  }
+
   const demoProjects = readDemoProjects(
     cloneDemo(demoData.projects)
   );
@@ -783,6 +853,87 @@ export const api = {
         idempotencyKey: options.idempotencyKey || createIdempotencyKey(),
         body: JSON.stringify({ region: scope.region, category: scope.category }),
       });
+    },
+  },
+
+  /**
+   * Image generation, in the only order the server accepts: draft the brief,
+   * preflight it, confirm it, then poll the durable job.
+   *
+   * The model, the provider and the spending limits are never sent from here:
+   * the client chooses the brief, one of three formats, and optionally one
+   * asset the workspace already owns.
+   */
+  images: {
+    /** Free and provider-free. Answers even when generation is unavailable. */
+    draftBrief(data: {
+      business_id: string;
+      publication_text?: string;
+      trend_title?: string;
+    }): Promise<ImageBriefDraft> {
+      return request<ImageBriefDraft>(`${BASE}/images/brief`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+
+    /** Estimates and authorizes. Spends nothing and calls no provider. */
+    preflight(data: {
+      brief: VisualBrief;
+      aspect_ratio: ImageAspectRatio;
+      reference_asset_id?: string | null;
+    }): Promise<ImagePreflight> {
+      return request<ImagePreflight>(`${BASE}/images/preflight`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+
+    /**
+     * The only paid step, and the only one that needs an explicit `confirmed`.
+     * It runs with a single attempt: the idempotency key already makes a
+     * replay safe, and a refused confirmation (no budget, capability down)
+     * must surface to the user instead of being retried behind their back.
+     */
+    createJob(
+      data: {
+        brief: VisualBrief;
+        aspect_ratio: ImageAspectRatio;
+        approval_token: string;
+        confirmed: true;
+        reference_asset_id?: string | null;
+        project_id?: string | null;
+      },
+      options: Pick<ApiRequestOptions, "idempotencyKey"> = {}
+    ): Promise<ImageJob> {
+      return request<ImageJob>(`${BASE}/images/jobs`, {
+        method: "POST",
+        idempotencyKey: options.idempotencyKey || createIdempotencyKey(),
+        maxAttempts: 1,
+        body: JSON.stringify(data),
+      });
+    },
+
+    /** One poll. Mints a fresh short-lived link on every successful read. */
+    job(id: string): Promise<ImageJob> {
+      return request<ImageJob>(
+        `${BASE}/images/jobs/${encodeURIComponent(id)}`
+      );
+    },
+
+    /**
+     * The project's most recent job, or `null`.
+     *
+     * A reloaded page has lost the job id but not the generation, which is
+     * durable on the server and may already have been paid for. Asking for it
+     * is the only honest way back: generating again to find out would spend a
+     * second image.
+     */
+    async latestJob(projectId: string): Promise<ImageJob | null> {
+      const { job } = await request<{ job: ImageJob | null }>(
+        `${BASE}/images/jobs?project_id=${encodeURIComponent(projectId)}&latest=true`
+      );
+      return job ?? null;
     },
   },
 

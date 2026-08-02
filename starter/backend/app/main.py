@@ -26,6 +26,7 @@ from app.core.infrastructure import get_infrastructure_capabilities
 from app.core.rate_limit import LocalRateLimiter, RateLimiter, RedisRateLimiter
 from app.db.session import get_session_factory
 from app.identity.routes import router as identity_router
+from app.images.routes import router as images_router
 from app.projects.routes import router as project_router
 from app.templates.routes import router as template_router
 from app.trends.routes import router as trends_router
@@ -341,6 +342,7 @@ app.include_router(project_router, prefix=settings.api_prefix)
 app.include_router(asset_router, prefix=settings.api_prefix)
 app.include_router(template_router, prefix=settings.api_prefix)
 app.include_router(trends_router, prefix=settings.api_prefix)
+app.include_router(images_router, prefix=settings.api_prefix)
 
 
 @app.get("/health/live")

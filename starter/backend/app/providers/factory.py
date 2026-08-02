@@ -8,6 +8,11 @@ from app.providers.content import (
     DemoContentModelProvider,
     OpenAICompatibleContentModelProvider,
 )
+from app.providers.images import (
+    DemoImageGenerationProvider,
+    ImageGenerationProvider,
+    OpenRouterImageGenerationProvider,
+)
 from app.providers.openrouter_catalog import OpenRouterModelCatalog
 from app.providers.vision import (
     DemoVisionReviewProvider,
@@ -109,6 +114,73 @@ def get_openrouter_model_catalog() -> OpenRouterModelCatalog:
     return OpenRouterModelCatalog(
         ttl_seconds=settings.openrouter_catalog_ttl_seconds,
         fetcher=provider.fetch_model_catalog,
+    )
+
+
+def get_image_generation_provider(
+    *, provider: str | None = None, model: str | None = None
+) -> ImageGenerationProvider:
+    """Build the image provider, optionally for a route persisted earlier.
+
+    With no arguments this answers "what would we run right now", which is what
+    a confirmation records on the job. A worker instead passes the route the job
+    stored, so a configuration change between confirmation and execution can
+    never silently move the spend to another model.
+
+    Persisted values are re-authorized, never trusted: the provider must still
+    be a supported one and the model must still be in the operator allow-list.
+    A route that is no longer authorized raises here -- before the provider is
+    reached -- so the caller can fail the job and return its reservation.
+    """
+
+    if not settings.image_generation_enabled:
+        raise AppError(
+            "CAPABILITY_UNAVAILABLE",
+            "La generación de imágenes no está disponible.",
+            status_code=503,
+            retryable=False,
+        )
+    selected = (provider or settings.image_provider).strip().lower()
+    if selected == "demo":
+        if settings.app_env not in {"development", "test"}:
+            raise AppError(
+                "IMAGE_PROVIDER_UNAVAILABLE",
+                "La generación de imágenes no está disponible.",
+                status_code=503,
+                retryable=False,
+            )
+        if model is not None and model != DemoImageGenerationProvider.model_name:
+            raise AppError(
+                "IMAGE_PROVIDER_UNAVAILABLE",
+                "La generación de imágenes no está disponible.",
+                status_code=503,
+                retryable=False,
+            )
+        return DemoImageGenerationProvider()
+    if selected == "openrouter":
+        model_name = model if model is not None else settings.image_generation_model
+        if (
+            not settings.openrouter_api_key
+            or not model_name
+            or model_name not in settings.image_generation_allowed_models
+        ):
+            raise AppError(
+                "IMAGE_PROVIDER_UNAVAILABLE",
+                "La generación de imágenes no está configurada.",
+                status_code=503,
+                retryable=False,
+            )
+        return OpenRouterImageGenerationProvider(
+            base_url=settings.openrouter_base_url,
+            api_key=settings.openrouter_api_key,
+            model_name=model_name,
+            timeout_seconds=settings.image_generation_timeout_seconds,
+        )
+    raise AppError(
+        "IMAGE_PROVIDER_UNAVAILABLE",
+        "El proveedor de imágenes configurado no está disponible.",
+        status_code=503,
+        retryable=False,
     )
 
 

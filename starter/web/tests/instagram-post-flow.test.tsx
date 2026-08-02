@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
     projects: { startCreationFlow: vi.fn(), completeCreationFlow: vi.fn(), create: vi.fn(), get: vi.fn(), updateArtifactVersion: vi.fn(), duplicate: vi.fn() },
     conversations: { create: vi.fn(), sendMessage: vi.fn() }, artifacts: { createVariation: vi.fn() },
     trends: { detail: vi.fn() },
+    assets: { list: vi.fn() }, images: { draftBrief: vi.fn(), preflight: vi.fn(), createJob: vi.fn(), job: vi.fn(), latestJob: vi.fn() },
   },
 }));
 const { api, push, replace } = mocks;
@@ -44,6 +45,9 @@ function configure() {
   api.projects.duplicate.mockResolvedValue({ id: "project-copy" });
   api.artifacts.createVariation.mockResolvedValue({ artifact: { ...post, caption: "Variación" } });
   api.trends.detail.mockResolvedValue(null);
+  api.assets.list.mockResolvedValue([]);
+  api.images.draftBrief.mockResolvedValue({ brief: { subject: "Taza de café", setting: "Barra de madera", style: "Fotografía natural", palette: "Tonos cálidos", mood: "Cercano", avoid: "Texto sobre la imagen" }, aspect_ratios: ["1:1", "4:5", "9:16"], capability: { status: "disabled", tier: "paid", message: null, fallback: "visual_brief" }, budget: { remaining: 0, total: 0, next_reset_at: "2026-08-01T00:00:00Z" } });
+  api.images.latestJob.mockResolvedValue(null);
 }
 
 beforeEach(() => { mocks.query = "template=tpl_instagram_01"; replace.mockReset(); push.mockReset(); Object.values(api).forEach((group) => Object.values(group).forEach((value) => { if (typeof value === "function" && "mockReset" in value) value.mockReset(); })); configure(); });
@@ -154,5 +158,16 @@ describe("InstagramPostFlow", () => {
     expect(screen.getByDisplayValue(/Café frío local/)).toBeInTheDocument();
     expect(api.trends.detail).toHaveBeenCalledWith("trend-visible-1");
     expect(api.conversations.sendMessage).not.toHaveBeenCalled();
+    expect(api.images.draftBrief).not.toHaveBeenCalled();
+  });
+
+  test("offers the image step only once a post exists, and never generates on its own", async () => {
+    mocks.query = "project=project-1";
+    api.projects.get.mockResolvedValue({ id: "project-1", artifact_id: "artifact-1", source_template_id: template.id, artifact_snapshot: post });
+    render(<InstagramPostFlow />);
+    expect(await screen.findByRole("heading", { name: "4. Imagen del post" })).toBeInTheDocument();
+    await waitFor(() => expect(api.images.draftBrief).toHaveBeenCalledWith({ business_id: "business-1", publication_text: "Caption inicial", trend_title: undefined }));
+    expect(api.images.preflight).not.toHaveBeenCalled();
+    expect(api.images.createJob).not.toHaveBeenCalled();
   });
 });

@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.db.base import Base
 from app.db.session import get_database_engine_options
 from app.identity import models as identity_models  # noqa: F401
+from app.images import models as image_models  # noqa: F401
 from app.projects import models as project_models  # noqa: F401
 from app.templates import models as template_models  # noqa: F401
 from app.trends import models as trend_models  # noqa: F401

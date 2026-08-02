@@ -18,6 +18,7 @@ import app.assets.models  # noqa: F401
 import app.business.models  # noqa: F401
 import app.conversations.models  # noqa: F401
 import app.identity.models  # noqa: F401
+import app.images.models  # noqa: F401
 import app.projects.models  # noqa: F401
 import app.templates.models  # noqa: F401
 import app.trends.models  # noqa: F401
@@ -91,7 +92,7 @@ def _public_template_ids(engine) -> list[str]:
 def test_upgrade_empty_postgres_to_head(postgres_engine) -> None:
     _upgrade("head")
     with postgres_engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "021"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "022"
     assert set(_public_template_ids(postgres_engine)) == EXPECTED_TEMPLATE_IDS
 
 
@@ -604,7 +605,7 @@ def test_upgrade_from_017_adds_account_lifecycle_schema(postgres_engine) -> None
         assert connection.scalar(text("SELECT to_regclass('public.admin_audit_events')"))
         assert connection.scalar(text("SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='deletion_requested_at'"))
 
-    # 021 -> 017 must leave no trace behind, so a redeploy can replay it.
+    # head -> 017 must leave no trace behind, so a redeploy can replay it.
     command.downgrade(_alembic_config(), "017")
     with postgres_engine.connect() as connection:
         assert connection.scalar(text("SELECT to_regclass('public.account_purge_jobs')")) is None
@@ -613,7 +614,7 @@ def test_upgrade_from_017_adds_account_lifecycle_schema(postgres_engine) -> None
 
     _upgrade("head")
     with postgres_engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "021"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "022"
         assert connection.scalar(text("SELECT to_regclass('public.account_purge_jobs')"))
 
 
@@ -678,3 +679,228 @@ def test_account_lifecycle_schema_matches_the_sqlalchemy_models(postgres_engine)
         or (_diff_table(entry) == "users" and _diff_column(entry) == "deletion_requested_at")
     ]
     assert divergences == [], f"019 no coincide con los modelos: {divergences}"
+
+
+def test_image_generation_upgrade_from_021_downgrade_and_reupgrade(postgres_engine) -> None:
+    """022 must be additive over 021 and fully reversible."""
+
+    _upgrade("021")
+    with postgres_engine.connect() as connection:
+        assert connection.scalar(text("SELECT to_regclass('public.image_generation_jobs')")) is None
+        assert (
+            connection.scalar(text("SELECT to_regclass('public.image_generation_budgets')")) is None
+        )
+
+    _upgrade("022")
+    with postgres_engine.connect() as connection:
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "022"
+        assert connection.scalar(text("SELECT to_regclass('public.image_generation_jobs')"))
+        assert connection.scalar(text("SELECT to_regclass('public.image_generation_budgets')"))
+        # The worker claims the oldest queued job; that predicate must be indexed.
+        indexes = set(
+            connection.scalars(
+                text("SELECT indexname FROM pg_indexes WHERE tablename = 'image_generation_jobs'")
+            )
+        )
+    assert "ix_image_generation_jobs_status_created" in indexes
+    # A browser reload asks for the newest job of one project, never for a scan.
+    assert "ix_image_generation_jobs_workspace_project" in indexes
+
+    command.downgrade(_alembic_config(), "021")
+    with postgres_engine.connect() as connection:
+        assert connection.scalar(text("SELECT to_regclass('public.image_generation_jobs')")) is None
+        assert (
+            connection.scalar(text("SELECT to_regclass('public.image_generation_budgets')")) is None
+        )
+        # 021 keeps everything it owned before the image wave existed.
+        assert connection.scalar(text("SELECT to_regclass('public.trend_runs')"))
+
+    _upgrade("022")
+    with postgres_engine.connect() as connection:
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "022"
+        assert connection.scalar(text("SELECT to_regclass('public.image_generation_jobs')"))
+
+
+def test_image_generation_schema_matches_the_sqlalchemy_models(postgres_engine) -> None:
+    """What 022 builds must equal what the ORM declares for the tables it owns."""
+
+    _upgrade("head")
+    owned_tables = {"image_generation_jobs", "image_generation_budgets"}
+    with postgres_engine.connect() as connection:
+        context = MigrationContext.configure(connection)
+        diffs = _flatten_diffs(compare_metadata(context, Base.metadata))
+    divergences = [entry for entry in diffs if _diff_table(entry) in owned_tables]
+    assert divergences == [], f"022 no coincide con los modelos: {divergences}"
+
+
+def test_image_generation_constraints_are_enforced_by_postgres(postgres_engine) -> None:
+    """The database refuses the shapes the service refuses, not only the service."""
+
+    _upgrade("head")
+    now = datetime.now(UTC)
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            text("INSERT INTO workspaces (id, name) VALUES ('ws_img_mig', 'Migración imágenes')")
+        )
+
+    def _insert_job(ratio: str, status: str) -> None:
+        with postgres_engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO image_generation_jobs "
+                    "(id, workspace_id, status, aspect_ratio, prompt, provider, model) "
+                    "VALUES (:id, 'ws_img_mig', :status, :ratio, 'prompt', 'demo', 'demo-image-v1')"
+                ),
+                {"id": f"job_{ratio}_{status}", "ratio": ratio, "status": status},
+            )
+
+    _insert_job("1:1", "queued")
+    for ratio in ("3:2", "16:9"):
+        with pytest.raises(Exception, match="ck_image_generation_job_ratio"):
+            _insert_job(ratio, "queued")
+    with pytest.raises(Exception, match="ck_image_generation_job_status"):
+        _insert_job("4:5", "in_progress")
+
+    def _insert_budget(suffix: str, budget: int, consumed: int) -> None:
+        with postgres_engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO image_generation_budgets "
+                    "(id, workspace_id, period_start, period_end, budget, consumed) "
+                    "VALUES (:id, 'ws_img_mig', :start, :end, :budget, :consumed)"
+                ),
+                {
+                    "id": f"bud_{suffix}",
+                    "start": now,
+                    "end": now,
+                    "budget": budget,
+                    "consumed": consumed,
+                },
+            )
+
+    with pytest.raises(Exception, match="ck_image_generation_budget_consumed"):
+        _insert_budget("over", 5, 6)
+    with pytest.raises(Exception, match="ck_image_generation_budget_positive"):
+        _insert_budget("zero", 0, 0)
+
+
+def test_the_paid_boundary_survives_in_the_schema_itself(postgres_engine) -> None:
+    """The columns that stop a second paid call are not optional bookkeeping.
+
+    ``provider_started`` is the state that says "the money may already be gone".
+    The database refuses to record it without the timestamp that proves when,
+    and it never deletes a job just because the row it should refund or the
+    project it belonged to disappeared -- an orphan reference is recoverable,
+    a vanished job is not.
+    """
+
+    _upgrade("head")
+    now = datetime.now(UTC)
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            text("INSERT INTO workspaces (id, name) VALUES ('ws_img_edge', 'Frontera pagada')")
+        )
+        connection.execute(
+            text(
+                "INSERT INTO projects (id, workspace_id, business_id, name, platform, status) "
+                "VALUES ('prj_img_edge', 'ws_img_edge', 'biz_img_edge', 'Post', "
+                "'instagram', 'active')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO image_generation_budgets "
+                "(id, workspace_id, period_start, period_end, budget, consumed) "
+                "VALUES ('bud_img_edge', 'ws_img_edge', :start, :end, 10, 1)"
+            ),
+            {"start": now, "end": now},
+        )
+
+    def _insert_job(job_id: str, status: str, provider_started_at) -> None:
+        with postgres_engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO image_generation_jobs "
+                    "(id, workspace_id, project_id, budget_id, status, aspect_ratio, prompt, "
+                    "provider, model, claim_token, provider_started_at) "
+                    "VALUES (:id, 'ws_img_edge', 'prj_img_edge', 'bud_img_edge', :status, "
+                    "'4:5', 'prompt', 'demo', 'demo-image-v1', 'tok', :started)"
+                ),
+                {"id": job_id, "status": status, "started": provider_started_at},
+            )
+
+    # Claiming the job is not crossing the boundary; only the call is.
+    _insert_job("job_edge_running", "running", None)
+    with pytest.raises(Exception, match="ck_image_generation_job_provider_started"):
+        _insert_job("job_edge_blind", "provider_started", None)
+    _insert_job("job_edge_started", "provider_started", now)
+    # The ambiguous and cancelled outcomes are storable states, not strings the
+    # service invents on its way past a stricter constraint.
+    _insert_job("job_edge_cancelled", "cancelled", None)
+
+    with postgres_engine.begin() as connection:
+        connection.execute(text("DELETE FROM image_generation_budgets WHERE id = 'bud_img_edge'"))
+        connection.execute(text("DELETE FROM projects WHERE id = 'prj_img_edge'"))
+
+    with postgres_engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                "SELECT id, budget_id, project_id FROM image_generation_jobs "
+                "WHERE workspace_id = 'ws_img_edge' ORDER BY id"
+            )
+        ).all()
+    assert [row.id for row in rows] == [
+        "job_edge_cancelled",
+        "job_edge_running",
+        "job_edge_started",
+    ]
+    assert all(row.budget_id is None and row.project_id is None for row in rows)
+
+    with postgres_engine.begin() as connection:
+        connection.execute(text("DELETE FROM workspaces WHERE id = 'ws_img_edge'"))
+
+
+def test_deleting_a_workspace_takes_its_image_rows(postgres_engine) -> None:
+    """Account cleanup must not leave orphan jobs or budgets behind."""
+
+    _upgrade("head")
+    now = datetime.now(UTC)
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            text("INSERT INTO workspaces (id, name) VALUES ('ws_img_drop', 'Baja de cuenta')")
+        )
+        connection.execute(
+            text(
+                "INSERT INTO image_generation_jobs "
+                "(id, workspace_id, status, aspect_ratio, prompt, provider, model) "
+                "VALUES ('job_drop', 'ws_img_drop', 'queued', '1:1', 'p', 'demo', 'demo-image-v1')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO image_generation_budgets "
+                "(id, workspace_id, period_start, period_end, budget, consumed) "
+                "VALUES ('bud_drop', 'ws_img_drop', :start, :end, 10, 1)"
+            ),
+            {"start": now, "end": now},
+        )
+
+    with postgres_engine.begin() as connection:
+        connection.execute(text("DELETE FROM workspaces WHERE id = 'ws_img_drop'"))
+
+    with postgres_engine.connect() as connection:
+        assert (
+            connection.scalar(
+                text("SELECT count(*) FROM image_generation_jobs WHERE workspace_id='ws_img_drop'")
+            )
+            == 0
+        )
+        assert (
+            connection.scalar(
+                text(
+                    "SELECT count(*) FROM image_generation_budgets "
+                    "WHERE workspace_id='ws_img_drop'"
+                )
+            )
+            == 0
+        )

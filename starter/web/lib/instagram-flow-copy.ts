@@ -14,6 +14,201 @@ const qualityLabels = {
   quality: ["Calidad", "Quality", "Qualidade"],
 } as const;
 
+/**
+ * Every string the image step can render, in the three interface languages.
+ *
+ * The keys mirror the contract the backend exposes: one label per brief field,
+ * one per aspect ratio, one per job state and one per refusal reason, so an
+ * unavailable capability is explained instead of hidden behind a dead button.
+ */
+const imageCopy = {
+  heading: ["4. Imagen del post", "4. Post image", "4. Imagem do post"],
+  intro: [
+    "Revisa y edita el brief visual. Nada se genera hasta que lo confirmes.",
+    "Review and edit the visual brief. Nothing is generated until you confirm.",
+    "Revise e edite o brief visual. Nada é gerado até você confirmar.",
+  ],
+  briefHeading: ["Brief visual", "Visual brief", "Brief visual"],
+  briefLoading: ["Preparando el brief visual…", "Preparing the visual brief…", "Preparando o brief visual…"],
+  briefError: [
+    "No pudimos preparar el brief visual.",
+    "We could not prepare the visual brief.",
+    "Não foi possível preparar o brief visual.",
+  ],
+  subject: ["Qué se ve", "What is shown", "O que aparece"],
+  setting: ["Dónde ocurre", "Where it happens", "Onde acontece"],
+  style: ["Estilo visual", "Visual style", "Estilo visual"],
+  palette: ["Paleta de color", "Color palette", "Paleta de cores"],
+  mood: ["Ánimo", "Mood", "Clima"],
+  avoid: ["Qué evitar", "What to avoid", "O que evitar"],
+  formatHeading: ["Formato", "Format", "Formato"],
+  formatHint: [
+    "Una imagen por generación, en uno de estos tres formatos.",
+    "One image per generation, in one of these three formats.",
+    "Uma imagem por geração, em um destes três formatos.",
+  ],
+  ratioLabels: {
+    "1:1": ["Cuadrado 1:1", "Square 1:1", "Quadrado 1:1"],
+    "4:5": ["Vertical 4:5", "Portrait 4:5", "Vertical 4:5"],
+    "9:16": ["Historia 9:16", "Story 9:16", "Story 9:16"],
+  },
+  referenceHeading: ["Imagen de referencia", "Reference image", "Imagem de referência"],
+  referenceHint: [
+    "Opcional. Solo puedes usar imágenes que ya subiste a este espacio.",
+    "Optional. You can only use images already uploaded to this workspace.",
+    "Opcional. Você só pode usar imagens já enviadas para este espaço.",
+  ],
+  referenceNone: ["Sin referencia", "No reference", "Sem referência"],
+  preflight: ["Revisar antes de generar", "Review before generating", "Revisar antes de gerar"],
+  preflighting: ["Revisando…", "Reviewing…", "Revisando…"],
+  preflightHeading: ["Resumen de la generación", "Generation summary", "Resumo da geração"],
+  costHeading: ["Costo", "Cost", "Custo"],
+  costValue: ["1 imagen de tu límite diario", "1 image from your daily limit", "1 imagem do seu limite diário"],
+  budget: ["Disponible hoy", "Available today", "Disponível hoje"],
+  budgetValue: ["{remaining} de {total}", "{remaining} of {total}", "{remaining} de {total}"],
+  budgetReset: ["Se renueva el {date}", "Renews on {date}", "Renova em {date}"],
+  promptPreview: ["Descripción que se enviará", "Description that will be sent", "Descrição que será enviada"],
+  avoidPreview: ["Lo que se pedirá evitar", "What will be avoided", "O que será evitado"],
+  avoidPreviewNone: ["Nada en particular", "Nothing in particular", "Nada em particular"],
+  confirm: ["Confirmar y generar imagen", "Confirm and generate image", "Confirmar e gerar imagem"],
+  confirming: ["Enviando…", "Sending…", "Enviando…"],
+  confirmHint: [
+    "Al confirmar se descuenta una imagen de tu límite diario.",
+    "Confirming uses one image from your daily limit.",
+    "Ao confirmar, uma imagem do seu limite diário é usada.",
+  ],
+  editedAfterPreflight: [
+    "Cambiaste el brief. Vuelve a revisarlo antes de generar.",
+    "You changed the brief. Review it again before generating.",
+    "Você alterou o brief. Revise novamente antes de gerar.",
+  ],
+  statusHeading: ["Estado de la imagen", "Image status", "Status da imagem"],
+  statusQueued: ["En cola. Puedes seguir editando tu post.", "Queued. You can keep editing your post.", "Na fila. Você pode continuar editando seu post."],
+  statusRunning: ["Generando tu imagen…", "Generating your image…", "Gerando sua imagem…"],
+  statusProviderStarted: [
+    "El proveedor ya está creando tu imagen. Espera su respuesta.",
+    "The provider is already creating your image. Wait for its response.",
+    "O provedor já está criando sua imagem. Aguarde a resposta.",
+  ],
+  statusSucceeded: ["Tu imagen está lista.", "Your image is ready.", "Sua imagem está pronta."],
+  statusFailed: ["No pudimos generar la imagen.", "We could not generate the image.", "Não foi possível gerar a imagem."],
+  statusCancelled: ["La generación se canceló.", "The generation was cancelled.", "A geração foi cancelada."],
+  statusUnknown: ["Seguimos esperando una respuesta.", "We are still waiting for a response.", "Ainda estamos aguardando uma resposta."],
+  pollTimeout: [
+    "La imagen está tardando más de lo normal. Consulta el estado cuando quieras.",
+    "The image is taking longer than usual. Check the status whenever you want.",
+    "A imagem está demorando mais que o normal. Consulte o status quando quiser.",
+  ],
+  checkStatus: ["Consultar estado", "Check status", "Consultar status"],
+  retry: ["Reintentar generación", "Retry generation", "Tentar gerar novamente"],
+  altNote: [
+    "La descripción accesible de la imagen se toma de tu brief visual.",
+    "The image's accessible description comes from your visual brief.",
+    "A descrição acessível da imagem vem do seu brief visual.",
+  ],
+  linkExpires: [
+    "El enlace de la imagen es temporal y privado.",
+    "The image link is temporary and private.",
+    "O link da imagem é temporário e privado.",
+  ],
+  refreshLink: [
+    "Actualizar el enlace de la imagen",
+    "Refresh the image link",
+    "Atualizar o link da imagem",
+  ],
+  savePostFirst: [
+    "Guarda el post antes de generar la imagen, para poder recuperarla si cierras la página.",
+    "Save the post before generating the image, so you can recover it if you close the page.",
+    "Salve o post antes de gerar a imagem, para poder recuperá-la se fechar a página.",
+  ],
+  recovering: [
+    "Buscando la imagen que ya habías pedido para este post…",
+    "Looking for the image you already requested for this post…",
+    "Procurando a imagem que você já pediu para este post…",
+  ],
+  recovered: [
+    "Recuperamos la generación que ya habías iniciado para este post.",
+    "We recovered the generation you had already started for this post.",
+    "Recuperamos a geração que você já havia iniciado para este post.",
+  ],
+  fallbackHeading: ["Usa el brief visual", "Use the visual brief", "Use o brief visual"],
+  fallbackHint: [
+    "La generación no está disponible, pero este brief sirve para Canva o para tu diseñador.",
+    "Generation is unavailable, but this brief works for Canva or for your designer.",
+    "A geração não está disponível, mas este brief serve para o Canva ou para seu designer.",
+  ],
+  reason: {
+    disabled: [
+      "La generación de imágenes está desactivada en este espacio.",
+      "Image generation is turned off for this workspace.",
+      "A geração de imagens está desativada neste espaço.",
+    ],
+    unconfigured: [
+      "Todavía no hay un proveedor de imágenes configurado.",
+      "No image provider is configured yet.",
+      "Ainda não há um provedor de imagens configurado.",
+    ],
+    quota_exhausted: [
+      "Alcanzaste el límite de imágenes de hoy.",
+      "You have reached today's image limit.",
+      "Você atingiu o limite de imagens de hoje.",
+    ],
+    payment_required: [
+      "La cuenta del proveedor no tiene crédito disponible.",
+      "The provider account has no credit available.",
+      "A conta do provedor não tem crédito disponível.",
+    ],
+    restricted: [
+      "Tu plan no incluye generación de imágenes.",
+      "Your plan does not include image generation.",
+      "Seu plano não inclui geração de imagens.",
+    ],
+    degraded: [
+      "El proveedor responde con lentitud. Puedes intentarlo igualmente.",
+      "The provider is responding slowly. You can still try.",
+      "O provedor está respondendo devagar. Você ainda pode tentar.",
+    ],
+    error: [
+      "La generación de imágenes no está disponible en este momento.",
+      "Image generation is unavailable right now.",
+      "A geração de imagens não está disponível no momento.",
+    ],
+  },
+  confirmError: [
+    "No pudimos iniciar la generación.",
+    "We could not start the generation.",
+    "Não foi possível iniciar a geração.",
+  ],
+  statusError: [
+    "No pudimos consultar el estado de la imagen.",
+    "We could not check the image status.",
+    "Não foi possível consultar o status da imagem.",
+  ],
+} as const;
+
+type ImageCopyEntry = readonly [string, string, string];
+
+function localizedImageCopy(index: 0 | 1 | 2) {
+  const flat = Object.fromEntries(
+    Object.entries(imageCopy)
+      .filter(([, value]) => Array.isArray(value))
+      .map(([key, value]) => [key, (value as ImageCopyEntry)[index]])
+  ) as Record<
+    Exclude<keyof typeof imageCopy, "ratioLabels" | "reason">,
+    string
+  >;
+
+  return {
+    ...flat,
+    ratioLabels: Object.fromEntries(
+      Object.entries(imageCopy.ratioLabels).map(([key, value]) => [key, value[index]])
+    ) as Record<keyof typeof imageCopy.ratioLabels, string>,
+    reason: Object.fromEntries(
+      Object.entries(imageCopy.reason).map(([key, value]) => [key, value[index]])
+    ) as Record<keyof typeof imageCopy.reason, string>,
+  };
+}
+
 function copyAt(index: 0 | 1 | 2) {
   return {
     objectiveLabels: Object.fromEntries(
@@ -22,6 +217,7 @@ function copyAt(index: 0 | 1 | 2) {
     qualityLabels: Object.fromEntries(
       Object.entries(qualityLabels).map(([key, value]) => [key, value[index]])
     ) as Record<keyof typeof qualityLabels, string>,
+    image: localizedImageCopy(index),
   };
 }
 

@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 import app.assets.models  # noqa: F401
 import app.business.models  # noqa: F401
 import app.conversations.models  # noqa: F401
+import app.images.models  # noqa: F401
 import app.projects.models  # noqa: F401
 import app.templates.models  # noqa: F401
 import app.trends.models  # noqa: F401

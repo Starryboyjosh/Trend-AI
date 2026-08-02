@@ -66,6 +66,31 @@ def _bounded_positive_float(value: str, *, name: str, maximum: float) -> float:
     return parsed
 
 
+# A model identifier is an operator-controlled routing key, so it stays inside
+# the printable ASCII subset that provider APIs accept in a path-like slug.
+MODEL_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
+
+
+def _parse_model_allowlist(value: str) -> tuple[str, ...]:
+    """Return the deduplicated, ordered models an operator authorized to bill."""
+
+    models: list[str] = []
+    for raw in value.split(","):
+        candidate = raw.strip()
+        if not candidate:
+            continue
+        if not MODEL_IDENTIFIER.fullmatch(candidate):
+            raise RuntimeError(
+                "IMAGE_GENERATION_ALLOWED_MODELS solo admite identificadores de "
+                "modelo separados por comas."
+            )
+        if candidate not in models:
+            models.append(candidate)
+    if len(models) > 10:
+        raise RuntimeError("IMAGE_GENERATION_ALLOWED_MODELS admite hasta 10 modelos.")
+    return tuple(models)
+
+
 def _parse_rss_allowlist(value: str) -> tuple[dict[str, object], ...]:
     try:
         entries = json.loads(value)
@@ -237,6 +262,12 @@ def _validate_host(value: str, *, name: str) -> str:
 
 VALID_ENVS = {"development", "test", "staging", "production"}
 PRODUCTION_LIKE = {"staging", "production"}
+
+#: A claim must outlive the call it protects by at least this much. A provider
+#: call that is merely slow must never be declared abandoned while it is still
+#: in flight: the margin absorbs the request timeout plus the validation and
+#: the write that follow it.
+_IMAGE_LEASE_MARGIN_SECONDS = 60
 
 
 class Settings:
@@ -417,6 +448,54 @@ class Settings:
             values.get("IMAGE_GENERATION_ENABLED", "0"),
             name="IMAGE_GENERATION_ENABLED",
         )
+        self.image_provider: str = values.get("IMAGE_PROVIDER", "demo").strip().lower()
+        # The server owns the model identity. The frontend never sends a model
+        # ID: it only picks an aspect ratio, so a compromised client cannot
+        # redirect spending to an arbitrary paid model.
+        self.image_generation_model: str = values.get("IMAGE_GENERATION_MODEL", "").strip()
+        self.image_generation_allowed_models = _parse_model_allowlist(
+            values.get("IMAGE_GENERATION_ALLOWED_MODELS", "")
+        )
+        self.image_generation_daily_budget: int = _bounded_positive_int(
+            values.get("IMAGE_GENERATION_DAILY_BUDGET", "10"),
+            name="IMAGE_GENERATION_DAILY_BUDGET",
+            maximum=10_000,
+        )
+        self.image_generation_timeout_seconds: float = _bounded_positive_float(
+            values.get("IMAGE_GENERATION_TIMEOUT_SECONDS", "120"),
+            name="IMAGE_GENERATION_TIMEOUT_SECONDS",
+            maximum=600,
+        )
+        self.image_generation_max_bytes: int = _bounded_positive_int(
+            values.get("IMAGE_GENERATION_MAX_BYTES", "8_000_000"),
+            name="IMAGE_GENERATION_MAX_BYTES",
+            maximum=25_000_000,
+        )
+        self.image_generation_max_attempts: int = _bounded_positive_int(
+            values.get("IMAGE_GENERATION_MAX_ATTEMPTS", "3"),
+            name="IMAGE_GENERATION_MAX_ATTEMPTS",
+            maximum=5,
+        )
+        self.image_generation_stuck_after_seconds: int = _bounded_positive_int(
+            values.get("IMAGE_GENERATION_STUCK_AFTER_SECONDS", "900"),
+            name="IMAGE_GENERATION_STUCK_AFTER_SECONDS",
+            maximum=86_400,
+        )
+        # A preflight approval is short-lived on purpose: budget and capability
+        # can change between the estimate and the confirmation.
+        self.image_preflight_ttl_seconds: int = _bounded_positive_int(
+            values.get("IMAGE_PREFLIGHT_TTL_SECONDS", "600"),
+            name="IMAGE_PREFLIGHT_TTL_SECONDS",
+            maximum=3_600,
+        )
+        self.image_signed_url_ttl_seconds: int = _bounded_positive_int(
+            values.get("IMAGE_SIGNED_URL_TTL_SECONDS", "300"),
+            name="IMAGE_SIGNED_URL_TTL_SECONDS",
+            maximum=3_600,
+        )
+        self.run_real_images_smoke: bool = _as_bool(
+            values.get("RUN_REAL_IMAGES_SMOKE", "0"), name="RUN_REAL_IMAGES_SMOKE"
+        )
         self.video_generation_enabled: bool = _as_bool(
             values.get("VIDEO_GENERATION_ENABLED", "0"),
             name="VIDEO_GENERATION_ENABLED",
@@ -550,6 +629,24 @@ class Settings:
             or (self.rss_trends_enabled and any(feed["enabled"] for feed in self.rss_trends_allowlist))
         )
 
+    @property
+    def image_generation_configured(self) -> bool:
+        """True only when a paid image call could legitimately be issued."""
+
+        if not self.image_generation_enabled:
+            return False
+        if self.image_provider == "demo":
+            # The offline provider renders locally, so it is only a development
+            # affordance and never a production capability.
+            return self.app_env in {"development", "test"}
+        if self.image_provider == "openrouter":
+            return bool(
+                self.openrouter_api_key
+                and self.image_generation_model
+                and self.image_generation_model in self.image_generation_allowed_models
+            )
+        return False
+
     def validate_runtime_configuration(self) -> None:
         if self.app_env not in VALID_ENVS:
             raise RuntimeError(
@@ -675,6 +772,40 @@ class Settings:
                 require_https=self.is_production_like,
             )
 
+        if self.image_provider not in {"demo", "openrouter"}:
+            raise RuntimeError("IMAGE_PROVIDER no es compatible.")
+        # A claim must outlive the call it protects. If the lease could expire
+        # while a legitimate provider call is still in flight, the job would be
+        # swept as unaccounted -- or worse, reclaimed -- while it was merely
+        # slow. The margin absorbs the retries and the write that follows.
+        if (
+            self.image_generation_stuck_after_seconds
+            < self.image_generation_timeout_seconds + _IMAGE_LEASE_MARGIN_SECONDS
+        ):
+            raise RuntimeError(
+                "IMAGE_GENERATION_STUCK_AFTER_SECONDS debe superar "
+                "IMAGE_GENERATION_TIMEOUT_SECONDS por al menos "
+                f"{_IMAGE_LEASE_MARGIN_SECONDS} segundos."
+            )
+        if self.image_generation_enabled and self.image_provider == "openrouter":
+            if not self.openrouter_api_key:
+                raise RuntimeError(
+                    "OPENROUTER_API_KEY es obligatoria para IMAGE_PROVIDER=openrouter."
+                )
+            if not self.image_generation_model:
+                raise RuntimeError(
+                    "IMAGE_GENERATION_MODEL es obligatoria para IMAGE_PROVIDER=openrouter."
+                )
+            if self.image_generation_model not in self.image_generation_allowed_models:
+                raise RuntimeError(
+                    "IMAGE_GENERATION_MODEL debe estar en IMAGE_GENERATION_ALLOWED_MODELS."
+                )
+            _validate_http_url(
+                self.openrouter_base_url,
+                name="OPENROUTER_BASE_URL",
+                require_https=self.is_production_like,
+            )
+
         if self.ai_http_referer:
             _validate_http_url(
                 self.ai_http_referer,
@@ -708,6 +839,8 @@ class Settings:
             raise RuntimeError(
                 "AI_PROVIDER debe ser openai-compatible u openrouter en producción."
             )
+        if self.image_generation_enabled and self.image_provider == "demo":
+            raise RuntimeError("IMAGE_PROVIDER no puede ser demo en staging ni producción.")
         if not self.csrf_enabled:
             raise RuntimeError("CSRF_ENABLED debe ser true en staging y producción.")
 

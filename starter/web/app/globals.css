@@ -3210,3 +3210,25 @@ img { display: block; max-width: 100%; }
 .flow-notice { padding: .75rem 1rem; border-radius: var(--radius-sm); background: var(--surface-elevated); color: var(--foreground); }
 @media (max-width: 900px) { .instagram-template-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .flow-controls { grid-template-columns: 1fr 1fr; } .flow-controls > label:first-child { grid-column: 1 / -1; } }
 @media (max-width: 600px) { .instagram-flow { width: min(100% - 1rem, 70rem); padding-top: 1rem; } .instagram-flow > header { display: grid; } .instagram-template-grid, .flow-controls { grid-template-columns: 1fr; } .flow-controls > label:first-child { grid-column: auto; } .flow-actions { display: grid; } .flow-actions button { width: 100%; } }
+
+/* WAVE-011 — image generation step, inside the Instagram flow. */
+.image-step { display: grid; gap: 1rem; }
+.image-step > div, .image-step fieldset, .image-step > label { min-width: 0; }
+.image-reference { display: grid; gap: .45rem; min-width: 0; }
+.image-reference label { font-weight: 600; }
+.image-alt { color: var(--muted-foreground); }
+.image-step fieldset { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem; margin: 0; display: grid; gap: .75rem; }
+.image-step legend { font-weight: 600; padding: 0 .35rem; }
+.image-brief { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.image-brief textarea { min-height: 4rem; }
+.image-ratios [role="radiogroup"] { display: flex; flex-wrap: wrap; gap: .6rem; }
+.image-ratios [role="radio"] { min-height: 2.65rem; padding: .5rem 1rem; border: 2px solid var(--border); border-radius: var(--radius-md); background: var(--background); color: inherit; font: inherit; cursor: pointer; }
+.image-ratios [role="radio"][data-selected="true"] { border-color: var(--primary); outline: 2px solid color-mix(in srgb, var(--primary) 22%, transparent); }
+.image-preflight, .image-job, .image-fallback { display: grid; gap: .75rem; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-elevated); padding: 1rem; min-width: 0; }
+.image-preflight h3, .image-job h3, .image-fallback h3, .image-preflight p, .image-job p, .image-fallback p { margin: 0; }
+.image-preflight textarea { min-height: 6rem; }
+.image-actions, .image-job-actions { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
+.image-actions button, .image-job-actions button { min-height: 2.65rem; }
+.image-result { display: block; width: 100%; max-width: 24rem; height: auto; border-radius: var(--radius-md); }
+.image-step :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+@media (max-width: 600px) { .image-brief { grid-template-columns: 1fr; } .image-actions, .image-job-actions { display: grid; } .image-actions button, .image-job-actions button { width: 100%; } .image-result { max-width: 100%; } }
