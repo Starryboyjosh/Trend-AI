@@ -119,6 +119,9 @@ class PendingSignup(Base):
     current_step: Mapped[str] = mapped_column(String(32), nullable=False, default="business")
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    beta_invite_id: Mapped[str | None] = mapped_column(
+        ForeignKey("beta_invites.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completion_idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)

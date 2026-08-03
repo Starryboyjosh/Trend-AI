@@ -115,7 +115,7 @@ jobs:
           PYTHONPATH=. python -m alembic upgrade head
           PYTHONPATH=. python -m alembic current
 
-      - name: Confirmar revisión 024
+      - name: Confirmar revisión 025
         run: |
           python - <<'PY'
           import os
@@ -129,8 +129,8 @@ jobs:
                   text("SELECT version_num FROM alembic_version")
               )
 
-          assert revision == "024", (
-              f"Revisión inesperada: {revision!r}. Se esperaba '024'."
+          assert revision == "025", (
+              f"Revisión inesperada: {revision!r}. Se esperaba '025'."
           )
 
           print(f"Alembic revision: {revision}")
@@ -181,3 +181,9 @@ jobs:
 
       - name: Ejecutar build
         run: npm run web:build
+
+      - name: Instalar Chromium para aceptación desktop y móvil
+        run: npx playwright install --with-deps chromium
+
+      - name: Ejecutar smoke browser de beta desktop y móvil
+        run: npm run web:test:e2e:beta

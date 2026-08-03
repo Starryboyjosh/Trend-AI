@@ -29,6 +29,7 @@ from app.domain.models import Category, Objective, Platform, Tone
 from app.providers.factory import get_content_provider
 from app.services.ai_usage import outcome_for_error, record_usage
 from app.services.generate_advice import GenerateAdviceService
+from app.services.usage_policy import ensure_generation_allowed
 
 router = APIRouter(prefix="/businesses", tags=["business"])
 
@@ -185,6 +186,7 @@ async def generate_advisor_endpoint(
     try:
         await get_business(db, workspace_id, business_id)
         route = await CapabilityRegistry().resolve(Capability.ADVISOR, body.quality_level)
+        await ensure_generation_allowed(db, workspace_id=workspace_id)
         provider = get_content_provider(quality_level=route.quality_level)
         service = GenerateAdviceService(SqlBusinessContextRepository(db), provider)
         provider_called = True

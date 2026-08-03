@@ -563,8 +563,14 @@ a {
   font-size: 0.9rem;
   font-weight: 700;
 }
+.auth-field-hint {
+  color: var(--muted-foreground);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
 .auth-form input,
-.auth-form select {
+.auth-form select,
+.auth-form textarea {
   width: 100%;
   min-height: 2.9rem;
   padding: 0.65rem 0.75rem;
@@ -572,6 +578,9 @@ a {
   background: var(--input);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
+}
+.auth-form textarea {
+  resize: vertical;
 }
 .auth-form button {
   min-height: 3rem;
@@ -586,6 +595,31 @@ a {
   color: var(--danger);
   font-size: 0.9rem;
   font-weight: 600;
+}
+.auth-success {
+  margin: 0;
+  color: var(--success);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.legal-page {
+  justify-content: flex-start;
+  gap: 0.8rem;
+}
+.legal-page h2 {
+  margin: 1rem 0 0;
+  color: var(--ht-ink-950);
+  font-family: var(--font-heading);
+  font-size: 1.15rem;
+}
+.legal-page p {
+  margin: 0;
+  color: var(--muted-foreground);
+  line-height: 1.65;
+}
+.legal-page a {
+  color: var(--primary);
+  font-weight: 700;
 }
 .auth-register-prompt {
   margin: 1.5rem 0 0;

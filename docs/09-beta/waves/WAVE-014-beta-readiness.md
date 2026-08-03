@@ -104,3 +104,36 @@ SLOs modestos y explícitos; no afirmar SLA de servicios free.
 
 
 No hacer commit ni push. Dejar el working tree revisable.
+
+## Estado de implementación — 2026-08-02
+
+La wave quedó implementada como una beta cerrada operable, con límites
+explícitos:
+
+- monitoreo HTTP local, endpoint Prometheus, request IDs y error tracker por
+  interfaz; la entrega de alertas externas sigue siendo responsabilidad del
+  despliegue;
+- backup SQLite/PostgreSQL, manifiesto SHA-256 y restore drill seguro;
+- recuperación de contraseña de un solo uso con adaptadores demo/Resend;
+- decisión de verificación de correo `disabled` para beta cero-costo; Google
+  sólo se habilita cuando el operador configura OAuth, y no se presenta como
+  integración disponible por defecto;
+- invitaciones de beta con hash, expiración, asociación opcional a correo,
+  revocación y CLI auditada;
+- feedback, reportes de abuso, páginas versionadas de privacidad/términos y
+  ruta de soporte;
+- presupuesto mensual en modo `soft` o `hard`, compensación administrativa
+  auditada y pruebas de frontend desktop/móvil.
+
+### Checklist de entrega
+
+- [x] Restore automatizado y drill documentado.
+- [x] Alertas de error/costo representadas en métricas y configuración.
+- [x] Cost cap antes de generación en `hard`.
+- [x] Privacy y terms versionados y enlazados desde la UI.
+- [x] Support path de feedback y abuso.
+- [x] Beta test: smoke, carga pequeña, Playwright desktop/móvil y checklist de
+  tester real.
+- [x] Threat review documentado con riesgos aceptados y decisión de apertura.
+- [ ] Restauración de PostgreSQL de staging ejecutada por el operador: requiere
+  acceso a la base y queda como gate antes de invitar testers externos.

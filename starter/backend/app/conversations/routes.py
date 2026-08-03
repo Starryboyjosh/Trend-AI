@@ -50,6 +50,7 @@ from app.providers.factory import get_content_provider
 from app.services.ai_usage import outcome_for_error, record_usage
 from app.services.generate_short_video_script import GenerateShortVideoScriptService
 from app.services.generate_social_post import GenerateSocialPostService
+from app.services.usage_policy import ensure_generation_allowed
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 SupportedGenerationIntent = Literal[
@@ -370,6 +371,7 @@ async def send_message_endpoint(
         biz_repo = SqlBusinessContextRepository(db)
         art_repo = SqlArtifactRepository(db)
         route = await CapabilityRegistry().resolve(Capability.COPYWRITER, body.quality_level)
+        await ensure_generation_allowed(db, workspace_id=workspace_id)
         provider = get_content_provider(quality_level=route.quality_level)
         artifact: GeneratedSocialPost | GeneratedShortVideoScript
         assistant_intent: str

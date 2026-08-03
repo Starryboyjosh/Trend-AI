@@ -18,6 +18,7 @@ import app.projects.models  # noqa: F401
 import app.social.models  # noqa: F401
 import app.templates.models  # noqa: F401
 import app.trends.models  # noqa: F401
+from app.conversations.models import AIUsageEvent
 from app.db.base import Base
 from app.dependencies import get_db
 from app.identity.models import (
@@ -33,6 +34,13 @@ from app.identity.models import (
     WorkspaceMember,
 )
 from app.main import app
+from app.operations.models import (
+    AbuseReport,
+    BetaInvite,
+    PasswordResetToken,
+    ProductFeedback,
+    UsageAdjustment,
+)
 from app.social.models import SocialConnection
 from app.templates.repository import seed_templates
 
@@ -77,7 +85,13 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
         token = "test-session-token"
         async with _TestingSessionFactory() as session:
             for model in (
+                AbuseReport,
+                ProductFeedback,
+                UsageAdjustment,
+                AIUsageEvent,
+                PasswordResetToken,
                 AccountPurgeJob,
+                BetaInvite,
                 SocialConnection,
                 AdminAuditEvent,
                 AuthSession,

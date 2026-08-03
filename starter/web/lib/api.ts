@@ -200,6 +200,14 @@ export interface UsageItem {
 
 export type DeletionStatus = "pending" | "processing" | "completed" | "failed";
 
+export interface BetaPolicies {
+  privacy: { version: string; path: string; retention_days: number };
+  terms: { version: string; path: string };
+  support: { email: string; path: string };
+  email_verification: "disabled" | "optional" | "required";
+  closed_beta: boolean;
+}
+
 const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 const DEFAULT_MAX_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 250;
@@ -982,6 +990,33 @@ function parseJsonBody(
 const BASE = "/api/v1";
 
 export const api = {
+  operations: {
+    policies(): Promise<BetaPolicies> {
+      return request<BetaPolicies>(`${BASE}/policies`);
+    },
+    feedback(data: {
+      category: "bug" | "idea" | "support" | "other";
+      message: string;
+      rating?: number;
+    }, options: Pick<ApiRequestOptions, "idempotencyKey"> = {}) {
+      return request<{ id: string; status: string }>(`${BASE}/feedback`, {
+        method: "POST",
+        idempotencyKey: options.idempotencyKey,
+        body: JSON.stringify(data),
+      });
+    },
+    abuseReport(data: {
+      category: "unsafe_content" | "spam" | "harassment" | "other";
+      message: string;
+      resource_id?: string;
+    }) {
+      return request<{ id: string; status: string }>(`${BASE}/abuse/reports`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+  },
+
   capabilities: {
     get(): Promise<PublicCapabilities> {
       return request<PublicCapabilities>(`${BASE}/capabilities`);
@@ -1600,6 +1635,7 @@ export const api = {
       name: string;
       password: string;
       workspace_name: string;
+      invite_code?: string;
     }) {
       return resetCsrfAfter(
         request(`${BASE}/auth/register`, {
@@ -1619,6 +1655,25 @@ export const api = {
           body: JSON.stringify(data),
         })
       );
+    },
+
+    passwordReset: {
+      request(email: string) {
+        return resetCsrfAfter(
+          request<{ message: string }>(`${BASE}/auth/password-reset/request`, {
+            method: "POST",
+            body: JSON.stringify({ email }),
+          })
+        );
+      },
+      confirm(token: string, password: string) {
+        return resetCsrfAfter(
+          request<{ status: "reset" }>(`${BASE}/auth/password-reset/confirm`, {
+            method: "POST",
+            body: JSON.stringify({ token, password }),
+          })
+        );
+      },
     },
 
     google: {
@@ -1641,6 +1696,7 @@ export const api = {
         name: string;
         password: string;
         interface_locale: "es" | "en" | "pt";
+        invite_code?: string;
       }) {
         return resetCsrfAfter(
           request<SignupProgress>(

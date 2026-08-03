@@ -134,6 +134,10 @@ Para beta:
 - inventario de objetos Storage;
 - política de retención.
 
+La imagen backend instala `postgresql-client` para que `scripts/backup.py` y
+`scripts/restore_drill.py` puedan ejecutarse como release/cron commands. El
+cliente no sustituye un backup administrado ni una restauración probada.
+
 No afirmar “backup listo” hasta restaurarlo.
 
 ## 8. Checklist de una nueva máquina

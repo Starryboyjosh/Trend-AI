@@ -3,14 +3,13 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-import os
 import secrets
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Literal
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Cookie, Depends, Header, Response
+from fastapi import APIRouter, Cookie, Depends, Header, Request, Response
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field, ValidationError, model_validator
 from sqlalchemy import delete, func, select
@@ -71,6 +70,15 @@ from app.identity.models import (
     Workspace,
     WorkspaceMember,
 )
+from app.identity.password_reset import (
+    PASSWORD_RESET_MESSAGE,
+    confirm_password_reset,
+    request_password_reset,
+)
+from app.identity.passwords import hash_password, verify_password
+from app.operations.invites import redeem_invite, resolve_invite
+from app.operations.models import BetaInvite
+from app.services.usage_policy import usage_limit_snapshot
 
 router = APIRouter(prefix="/auth", tags=["identity"])
 
@@ -82,18 +90,11 @@ InterfaceLocale = Literal["es", "en", "pt"]
 
 
 def _hash_password(password: str, salt: bytes | None = None) -> str:
-    salt = salt or os.urandom(16)
-    digest = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=2**14, r=8, p=1)
-    return f"scrypt${salt.hex()}${digest.hex()}"
+    return hash_password(password, salt)
 
 
 def _verify_password(password: str, encoded: str) -> bool:
-    try:
-        _, salt_hex, _ = encoded.split("$", 2)
-        candidate = _hash_password(password, bytes.fromhex(salt_hex))
-    except (ValueError, TypeError):
-        return False
-    return hmac.compare_digest(candidate, encoded)
+    return verify_password(password, encoded)
 
 
 def _token_hash(token: str) -> str:
@@ -213,11 +214,21 @@ class RegisterRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     password: str = Field(min_length=12, max_length=256)
     workspace_name: str = Field(min_length=1, max_length=120)
+    invite_code: str | None = Field(None, min_length=12, max_length=128)
 
 
 class LoginRequest(BaseModel):
     email: str = Field(min_length=3, max_length=255)
     password: str = Field(min_length=1, max_length=256)
+
+
+class PasswordResetRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=255)
+
+
+class PasswordResetConfirmRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=256)
+    password: str = Field(min_length=12, max_length=256)
 
 
 class UpdateAccountRequest(BaseModel):
@@ -241,6 +252,7 @@ class SignupStartRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     password: str = Field(min_length=12, max_length=256)
     interface_locale: InterfaceLocale = "es"
+    invite_code: str | None = Field(None, min_length=12, max_length=128)
 
 
 class SignupBusinessDraft(BaseModel):
@@ -391,6 +403,15 @@ async def register(
     body: RegisterRequest, response: Response, db: AsyncSession = Depends(get_db)
 ) -> dict[str, object]:
     email = body.email.casefold().strip()
+    invite: BetaInvite | None = None
+    if settings.beta_invites_enabled:
+        if not body.invite_code:
+            raise AppError(
+                "BETA_INVITE_REQUIRED",
+                "Esta beta requiere una invitación.",
+                status_code=403,
+            )
+        invite = await resolve_invite(db, code=body.invite_code, email=email, lock=True)
     existing = await db.execute(select(User).where(User.email == email))
     if existing.scalar_one_or_none() is not None:
         raise AppError("EMAIL_IN_USE", "No se pudo crear la cuenta.", status_code=409)
@@ -399,6 +420,8 @@ async def register(
     db.add_all([user, workspace])
     await db.flush()
     db.add(WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role="owner"))
+    if invite is not None:
+        await redeem_invite(db, invite)
     token = await _create_session(db, user.id)
     await db.commit()
     set_session_cookie(response, token)
@@ -408,6 +431,31 @@ async def register(
         "user": {"id": user.id, "name": user.name, "email": user.email},
         "workspace": {"id": workspace.id, "name": workspace.name, "role": "owner"},
     }
+
+
+@router.post("/password-reset/request", status_code=202)
+async def request_password_reset_endpoint(
+    body: PasswordResetRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Start recovery without revealing whether the address exists."""
+
+    await request_password_reset(
+        db,
+        email=body.email,
+        requested_ip=request.client.host if request.client else None,
+    )
+    return {"message": PASSWORD_RESET_MESSAGE}
+
+
+@router.post("/password-reset/confirm")
+async def confirm_password_reset_endpoint(
+    body: PasswordResetConfirmRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    await confirm_password_reset(db, token=body.token, password=body.password)
+    return {"status": "reset"}
 
 
 @router.get("/google/status")
@@ -526,6 +574,16 @@ async def start_signup(
     await _reject_authenticated_signup(db, session_token)
     now = datetime.now(UTC)
     email = body.email.casefold().strip()
+    invite_id: str | None = None
+    if settings.beta_invites_enabled:
+        if not body.invite_code:
+            raise AppError(
+                "BETA_INVITE_REQUIRED",
+                "Esta beta requiere una invitación.",
+                status_code=403,
+            )
+        invite = await resolve_invite(db, code=body.invite_code, email=email)
+        invite_id = invite.id
     await db.execute(
         delete(PendingSignup).where(
             PendingSignup.completed_at.is_(None), PendingSignup.expires_at <= now
@@ -545,6 +603,7 @@ async def start_signup(
         name=body.name.strip(),
         password_hash=_hash_password(body.password),
         interface_locale=body.interface_locale,
+        beta_invite_id=invite_id,
         token_hash=_token_hash(token),
         expires_at=now + SIGNUP_TTL,
     )
@@ -645,6 +704,30 @@ async def complete_signup(
     await _reject_authenticated_signup(db, session_token)
     business_draft, channels_draft, brand_draft = _validated_complete_draft(_load_draft(pending))
     try:
+        invite: BetaInvite | None = None
+        if settings.beta_invites_enabled:
+            invite = await db.scalar(
+                select(BetaInvite).where(BetaInvite.id == pending.beta_invite_id).with_for_update()
+            )
+            if invite is None or invite.status != "active":
+                raise AppError(
+                    "BETA_INVITE_INVALID",
+                    "La invitación de beta ya no está disponible.",
+                    status_code=403,
+                )
+            if invite.expires_at is not None and _datetime_is_expired(invite.expires_at):
+                invite.status = "revoked"
+                raise AppError(
+                    "BETA_INVITE_EXPIRED",
+                    "La invitación de beta expiró.",
+                    status_code=403,
+                )
+            if invite.email_normalized and invite.email_normalized != pending.email_normalized:
+                raise AppError(
+                    "BETA_INVITE_INVALID",
+                    "La invitación de beta no está asociada a este correo.",
+                    status_code=403,
+                )
         existing = await db.execute(select(User).where(User.email == pending.email_normalized))
         if existing.scalar_one_or_none() is not None:
             raise AppError("EMAIL_IN_USE", "No se pudo crear la cuenta.", status_code=409)
@@ -696,6 +779,8 @@ async def complete_signup(
         }
         pending.completed_at = datetime.now(UTC)
         pending.current_step = "completed"
+        if invite is not None:
+            await redeem_invite(db, invite)
         pending.completion_idempotency_key = idempotency_key
         pending.completion_response_json = json.dumps(result, ensure_ascii=False, sort_keys=True)
         await db.commit()
@@ -837,7 +922,12 @@ async def account_usage(
                 "currency": row.currency,
             }
         )
-    return {"period_days": USAGE_PERIOD_DAYS, "items": items}
+    payload: dict[str, object] = {"period_days": USAGE_PERIOD_DAYS, "items": items}
+    # Preserve the original compact response when the cap is disabled. The
+    # optional block is shown only for a configured beta budget.
+    if settings.monthly_ai_budget_usd > 0:
+        payload["limit"] = await usage_limit_snapshot(db, workspace_id=workspace_id)
+    return payload
 
 
 @router.post("/account/delete", status_code=202)

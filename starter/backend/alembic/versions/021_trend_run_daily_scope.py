@@ -18,7 +18,10 @@ Revises: 020
 
 from __future__ import annotations
 
+import json
+from collections import defaultdict
 from collections.abc import Sequence
+from datetime import UTC, datetime
 
 import sqlalchemy as sa
 
@@ -34,11 +37,219 @@ CONSOLIDATION_TABLE = "trend_run_daily_scope_consolidation_021"
 REFRESH_ENDPOINT = "POST:/trends/refresh"
 
 
+def _parse_datetime(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    else:
+        return None
+    if parsed.tzinfo is not None:
+        return parsed.astimezone(UTC).replace(tzinfo=None)
+    return parsed
+
+
+def _timestamp(value: datetime | None) -> float:
+    if value is None:
+        return float("-inf")
+    return value.replace(tzinfo=UTC).timestamp()
+
+
+def _source_set(value: object) -> set[str]:
+    try:
+        payload = json.loads(value) if isinstance(value, str) else value
+    except (TypeError, json.JSONDecodeError):
+        return set()
+    if not isinstance(payload, list):
+        return set()
+    return {str(item) for item in payload if item is not None}
+
+
+def _sqlite_upgrade(connection: sa.Connection) -> None:
+    """Apply 021 without PostgreSQL-only JSON/window syntax.
+
+    SQLite is the credential-free demo database. The PostgreSQL path below is
+    intentionally kept unchanged for the larger, set-based migration, while
+    this branch performs the same bounded consolidation in Python so a fresh
+    demo install can still run every migration to head.
+    """
+
+    connection.execute(
+        sa.text(
+            """
+            UPDATE trend_runs
+            SET
+                region = upper(trim(region)),
+                category = nullif(lower(trim(category)), ''),
+                window_start = datetime(started_at, 'start of day')
+            """
+        )
+    )
+    rows = [
+        dict(row)
+        for row in connection.execute(
+            sa.text(
+                """
+                SELECT id, region, category, status, sources_attempted,
+                       sources_succeeded, sources_failed, started_at, finished_at,
+                       window_start
+                FROM trend_runs
+                """
+            )
+        ).mappings()
+    ]
+    scopes: defaultdict[tuple[str, str, str | None], list[dict[str, object]]] = defaultdict(list)
+    for row in rows:
+        category = row["category"]
+        scopes[(str(row["window_start"]), str(row["region"]), category if category is None else str(category))].append(row)
+
+    status_rank = {"completed": 0, "partial": 1, "processing": 2, "pending": 3}
+    mapping: dict[str, str] = {}
+    duplicate_groups: list[tuple[dict[str, object], list[dict[str, object]]]] = []
+    for members in scopes.values():
+        if len(members) < 2:
+            continue
+        members.sort(
+            key=lambda row: (
+                status_rank.get(str(row["status"]), 4),
+                0 if _parse_datetime(row["finished_at"]) is not None else 1,
+                -_timestamp(_parse_datetime(row["finished_at"])),
+                -_timestamp(_parse_datetime(row["started_at"])),
+                str(row["id"]),
+            )
+        )
+        survivor = members[0]
+        removed = members[1:]
+        duplicate_groups.append((survivor, members))
+        for row in removed:
+            mapping[str(row["id"])] = str(survivor["id"])
+
+    evidence_by_run: defaultdict[str, set[str]] = defaultdict(set)
+    evidence_sources_by_run: defaultdict[str, set[str]] = defaultdict(set)
+    for link in connection.execute(
+        sa.text(
+            """
+            SELECT links.trend_run_id, links.trend_evidence_id, evidence.source
+            FROM trend_run_evidence AS links
+            JOIN trend_evidence AS evidence
+              ON evidence.id = links.trend_evidence_id
+            """
+        )
+    ).mappings():
+        run_id = str(link["trend_run_id"])
+        evidence_by_run[run_id].add(str(link["trend_evidence_id"]))
+        evidence_sources_by_run[run_id].add(str(link["source"]))
+
+    for removed_id, survivor_id in mapping.items():
+        for evidence_id in evidence_by_run[removed_id]:
+            connection.execute(
+                sa.text(
+                    """
+                    INSERT OR IGNORE INTO trend_run_evidence
+                        (trend_run_id, trend_evidence_id)
+                    VALUES (:survivor_id, :evidence_id)
+                    """
+                ),
+                {"survivor_id": survivor_id, "evidence_id": evidence_id},
+            )
+
+    for survivor, members in duplicate_groups:
+        attempted: set[str] = set()
+        succeeded: set[str] = set()
+        failed: set[str] = set()
+        survivor_id = str(survivor["id"])
+        for member in members:
+            attempted.update(_source_set(member["sources_attempted"]))
+            succeeded.update(_source_set(member["sources_succeeded"]))
+            failed.update(_source_set(member["sources_failed"]))
+            succeeded.update(evidence_sources_by_run[str(member["id"])])
+        failed.difference_update(succeeded)
+        attempted.update(succeeded)
+        connection.execute(
+            sa.text(
+                """
+                UPDATE trend_runs
+                SET sources_attempted = :attempted,
+                    sources_succeeded = :succeeded,
+                    sources_failed = :failed
+                WHERE id = :survivor_id
+                """
+            ),
+            {
+                "attempted": json.dumps(sorted(attempted)),
+                "succeeded": json.dumps(sorted(succeeded)),
+                "failed": json.dumps(sorted(failed)),
+                "survivor_id": survivor_id,
+            },
+        )
+
+    if mapping:
+        for record in connection.execute(
+            sa.text(
+                """
+                SELECT id, response_json
+                FROM idempotency_records
+                WHERE endpoint = :endpoint
+                  AND status = 'completed'
+                  AND response_json IS NOT NULL
+                """
+            ),
+            {"endpoint": REFRESH_ENDPOINT},
+        ).mappings():
+            try:
+                document = json.loads(record["response_json"])
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if not isinstance(document, dict):
+                continue
+            old_id = document.get("id")
+            if old_id not in mapping:
+                continue
+            document["id"] = mapping[old_id]
+            connection.execute(
+                sa.text(
+                    "UPDATE idempotency_records SET response_json = :response_json WHERE id = :id"
+                ),
+                {
+                    "id": record["id"],
+                    "response_json": json.dumps(document, ensure_ascii=False),
+                },
+            )
+
+        for removed_id in mapping:
+            connection.execute(
+                sa.text("DELETE FROM trend_run_evidence WHERE trend_run_id = :run_id"),
+                {"run_id": removed_id},
+            )
+            connection.execute(
+                sa.text("DELETE FROM trend_runs WHERE id = :run_id"),
+                {"run_id": removed_id},
+            )
+
+    # SQLite cannot express PostgreSQL's NULLS NOT DISTINCT unique constraint.
+    # Coalescing category preserves the intended one-row-per-null-category
+    # scope and keeps the application invariant enforceable after migration.
+    with op.batch_alter_table("trend_runs", recreate="always") as batch:
+        batch.alter_column("window_start", nullable=False)
+    op.execute(
+        """
+        CREATE UNIQUE INDEX uq_trend_run_daily_scope
+        ON trend_runs(window_start, region, coalesce(category, ''))
+        """
+    )
+
+
 def upgrade() -> None:
     op.add_column(
         "trend_runs",
         sa.Column("window_start", sa.DateTime(timezone=True), nullable=True),
     )
+    if op.get_bind().dialect.name == "sqlite":
+        _sqlite_upgrade(op.get_bind())
+        return
     op.execute(
         """
         UPDATE trend_runs
@@ -267,6 +478,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if op.get_bind().dialect.name == "sqlite":
+        op.drop_index("uq_trend_run_daily_scope", table_name="trend_runs")
+        with op.batch_alter_table("trend_runs", recreate="always") as batch:
+            batch.drop_column("window_start")
+        return
     op.drop_constraint(
         "uq_trend_run_daily_scope",
         "trend_runs",

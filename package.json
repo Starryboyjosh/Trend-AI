@@ -15,6 +15,12 @@
     "validate:e2e": "bash scripts/validate-e2e.sh",
     "backend:dev": "cd starter/backend && PYTHONPATH=. python -m alembic upgrade head && PYTHONPATH=. python -m uvicorn app.main:app --reload --port 8000",
     "backend:test": "PYTHONPATH=starter/backend python -m pytest starter/backend/tests",
+    "beta:check": "python scripts/beta_readiness_check.py",
+    "beta:load-smoke": "python scripts/load_smoke.py",
+    "backup": "PYTHONPATH=starter/backend python scripts/backup.py",
+    "restore:drill": "PYTHONPATH=starter/backend python scripts/restore_drill.py",
+    "web:test:e2e": "npm run test:e2e -w starter/web",
+    "web:test:e2e:beta": "npm run test:e2e -w starter/web -- tests/e2e/beta-readiness.spec.ts",
     "dev": "npx --yes concurrently \"npm run web:dev\" \"npm run backend:dev\""
   }
 }

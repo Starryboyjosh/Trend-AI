@@ -19,6 +19,7 @@ export default function RegisterPage() {
     name: "",
     email: "",
     password: "",
+    inviteCode: "",
     interfaceLocale: readStoredLocale() as InterfaceLocale,
   });
   const [error, setError] = useState("");
@@ -35,6 +36,7 @@ export default function RegisterPage() {
         password: form.password,
         name: form.name.trim(),
         interface_locale: form.interfaceLocale,
+        invite_code: form.inviteCode.trim() || undefined,
       });
       router.replace(routes.onboarding);
     } catch (reason) {
@@ -101,6 +103,18 @@ export default function RegisterPage() {
               required
               minLength={12}
               autoComplete="new-password"
+            />
+          </label>
+          <label htmlFor="invite-code">
+            Código de invitación <span className="auth-field-hint">(si aplica)</span>
+            <input
+              id="invite-code"
+              value={form.inviteCode}
+              onChange={(event) =>
+                setForm({ ...form, inviteCode: event.target.value })
+              }
+              autoComplete="one-time-code"
+              placeholder="Código de beta"
             />
           </label>
           <label htmlFor="interface-locale">

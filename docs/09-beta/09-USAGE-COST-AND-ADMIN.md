@@ -56,7 +56,9 @@ No usar comando secreto incrustado en el navegador.
 CLI:
 
 ```bash
-python -m app.admin.usage reset --email demo@example.com --reason "feria"
+python -m app.admin.usage reset \
+  --email demo@example.com --actor ops@example.com \
+  --reason "feria" --confirm RESET_USAGE
 ```
 
 Requisitos:

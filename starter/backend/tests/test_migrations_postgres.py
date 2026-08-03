@@ -94,7 +94,7 @@ def _public_template_ids(engine) -> list[str]:
 def test_upgrade_empty_postgres_to_head(postgres_engine) -> None:
     _upgrade("head")
     with postgres_engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "024"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "025"
         assert connection.scalar(text("SELECT to_regclass('public.video_generation_jobs')"))
         assert connection.scalar(text("SELECT to_regclass('public.video_generation_budgets')"))
         assert connection.scalar(
@@ -665,7 +665,7 @@ def test_upgrade_from_017_adds_account_lifecycle_schema(postgres_engine) -> None
 
     _upgrade("head")
     with postgres_engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "024"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "025"
         assert connection.scalar(text("SELECT to_regclass('public.account_purge_jobs')"))
 
 
@@ -1370,3 +1370,27 @@ def test_video_generation_024_roundtrip_and_durable_constraints(postgres_engine)
             )
             == 0
         )
+
+
+def test_beta_readiness_schema_matches_the_declared_models(postgres_engine) -> None:
+    """Wave 14 tables and the invite foreign key must not drift from ORM metadata."""
+
+    _upgrade("head")
+    owned_tables = {
+        "beta_invites",
+        "password_reset_tokens",
+        "product_feedback",
+        "abuse_reports",
+        "usage_adjustments",
+    }
+    with postgres_engine.connect() as connection:
+        context = MigrationContext.configure(connection)
+        diffs = _flatten_diffs(compare_metadata(context, Base.metadata))
+
+    divergences = [
+        entry
+        for entry in diffs
+        if _diff_table(entry) in owned_tables
+        or (_diff_table(entry) == "pending_signups" and _diff_column(entry) == "beta_invite_id")
+    ]
+    assert divergences == [], f"025 no coincide con los modelos: {divergences}"

@@ -2,6 +2,10 @@ export const routes = {
   home: "/",
   login: "/login",
   register: "/register",
+  resetPassword: "/reset-password",
+  privacy: "/privacy",
+  terms: "/terms",
+  feedback: "/feedback",
   onboarding: "/onboarding",
   dashboard: "/dashboard",
   templates: "/templates",
@@ -16,6 +20,7 @@ const protectedExactPaths = new Set<string>([
   routes.templates,
   routes.studioNew,
   routes.settings,
+  routes.feedback,
 ]);
 
 export function isSafeNextPath(

@@ -127,6 +127,9 @@ function LoginForm() {
             </button>
           </form>
           <p className="auth-register-prompt">
+            <Link href={routes.resetPassword}>¿Olvidaste tu contraseña?</Link>
+          </p>
+          <p className="auth-register-prompt">
             {copy.noAccount} <Link href={routes.register}>{copy.registerLink}</Link>
           </p>
         </section>

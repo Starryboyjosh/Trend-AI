@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import binascii
 import json
+import math
 import re
 from collections.abc import Mapping
 from ipaddress import ip_address, ip_network
@@ -65,6 +66,16 @@ def _bounded_positive_float(value: str, *, name: str, maximum: float) -> float:
     parsed = _positive_float(value, name=name)
     if parsed > maximum:
         raise RuntimeError(f"{name} debe ser menor o igual que {maximum}.")
+    return parsed
+
+
+def _bounded_non_negative_float(value: str, *, name: str, maximum: float) -> float:
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise RuntimeError(f"{name} debe ser un número válido.") from exc
+    if not math.isfinite(parsed) or parsed < 0 or parsed > maximum:
+        raise RuntimeError(f"{name} debe estar entre 0 y {maximum}.")
     return parsed
 
 
@@ -444,6 +455,93 @@ class Settings:
         self.frontend_url: str = (
             values.get("FRONTEND_URL", "http://localhost:3000").strip().rstrip("/")
         )
+        # Beta operations are deliberately adapter-based. ``demo`` email is
+        # useful for local/tests because it records an in-memory delivery, but
+        # it can never become a production provider by accident.
+        self.email_provider: str = values.get(
+            "EMAIL_PROVIDER",
+            "demo" if self.app_env in {"development", "test"} else "disabled",
+        ).strip().lower()
+        self.email_from: str = values.get("EMAIL_FROM", "HiTrendy <no-reply@hitrendy.local>").strip()
+        self.resend_api_key: str = values.get("RESEND_API_KEY", "").strip()
+        self.email_timeout_seconds: float = _bounded_positive_float(
+            values.get("EMAIL_TIMEOUT_SECONDS", "10"),
+            name="EMAIL_TIMEOUT_SECONDS",
+            maximum=60,
+        )
+        self.password_reset_ttl_seconds: int = _bounded_positive_int(
+            values.get("PASSWORD_RESET_TTL_SECONDS", "3600"),
+            name="PASSWORD_RESET_TTL_SECONDS",
+            maximum=86_400,
+        )
+        self.password_reset_url: str = values.get(
+            "PASSWORD_RESET_URL", f"{self.frontend_url}/reset-password"
+        ).strip().rstrip("/")
+        # Email verification is an explicit beta decision. Password recovery
+        # is available now; account verification remains opt-in until a real
+        # delivery domain is configured.
+        self.email_verification_mode: str = values.get(
+            "EMAIL_VERIFICATION_MODE", "disabled"
+        ).strip().lower()
+        self.support_email: str = values.get("SUPPORT_EMAIL", "support@hitrendy.local").strip()
+        self.privacy_policy_version: str = values.get(
+            "PRIVACY_POLICY_VERSION", "2026-08-02"
+        ).strip()
+        self.terms_version: str = values.get("TERMS_VERSION", "2026-08-02").strip()
+        self.data_retention_days: int = _bounded_positive_int(
+            values.get("DATA_RETENTION_DAYS", "365"),
+            name="DATA_RETENTION_DAYS",
+            maximum=3_650,
+        )
+        self.beta_invites_enabled: bool = _as_bool(
+            values.get("BETA_INVITES_ENABLED", "0"), name="BETA_INVITES_ENABLED"
+        )
+        self.beta_invite_ttl_seconds: int = _bounded_positive_int(
+            values.get("BETA_INVITE_TTL_SECONDS", "604800"),
+            name="BETA_INVITE_TTL_SECONDS",
+            maximum=2_592_000,
+        )
+        self.usage_enforcement_mode: str = values.get(
+            "USAGE_ENFORCEMENT_MODE", "off"
+        ).strip().lower()
+        self.monthly_ai_budget_usd: float = _bounded_non_negative_float(
+            values.get("MONTHLY_AI_BUDGET_USD", "0"),
+            name="MONTHLY_AI_BUDGET_USD",
+            maximum=1_000_000,
+        )
+        self.max_text_cost_usd: float = _bounded_non_negative_float(
+            values.get("MAX_TEXT_COST_USD", "0"),
+            name="MAX_TEXT_COST_USD",
+            maximum=100_000,
+        )
+        self.max_image_cost_usd: float = _bounded_non_negative_float(
+            values.get("MAX_IMAGE_COST_USD", "0"),
+            name="MAX_IMAGE_COST_USD",
+            maximum=100_000,
+        )
+        self.max_video_cost_usd: float = _bounded_non_negative_float(
+            values.get("MAX_VIDEO_COST_USD", "0"),
+            name="MAX_VIDEO_COST_USD",
+            maximum=100_000,
+        )
+        self.cost_alert_threshold_percent: int = _bounded_positive_int(
+            values.get("COST_ALERT_THRESHOLD_PERCENT", "80"),
+            name="COST_ALERT_THRESHOLD_PERCENT",
+            maximum=100,
+        )
+        self.alert_error_rate_percent: int = _bounded_positive_int(
+            values.get("ALERT_ERROR_RATE_PERCENT", "5"),
+            name="ALERT_ERROR_RATE_PERCENT",
+            maximum=100,
+        )
+        self.metrics_enabled: bool = _as_bool(
+            values.get("METRICS_ENABLED", "1"), name="METRICS_ENABLED"
+        )
+        self.metrics_auth_token: str = values.get("METRICS_AUTH_TOKEN", "").strip()
+        self.error_tracking_provider: str = values.get(
+            "ERROR_TRACKING_PROVIDER", "logging"
+        ).strip().lower()
+        self.error_tracking_dsn: str = values.get("ERROR_TRACKING_DSN", "").strip()
         self.google_sign_in_enabled: bool = _as_bool(
             values.get("GOOGLE_SIGN_IN_ENABLED", "0"),
             name="GOOGLE_SIGN_IN_ENABLED",
@@ -852,6 +950,47 @@ class Settings:
     def validate_runtime_configuration(self) -> None:
         if self.app_env not in VALID_ENVS:
             raise RuntimeError(f"APP_ENV debe ser {' ,'.join(sorted(VALID_ENVS))}.")
+        try:
+            _validate_http_url(
+                self.frontend_url,
+                name="FRONTEND_URL",
+                require_https=self.is_production_like,
+            )
+        except RuntimeError as exc:
+            if self.is_production_like:
+                raise RuntimeError(f"La configuración de producción es inválida: {exc}") from exc
+            raise
+        if self.email_provider not in {"disabled", "demo", "resend"}:
+            raise RuntimeError("EMAIL_PROVIDER no es compatible.")
+        if self.email_verification_mode not in {"disabled", "optional", "required"}:
+            raise RuntimeError("EMAIL_VERIFICATION_MODE no es compatible.")
+        if self.email_verification_mode == "required" and self.email_provider == "disabled":
+            raise RuntimeError(
+                "EMAIL_VERIFICATION_MODE=required necesita un proveedor de correo configurado."
+            )
+        if self.email_provider == "demo" and self.is_production_like:
+            raise RuntimeError(
+                "La configuración de producción no permite EMAIL_PROVIDER=demo en staging ni producción."
+            )
+        if self.email_provider == "resend" and not self.resend_api_key:
+            # Keeping the provider disabled is a valid zero-cost deployment;
+            # only an explicitly selected Resend adapter requires its secret.
+            raise RuntimeError("RESEND_API_KEY es obligatoria con EMAIL_PROVIDER=resend.")
+        if self.usage_enforcement_mode not in {"off", "soft", "hard"}:
+            raise RuntimeError("USAGE_ENFORCEMENT_MODE debe ser off, soft o hard.")
+        if self.error_tracking_provider not in {"disabled", "logging", "sentry"}:
+            raise RuntimeError("ERROR_TRACKING_PROVIDER no es compatible.")
+        if self.error_tracking_provider == "sentry" and not self.error_tracking_dsn:
+            raise RuntimeError("ERROR_TRACKING_DSN es obligatoria con ERROR_TRACKING_PROVIDER=sentry.")
+        if not self.password_reset_url:
+            raise RuntimeError("PASSWORD_RESET_URL es obligatoria.")
+        _validate_http_url(
+            self.password_reset_url,
+            name="PASSWORD_RESET_URL",
+            require_https=self.is_production_like,
+        )
+        if not self.support_email or "@" not in self.support_email:
+            raise RuntimeError("SUPPORT_EMAIL debe ser un correo válido.")
         if self.video_provider not in {"demo"}:
             raise RuntimeError("VIDEO_PROVIDER no es compatible.")
         if self.video_provider == "demo" and not set(

@@ -72,6 +72,18 @@ This index is the human and agent entry point.
 - [Acceptance criteria](07-demo/acceptance.md)
 - [Official references](08-references/official-sources.md)
 
+## Beta cerrada
+
+- [Plan maestro de beta](09-beta/00-MASTER-PLAN.md)
+- [Uso, costos y administración](09-beta/09-USAGE-COST-AND-ADMIN.md)
+- [Despliegue y entornos](09-beta/10-DEPLOYMENT-ENVIRONMENTS.md)
+- [Runbook de incidentes](09-beta/15-BETA-INCIDENT-RUNBOOK.md)
+- [Política de privacidad](09-beta/16-PRIVACY-POLICY.md)
+- [Términos de beta](09-beta/17-TERMS-OF-BETA.md)
+- [Checklist de aceptación](09-beta/18-BETA-ACCEPTANCE-CHECKLIST.md)
+- [Threat review](09-beta/19-BETA-THREAT-REVIEW.md)
+- [Wave 14: preparación operativa](09-beta/waves/WAVE-014-beta-readiness.md)
+
 ## Dependency map
 
 ```mermaid

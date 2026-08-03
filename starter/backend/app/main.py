@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import logging
+import secrets
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from time import monotonic
 from uuid import uuid4
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy import text
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -27,6 +28,8 @@ from app.core.rate_limit import LocalRateLimiter, RateLimiter, RedisRateLimiter
 from app.db.session import get_session_factory
 from app.identity.routes import router as identity_router
 from app.images.routes import router as images_router
+from app.operations.monitoring import get_error_tracker, metrics
+from app.operations.routes import router as operations_router
 from app.projects.routes import router as project_router
 from app.social.routes import router as social_router
 from app.templates.routes import router as template_router
@@ -80,6 +83,8 @@ _RATE_LIMITED_PATHS = {
     "/api/v1/auth/signup/start",
     "/api/v1/auth/signup/complete",
     "/api/v1/auth/google/start",
+    "/api/v1/auth/password-reset/request",
+    "/api/v1/auth/password-reset/confirm",
 }
 _local_rate_limiter = LocalRateLimiter()
 _rate_windows = _local_rate_limiter.windows
@@ -94,6 +99,8 @@ def _requires_rate_limit(path: str) -> bool:
         or path.endswith("/advisor")
         or path.endswith("/variations")
         or path.endswith("/analyses")
+        or path.endswith("/feedback")
+        or path.endswith("/abuse/reports")
         or path.endswith("/auth/account/deletion-status")
         # Starting an OAuth handshake writes to the shared state store, so it is
         # limited like the other handshake starts above.
@@ -122,6 +129,7 @@ def _record_request(request: Request, request_id: str, status_code: int, started
             "duration_ms": round((monotonic() - started) * 1000, 2),
         },
     )
+    metrics.record_request(status_code=status_code, duration_ms=(monotonic() - started) * 1000)
 
 
 async def trusted_host_handler(request: Request, call_next):
@@ -202,6 +210,11 @@ async def security_headers(request: Request, call_next):
                 "status_code": 500,
                 "duration_ms": round((monotonic() - started) * 1000, 2),
             },
+        )
+        get_error_tracker().capture(
+            request_id=request_id,
+            path=request.url.path,
+            error_type="internal_error",
         )
         response = JSONResponse(
             status_code=500,
@@ -350,6 +363,22 @@ app.include_router(trends_router, prefix=settings.api_prefix)
 app.include_router(images_router, prefix=settings.api_prefix)
 app.include_router(videos_router, prefix=settings.api_prefix)
 app.include_router(social_router, prefix=settings.api_prefix)
+app.include_router(operations_router, prefix=settings.api_prefix)
+
+
+@app.get("/metrics", response_class=PlainTextResponse, include_in_schema=False, response_model=None)
+@app.get("/health/metrics", response_class=PlainTextResponse, include_in_schema=False, response_model=None)
+async def metrics_endpoint(request: Request) -> Response:
+    """Expose low-cardinality process metrics for a deployment monitor."""
+
+    if not settings.metrics_enabled:
+        return JSONResponse(status_code=404, content={"detail": "Not found"})
+    if settings.metrics_auth_token:
+        provided = request.headers.get("Authorization", "")
+        expected = f"Bearer {settings.metrics_auth_token}"
+        if not secrets.compare_digest(provided, expected):
+            return JSONResponse(status_code=404, content={"detail": "Not found"})
+    return PlainTextResponse(metrics.prometheus(), media_type="text/plain; version=0.0.4")
 
 
 @app.get("/health/live")

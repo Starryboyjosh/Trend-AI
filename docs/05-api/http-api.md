@@ -42,6 +42,19 @@ Return user and workspace summary.
 ### `POST /auth/register`
 
 Creates a user, an owner workspace membership, and an HttpOnly session cookie.
+When `BETA_INVITES_ENABLED=1`, the request must include the one-time
+`invite_code` associated with the email.
+
+### `POST /auth/password-reset/request`
+
+Accepts an email and always returns `202` with the same generic message. A
+configured email adapter may deliver a one-time link; the token is hashed in
+the database and never returned by the API.
+
+### `POST /auth/password-reset/confirm`
+
+Accepts `token` and a new password. A successful reset revokes all existing
+sessions; expired or reused links are rejected.
 
 ### Session scope
 
@@ -201,6 +214,23 @@ Streams the authorized image with a private, short-lived cache policy. Object
 storage keys and permanent public URLs are never exposed to the browser.
 
 ## Feedback
+
+### `GET /policies`
+
+Public versions and paths for privacy, terms and support. It also reports the
+configured retention period, email-verification decision and closed-beta flag.
+
+### `POST /feedback`
+
+Authenticated product/support feedback. Accepts `category`, `message` and an
+optional rating. `Idempotency-Key` makes a repeated submission return the
+original feedback row for that workspace.
+
+### `POST /abuse/reports`
+
+Authenticated abuse report with a bounded category, message and optional
+resource id. It creates a moderation queue record; it does not publish or
+delete content automatically.
 
 ### `POST /conversations/artifacts/{artifact_id}/feedback`
 

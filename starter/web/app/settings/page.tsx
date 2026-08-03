@@ -899,6 +899,13 @@ function SettingsPageContent() {
           <section>
             <h2>{t("privacy.title")}</h2>
             <p>{t("privacy.body")}</p>
+            <p>
+              <Link href={routes.privacy}>Leer política completa</Link> ·{" "}
+              <Link href={routes.terms}>Leer términos de la beta</Link>
+            </p>
+            <p>
+              <Link href={routes.feedback}>Contactar soporte o enviar feedback</Link>
+            </p>
           </section>
         ) : null}
 
