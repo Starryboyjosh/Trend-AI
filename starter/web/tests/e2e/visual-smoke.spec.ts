@@ -122,32 +122,40 @@ async function mockPrivateApi(page: Page, projects: unknown[] = []) {
   });
 }
 
-test("el Home público conserva el prompt antes de ir al login", async ({
+test("el Home público conserva únicamente las acciones principales y lleva al login", async ({
   page,
 }) => {
   await page.route("**/api/v1/auth/me", async (route) => {
     await route.fulfill({
       status: 401,
       contentType: "application/json",
-      body: JSON.stringify({ error: { code: "UNAUTHENTICATED", message: "Sesión requerida" } }),
+      body: JSON.stringify({
+        error: { code: "UNAUTHENTICATED", message: "Sesión requerida" },
+      }),
     });
   });
   await page.route("**/api/v1/auth/signup**", async (route) => {
     await route.fulfill({
       status: 404,
       contentType: "application/json",
-      body: JSON.stringify({ error: { code: "SIGNUP_NOT_FOUND", message: "No hay registro pendiente." } }),
+      body: JSON.stringify({
+        error: {
+          code: "SIGNUP_NOT_FOUND",
+          message: "No hay registro pendiente.",
+        },
+      }),
     });
   });
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: /Comienza a crear/ })
+    page.getByRole("heading", { name: /Comienza a Crear/ })
   ).toBeVisible();
-  await page
-    .getByLabel("Describe qué quieres crear para tu negocio")
-    .fill("Quiero lanzar mi cafetería");
-  await page.getByRole("button", { name: /Comenzar/ }).click();
-  await expect(page).toHaveURL(/\/login\?next=%2Fstudio%2Fnew$/);
+  await expect(
+    page.getByRole("link", { name: "Quiénes somos" })
+  ).toHaveAttribute("href", "#quienes-somos");
+  await expect(page.getByText("Plantillas")).toHaveCount(0);
+  await page.getByRole("link", { name: "Empezar a Crear" }).first().click();
+  await expect(page).toHaveURL(/\/login$/);
   await expect(page.getByText("Tus proyectos")).toHaveCount(0);
 });
 
@@ -260,7 +268,10 @@ test("Login conserva un destino interno seguro", async ({ page }) => {
       contentType: "application/json",
       body: JSON.stringify(
         authenticated
-          ? { user: { id: "user-1", name: "Ana", email: "ana@example.com" }, workspaces: [] }
+          ? {
+              user: { id: "user-1", name: "Ana", email: "ana@example.com" },
+              workspaces: [],
+            }
           : { error: { code: "UNAUTHENTICATED", message: "Sesión requerida" } }
       ),
     });
@@ -269,16 +280,25 @@ test("Login conserva un destino interno seguro", async ({ page }) => {
     await route.fulfill({
       status: 404,
       contentType: "application/json",
-      body: JSON.stringify({ error: { code: "SIGNUP_NOT_FOUND", message: "No hay registro pendiente." } }),
+      body: JSON.stringify({
+        error: {
+          code: "SIGNUP_NOT_FOUND",
+          message: "No hay registro pendiente.",
+        },
+      }),
     });
   });
   await page.route("**/api/v1/auth/login", async (route) => {
     authenticated = true;
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true }),
+    });
   });
   await page.goto("/login?next=/templates");
   await page.getByLabel("Correo electrónico").fill("ana@example.com");
-  await page.getByLabel("Contraseña").fill("demostracion");
+  await page.getByLabel("Contraseña", { exact: true }).fill("demostracion");
   await page.getByRole("button", { name: "Iniciar sesión" }).click();
   await expect(page).toHaveURL(/\/templates$/);
 });
@@ -288,18 +308,27 @@ test("Login no expone una entrada demo pública", async ({ page }) => {
     await route.fulfill({
       status: 401,
       contentType: "application/json",
-      body: JSON.stringify({ error: { code: "UNAUTHENTICATED", message: "Sesión requerida" } }),
+      body: JSON.stringify({
+        error: { code: "UNAUTHENTICATED", message: "Sesión requerida" },
+      }),
     });
   });
   await page.route("**/api/v1/auth/signup", async (route) => {
     await route.fulfill({
       status: 404,
       contentType: "application/json",
-      body: JSON.stringify({ error: { code: "SIGNUP_NOT_FOUND", message: "No hay registro pendiente." } }),
+      body: JSON.stringify({
+        error: {
+          code: "SIGNUP_NOT_FOUND",
+          message: "No hay registro pendiente.",
+        },
+      }),
     });
   });
   await page.goto("/login");
-  await expect(page.getByRole("heading", { name: "Bienvenido de vuelta" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "¡Bienvenido de vuelta!" })
+  ).toBeVisible();
   await expect(page.getByRole("button", { name: /modo demo/i })).toHaveCount(0);
 });
 
@@ -335,7 +364,12 @@ test("logout invalida la sesión y bloquea de nuevo las rutas privadas", async (
       await route.fulfill({
         status: 404,
         contentType: "application/json",
-        body: JSON.stringify({ error: { code: "SIGNUP_NOT_FOUND", message: "No hay registro pendiente." } }),
+        body: JSON.stringify({
+          error: {
+            code: "SIGNUP_NOT_FOUND",
+            message: "No hay registro pendiente.",
+          },
+        }),
       });
       return;
     }
@@ -386,21 +420,32 @@ test("Login rechaza un destino externo", async ({ page }) => {
       contentType: "application/json",
       body: JSON.stringify(
         authenticated
-          ? { user: { id: "user-1", name: "Ana", email: "ana@example.com" }, workspaces: [] }
+          ? {
+              user: { id: "user-1", name: "Ana", email: "ana@example.com" },
+              workspaces: [],
+            }
           : { error: { code: "UNAUTHENTICATED", message: "Sesión requerida" } }
       ),
     });
   });
   await page.route("**/api/v1/auth/signup", async (route) => {
-    await route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: { code: "SIGNUP_NOT_FOUND" } }) });
+    await route.fulfill({
+      status: 404,
+      contentType: "application/json",
+      body: JSON.stringify({ error: { code: "SIGNUP_NOT_FOUND" } }),
+    });
   });
   await page.route("**/api/v1/auth/login", async (route) => {
     authenticated = true;
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true }),
+    });
   });
   await page.goto("/login?next=https://example.com");
   await page.getByLabel("Correo electrónico").fill("ana@example.com");
-  await page.getByLabel("Contraseña").fill("demostracion");
+  await page.getByLabel("Contraseña", { exact: true }).fill("demostracion");
   await page.getByRole("button", { name: "Iniciar sesión" }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
 });

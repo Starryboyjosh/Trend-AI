@@ -35,11 +35,12 @@ export function StepBusiness({ data, onChange }: Props) {
   const locale = useInterfaceLocale();
   const copy = surfaceCopy[locale].onboarding;
   return (
-    <section aria-labelledby="business-step-title">
+    <section
+      className="onboarding-question-card"
+      aria-labelledby="business-step-title"
+    >
       <h2 id="business-step-title">{copy.businessTitle}</h2>
-      <p className="onboarding-step-description">
-        {copy.businessLead}
-      </p>
+      <p className="onboarding-step-description">{copy.businessLead}</p>
       <div className="onboarding-fields">
         <label>
           {copy.businessName} <span aria-hidden="true">*</span>
@@ -64,7 +65,8 @@ export function StepBusiness({ data, onChange }: Props) {
             <option value="">{copy.select}</option>
             {CATEGORIES.map((category) => (
               <option key={category.value} value={category.value}>
-                {optionLabel(locale, "category", category.value) || category.label}
+                {optionLabel(locale, "category", category.value) ||
+                  category.label}
               </option>
             ))}
           </select>
@@ -101,7 +103,9 @@ export function StepBusiness({ data, onChange }: Props) {
             name="business-product"
             type="text"
             value={data.primary_product}
-            onChange={(event) => onChange("primary_product", event.target.value)}
+            onChange={(event) =>
+              onChange("primary_product", event.target.value)
+            }
             required
             maxLength={240}
           />
@@ -111,7 +115,9 @@ export function StepBusiness({ data, onChange }: Props) {
           <textarea
             name="business-audience"
             value={data.target_audience}
-            onChange={(event) => onChange("target_audience", event.target.value)}
+            onChange={(event) =>
+              onChange("target_audience", event.target.value)
+            }
             required
             maxLength={500}
             rows={3}
@@ -129,7 +135,8 @@ export function StepBusiness({ data, onChange }: Props) {
           />
         </label>
         <label>
-          {copy.website} <span className="onboarding-optional">{copy.optional}</span>
+          {copy.website}{" "}
+          <span className="onboarding-optional">{copy.optional}</span>
           <input
             name="business-website"
             type="url"

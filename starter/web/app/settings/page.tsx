@@ -32,6 +32,7 @@ import {
   translate,
   type AppLocale,
 } from "@/lib/i18n";
+import { platformLabels, platformOrder } from "@/lib/labels";
 import { routes } from "@/lib/routes";
 import type { BrandProfile, Tone } from "@/types/brand";
 import type {
@@ -85,17 +86,6 @@ const OBJECTIVES: Objective[] = [
   "launch",
   "brand_awareness",
   "community",
-];
-
-/** Platform names are brands, so they are not translated. */
-const PLATFORMS: Array<[Platform, string]> = [
-  ["instagram", "Instagram"],
-  ["facebook", "Facebook"],
-  ["tiktok", "TikTok"],
-  ["whatsapp", "WhatsApp"],
-  ["youtube", "YouTube"],
-  ["x", "X"],
-  ["linkedin", "LinkedIn"],
 ];
 
 const TONES: Tone[] = [
@@ -506,14 +496,21 @@ function SettingsPageContent() {
         className="app-page app-page--narrow settings-page"
         aria-labelledby="settings-title"
       >
-        <h1 id="settings-title">{t("title")}</h1>
-        <div role="tablist" aria-label={t("title")}>
+        <header className="settings-header">
+          <h1 id="settings-title">{t("title")}</h1>
+        </header>
+        {/* Horizontally scrollable rather than wrapping: eight tabs on a phone
+            would otherwise take three rows before the panel even starts. */}
+        <div className="settings-tabs" role="tablist" aria-label={t("title")}>
           {tabs.map(([id, label]) => (
             <button
               key={id}
               type="button"
+              className="settings-tab"
               role="tab"
+              id={`settings-tab-${id}`}
               aria-selected={tab === id}
+              aria-controls={`settings-panel-${id}`}
               onClick={() => setTab(id)}
             >
               {label}
@@ -521,307 +518,49 @@ function SettingsPageContent() {
           ))}
         </div>
         {message ? (
-          <p role="status" aria-live="polite">
+          <p className="settings-status" role="status" aria-live="polite">
             {message}
           </p>
         ) : null}
         {!me ? (
-          <p role="status">{translate(locale, "common.loading")}</p>
+          <p className="settings-status" role="status">
+            {translate(locale, "common.loading")}
+          </p>
         ) : null}
 
         {tab === "account" && me ? (
-          <section>
+          <section
+            className="settings-card"
+            role="tabpanel"
+            id="settings-panel-account"
+            aria-labelledby="settings-tab-account"
+          >
             <h2>{t("tabs.account")}</h2>
-            <label>
-              {t("account.name")}
-              <input
-                value={name}
-                maxLength={120}
-                onChange={(event) => {
-                  setName(event.target.value);
-                  setDirty(true);
-                }}
-              />
-            </label>
-            <label>
-              {t("account.email")}
-              <input value={me.email} readOnly disabled />
-            </label>
-            <p>{t("account.emailHint")}</p>
-            <label>
-              {t("language.interface")}
-              <select
-                value={locale}
-                onChange={(event) =>
-                  updateLocale(event.target.value as AppLocale)
-                }
-              >
-                {supportedLocales.map((item) => (
-                  <option key={item} value={item}>
-                    {localeLabels[item]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => void save([persistAccount])}
-            >
-              {saveLabel}
-            </button>
-          </section>
-        ) : null}
-
-        {tab === "business" ? (
-          <section>
-            <h2>{t("tabs.business")}</h2>
-            {business ? (
-              <>
-                <label>
-                  {t("business.name")}
-                  <input
-                    value={business.name}
-                    maxLength={120}
-                    onChange={(event) =>
-                      editBusiness({ name: event.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  {t("business.category")}
-                  <select
-                    value={business.category}
-                    onChange={(event) =>
-                      editBusiness({ category: event.target.value as Category })
-                    }
-                  >
-                    {CATEGORIES.map((item) => (
-                      <option key={item} value={item}>
-                        {optionLabel(locale, "category", item)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  {t("business.country")}
-                  <input
-                    value={business.country}
-                    maxLength={80}
-                    onChange={(event) =>
-                      editBusiness({ country: event.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  {t("business.city")}
-                  <input
-                    value={business.city}
-                    maxLength={80}
-                    onChange={(event) =>
-                      editBusiness({ city: event.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  {t("business.description")}
-                  <textarea
-                    value={business.description ?? ""}
-                    maxLength={500}
-                    onChange={(event) =>
-                      editBusiness({ description: event.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  {t("business.product")}
-                  <input
-                    value={business.primary_product}
-                    maxLength={160}
-                    onChange={(event) =>
-                      editBusiness({ primary_product: event.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  {t("business.audience")}
-                  <input
-                    value={business.target_audience}
-                    maxLength={160}
-                    onChange={(event) =>
-                      editBusiness({ target_audience: event.target.value })
-                    }
-                  />
-                </label>
-                <fieldset>
-                  <legend>{t("business.platforms")}</legend>
-                  {PLATFORMS.map(([value, label]) => (
-                    <label key={value}>
-                      <input
-                        type="checkbox"
-                        checked={(business.preferred_platforms ?? []).includes(
-                          value
-                        )}
-                        onChange={() => togglePlatform(value)}
-                      />
-                      {label}
-                    </label>
-                  ))}
-                </fieldset>
-                <label>
-                  {t("business.objective")}
-                  <select
-                    value={business.primary_objective}
-                    onChange={(event) =>
-                      editBusiness({
-                        primary_objective: event.target.value as Objective,
-                      })
-                    }
-                  >
-                    {OBJECTIVES.map((item) => (
-                      <option key={item} value={item}>
-                        {optionLabel(locale, "objective", item)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() => void save([persistBusiness])}
-                >
-                  {saveLabel}
-                </button>
-              </>
-            ) : (
-              <p>{t("noBusiness")}</p>
-            )}
-          </section>
-        ) : null}
-
-        {tab === "brand" ? (
-          <section>
-            <h2>{t("tabs.brand")}</h2>
-            {business ? (
-              <>
-                <fieldset>
-                  <legend>{t("brand.tones")}</legend>
-                  <p>{t("brand.tonesHint")}</p>
-                  {TONES.map((tone) => (
-                    <label key={tone}>
-                      <input
-                        type="checkbox"
-                        checked={brand.voice_tones.includes(tone)}
-                        disabled={
-                          !brand.voice_tones.includes(tone) &&
-                          brand.voice_tones.length >= 3
-                        }
-                        onChange={() => toggleTone(tone)}
-                      />
-                      {optionLabel(locale, "tone", tone)}
-                    </label>
-                  ))}
-                </fieldset>
-                <label>
-                  {t("brand.value")}
-                  <textarea
-                    value={brand.value_proposition}
-                    maxLength={500}
-                    onChange={(event) =>
-                      editBrand({ value_proposition: event.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  {t("brand.preferred")}
-                  <input
-                    value={brand.preferred_words}
-                    onChange={(event) =>
-                      editBrand({ preferred_words: event.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  {t("brand.forbidden")}
-                  <input
-                    value={brand.forbidden_words}
-                    onChange={(event) =>
-                      editBrand({ forbidden_words: event.target.value })
-                    }
-                  />
-                </label>
-                <p>{t("brand.wordsHint")}</p>
-                <label>
-                  {t("brand.primaryColor")}
-                  <input
-                    value={brand.primary_color}
-                    maxLength={7}
-                    placeholder="#RRGGBB"
-                    onChange={(event) =>
-                      editBrand({ primary_color: event.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  {t("brand.secondaryColor")}
-                  <input
-                    value={brand.secondary_color}
-                    maxLength={7}
-                    placeholder="#RRGGBB"
-                    onChange={(event) =>
-                      editBrand({ secondary_color: event.target.value })
-                    }
-                  />
-                </label>
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() => void save([persistBrand])}
-                >
-                  {saveLabel}
-                </button>
-              </>
-            ) : (
-              <p>{t("noBusiness")}</p>
-            )}
-          </section>
-        ) : null}
-
-        {tab === "social" ? (
-          <SocialConnections
-            locale={locale}
-            callbackOutcome={socialCallback}
-            onCallbackProcessed={clearSocialCallback}
-          />
-        ) : null}
-
-        {tab === "language" && me ? (
-          <section>
-            <h2>{t("tabs.language")}</h2>
-            <label>
-              {t("language.interface")}
-              <select
-                value={locale}
-                onChange={(event) =>
-                  updateLocale(event.target.value as AppLocale)
-                }
-              >
-                {supportedLocales.map((item) => (
-                  <option key={item} value={item}>
-                    {localeLabels[item]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {business ? (
-              <label>
-                {t("language.content")}
+            <div className="settings-grid">
+              <label className="settings-field">
+                {t("account.name")}
+                <input
+                  value={name}
+                  maxLength={120}
+                  onChange={(event) => {
+                    setName(event.target.value);
+                    setDirty(true);
+                  }}
+                />
+              </label>
+              <label className="settings-field">
+                {t("account.email")}
+                <input value={me.email} readOnly disabled />
+                <small className="settings-hint">
+                  {t("account.emailHint")}
+                </small>
+              </label>
+              <label className="settings-field">
+                {t("language.interface")}
                 <select
-                  value={business.content_locale ?? "es"}
+                  value={locale}
                   onChange={(event) =>
-                    editBusiness({
-                      content_locale: event.target.value as ContentLocale,
-                    })
+                    updateLocale(event.target.value as AppLocale)
                   }
                 >
                   {supportedLocales.map((item) => (
@@ -831,34 +570,383 @@ function SettingsPageContent() {
                   ))}
                 </select>
               </label>
-            ) : null}
-            <p>{t("language.hint")}</p>
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() =>
-                void save(
-                  business
-                    ? [persistAccount, persistBusiness]
-                    : [persistAccount]
-                )
-              }
-            >
-              {saveLabel}
-            </button>
+            </div>
+            <div className="settings-actions">
+              <button
+                type="button"
+                className="button-primary"
+                disabled={saving}
+                onClick={() => void save([persistAccount])}
+              >
+                {saveLabel}
+              </button>
+            </div>
+          </section>
+        ) : null}
+
+        {tab === "business" ? (
+          <section
+            className="settings-card"
+            role="tabpanel"
+            id="settings-panel-business"
+            aria-labelledby="settings-tab-business"
+          >
+            <h2>{t("tabs.business")}</h2>
+            {business ? (
+              <>
+                <div className="settings-grid">
+                  <label className="settings-field">
+                    {t("business.name")}
+                    <input
+                      value={business.name}
+                      maxLength={120}
+                      onChange={(event) =>
+                        editBusiness({ name: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className="settings-field">
+                    {t("business.category")}
+                    <select
+                      value={business.category}
+                      onChange={(event) =>
+                        editBusiness({
+                          category: event.target.value as Category,
+                        })
+                      }
+                    >
+                      {CATEGORIES.map((item) => (
+                        <option key={item} value={item}>
+                          {optionLabel(locale, "category", item)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="settings-field">
+                    {t("business.country")}
+                    <input
+                      value={business.country}
+                      maxLength={80}
+                      onChange={(event) =>
+                        editBusiness({ country: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className="settings-field">
+                    {t("business.city")}
+                    <input
+                      value={business.city}
+                      maxLength={80}
+                      onChange={(event) =>
+                        editBusiness({ city: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className="settings-field settings-field--wide">
+                    {t("business.description")}
+                    <textarea
+                      value={business.description ?? ""}
+                      maxLength={500}
+                      rows={4}
+                      onChange={(event) =>
+                        editBusiness({ description: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className="settings-field">
+                    {t("business.product")}
+                    <input
+                      value={business.primary_product}
+                      maxLength={160}
+                      onChange={(event) =>
+                        editBusiness({ primary_product: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className="settings-field">
+                    {t("business.audience")}
+                    <input
+                      value={business.target_audience}
+                      maxLength={160}
+                      onChange={(event) =>
+                        editBusiness({ target_audience: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className="settings-field">
+                    {t("business.objective")}
+                    <select
+                      value={business.primary_objective}
+                      onChange={(event) =>
+                        editBusiness({
+                          primary_objective: event.target.value as Objective,
+                        })
+                      }
+                    >
+                      {OBJECTIVES.map((item) => (
+                        <option key={item} value={item}>
+                          {optionLabel(locale, "objective", item)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <fieldset className="settings-fieldset">
+                  <legend>{t("business.platforms")}</legend>
+                  <div className="settings-choice-grid">
+                    {platformOrder.map((value) => (
+                      <label key={value} className="settings-choice">
+                        <input
+                          type="checkbox"
+                          checked={(
+                            business.preferred_platforms ?? []
+                          ).includes(value)}
+                          onChange={() => togglePlatform(value)}
+                        />
+                        {platformLabels[value]}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+                <div className="settings-actions">
+                  <button
+                    type="button"
+                    className="button-primary"
+                    disabled={saving}
+                    onClick={() => void save([persistBusiness])}
+                  >
+                    {saveLabel}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <p className="settings-empty">{t("noBusiness")}</p>
+            )}
+          </section>
+        ) : null}
+
+        {tab === "brand" ? (
+          <section
+            className="settings-card"
+            role="tabpanel"
+            id="settings-panel-brand"
+            aria-labelledby="settings-tab-brand"
+          >
+            <h2>{t("tabs.brand")}</h2>
+            {business ? (
+              <>
+                <fieldset className="settings-fieldset">
+                  <legend>{t("brand.tones")}</legend>
+                  <p className="settings-hint">{t("brand.tonesHint")}</p>
+                  <div className="settings-choice-grid">
+                    {TONES.map((tone) => (
+                      <label key={tone} className="settings-choice">
+                        <input
+                          type="checkbox"
+                          checked={brand.voice_tones.includes(tone)}
+                          disabled={
+                            !brand.voice_tones.includes(tone) &&
+                            brand.voice_tones.length >= 3
+                          }
+                          onChange={() => toggleTone(tone)}
+                        />
+                        {optionLabel(locale, "tone", tone)}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+                <div className="settings-grid">
+                  <label className="settings-field settings-field--wide">
+                    {t("brand.value")}
+                    <textarea
+                      value={brand.value_proposition}
+                      maxLength={500}
+                      rows={4}
+                      onChange={(event) =>
+                        editBrand({ value_proposition: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className="settings-field">
+                    {t("brand.preferred")}
+                    <input
+                      value={brand.preferred_words}
+                      onChange={(event) =>
+                        editBrand({ preferred_words: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className="settings-field">
+                    {t("brand.forbidden")}
+                    <input
+                      value={brand.forbidden_words}
+                      onChange={(event) =>
+                        editBrand({ forbidden_words: event.target.value })
+                      }
+                    />
+                  </label>
+                  <p className="settings-hint settings-field--wide">
+                    {t("brand.wordsHint")}
+                  </p>
+                  <label className="settings-field">
+                    {t("brand.primaryColor")}
+                    {/* The swatch mirrors the field instead of replacing it:
+                        the API stores a hex string and a colour input cannot
+                        represent the empty value a new brand starts with. */}
+                    <span className="settings-color">
+                      <input
+                        value={brand.primary_color}
+                        maxLength={7}
+                        placeholder="#RRGGBB"
+                        onChange={(event) =>
+                          editBrand({ primary_color: event.target.value })
+                        }
+                      />
+                      <i
+                        aria-hidden="true"
+                        className="settings-swatch"
+                        style={
+                          HEX_COLOR.test(brand.primary_color)
+                            ? { background: brand.primary_color }
+                            : undefined
+                        }
+                      />
+                    </span>
+                  </label>
+                  <label className="settings-field">
+                    {t("brand.secondaryColor")}
+                    <span className="settings-color">
+                      <input
+                        value={brand.secondary_color}
+                        maxLength={7}
+                        placeholder="#RRGGBB"
+                        onChange={(event) =>
+                          editBrand({ secondary_color: event.target.value })
+                        }
+                      />
+                      <i
+                        aria-hidden="true"
+                        className="settings-swatch"
+                        style={
+                          HEX_COLOR.test(brand.secondary_color)
+                            ? { background: brand.secondary_color }
+                            : undefined
+                        }
+                      />
+                    </span>
+                  </label>
+                </div>
+                <div className="settings-actions">
+                  <button
+                    type="button"
+                    className="button-primary"
+                    disabled={saving}
+                    onClick={() => void save([persistBrand])}
+                  >
+                    {saveLabel}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <p className="settings-empty">{t("noBusiness")}</p>
+            )}
+          </section>
+        ) : null}
+
+        {tab === "social" ? (
+          <div
+            role="tabpanel"
+            id="settings-panel-social"
+            aria-labelledby="settings-tab-social"
+          >
+            <SocialConnections
+              locale={locale}
+              callbackOutcome={socialCallback}
+              onCallbackProcessed={clearSocialCallback}
+            />
+          </div>
+        ) : null}
+
+        {tab === "language" && me ? (
+          <section
+            className="settings-card"
+            role="tabpanel"
+            id="settings-panel-language"
+            aria-labelledby="settings-tab-language"
+          >
+            <h2>{t("tabs.language")}</h2>
+            <div className="settings-grid">
+              <label className="settings-field">
+                {t("language.interface")}
+                <select
+                  value={locale}
+                  onChange={(event) =>
+                    updateLocale(event.target.value as AppLocale)
+                  }
+                >
+                  {supportedLocales.map((item) => (
+                    <option key={item} value={item}>
+                      {localeLabels[item]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {business ? (
+                <label className="settings-field">
+                  {t("language.content")}
+                  <select
+                    value={business.content_locale ?? "es"}
+                    onChange={(event) =>
+                      editBusiness({
+                        content_locale: event.target.value as ContentLocale,
+                      })
+                    }
+                  >
+                    {supportedLocales.map((item) => (
+                      <option key={item} value={item}>
+                        {localeLabels[item]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+            </div>
+            <p className="settings-hint">{t("language.hint")}</p>
+            <div className="settings-actions">
+              <button
+                type="button"
+                className="button-primary"
+                disabled={saving}
+                onClick={() =>
+                  void save(
+                    business
+                      ? [persistAccount, persistBusiness]
+                      : [persistAccount]
+                  )
+                }
+              >
+                {saveLabel}
+              </button>
+            </div>
           </section>
         ) : null}
 
         {tab === "usage" ? (
-          <section>
+          <section
+            className="settings-card"
+            role="tabpanel"
+            id="settings-panel-usage"
+            aria-labelledby="settings-tab-usage"
+          >
             <h2>{t("usage.title")}</h2>
-            <p>{t("usage.note")}</p>
-            <p>{t("usage.unknownHint")}</p>
+            <p className="settings-hint">{t("usage.note")}</p>
+            <p className="settings-hint">{t("usage.unknownHint")}</p>
             {usage.length ? (
-              <ul>
+              <ul className="settings-usage-list">
                 {usage.map((item) => (
                   <li
                     key={`${item.capability}:${item.quality_level}:${item.currency ?? ""}`}
+                    className="settings-usage-item"
                   >
                     <strong>
                       {optionLabel(locale, "capability", item.capability)} ·{" "}
@@ -890,38 +978,48 @@ function SettingsPageContent() {
                 ))}
               </ul>
             ) : (
-              <p>{t("usage.empty")}</p>
+              <p className="settings-empty">{t("usage.empty")}</p>
             )}
           </section>
         ) : null}
 
         {tab === "privacy" ? (
-          <section>
+          <section
+            className="settings-card"
+            role="tabpanel"
+            id="settings-panel-privacy"
+            aria-labelledby="settings-tab-privacy"
+          >
             <h2>{t("privacy.title")}</h2>
             <p>{t("privacy.body")}</p>
-            <p>
-              <Link href={routes.privacy}>Leer política completa</Link> ·{" "}
+            <p className="settings-links">
+              <Link href={routes.privacy}>Leer política completa</Link>
               <Link href={routes.terms}>Leer términos de la beta</Link>
-            </p>
-            <p>
-              <Link href={routes.feedback}>Contactar soporte o enviar feedback</Link>
+              <Link href={routes.feedback}>
+                Contactar soporte o enviar feedback
+              </Link>
             </p>
           </section>
         ) : null}
 
         {tab === "delete" && me ? (
-          <section>
+          <section
+            className="settings-card settings-card--danger"
+            role="tabpanel"
+            id="settings-panel-delete"
+            aria-labelledby="settings-tab-delete"
+          >
             <h2>{t("deletion.title")}</h2>
             <p>{t("deletion.body")}</p>
             {deletionRequested ? (
-              <p>
+              <p className="settings-links">
                 <Link href={routes.accountDeletionStatus}>
                   {t("deletion.followLink")}
                 </Link>
               </p>
             ) : (
               <>
-                <label>
+                <label className="settings-field">
                   {t("deletion.confirmLabel", {
                     phrase: me.deletion_confirmation_phrase,
                   })}
@@ -931,15 +1029,18 @@ function SettingsPageContent() {
                     onChange={(event) => setConfirmation(event.target.value)}
                   />
                 </label>
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() => void requestDeletion()}
-                >
-                  {saving
-                    ? translate(locale, "common.saving")
-                    : t("deletion.request")}
-                </button>
+                <div className="settings-actions">
+                  <button
+                    type="button"
+                    className="button-danger"
+                    disabled={saving}
+                    onClick={() => void requestDeletion()}
+                  >
+                    {saving
+                      ? translate(locale, "common.saving")
+                      : t("deletion.request")}
+                  </button>
+                </div>
               </>
             )}
           </section>

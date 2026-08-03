@@ -23,7 +23,7 @@ def test_demo_sqlite_reaches_head_and_reapplies_wave14(tmp_path: Path) -> None:
         command.upgrade(config, "head")
         engine = create_engine(database_url)
         with engine.connect() as connection:
-            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "025"
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "026"
             assert connection.scalar(
                 text(
                     "SELECT name FROM sqlite_master "
@@ -34,7 +34,7 @@ def test_demo_sqlite_reaches_head_and_reapplies_wave14(tmp_path: Path) -> None:
         command.downgrade(config, "024")
         command.upgrade(config, "head")
         with engine.connect() as connection:
-            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "025"
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "026"
         engine.dispose()
     finally:
         settings.database_url = previous_url
@@ -130,6 +130,65 @@ def test_sqlite_trend_scope_migration_consolidates_legacy_rows(tmp_path: Path) -
             assert connection.scalar(
                 text("SELECT response_json FROM idempotency_records WHERE id = 'refresh-record'")
             ) == '{"id": "run-complete"}'
+    finally:
+        engine.dispose()
+        settings.database_url = previous_url
+
+
+def test_sqlite_trend_scope_migration_reuses_an_existing_window_column(
+    tmp_path: Path,
+) -> None:
+    database_url = f"sqlite:///{tmp_path / 'hitrendy.db'}"
+    config = _alembic_config()
+    config.set_main_option("sqlalchemy.url", database_url)
+    previous_url = settings.database_url
+    settings.database_url = database_url
+    engine = create_engine(database_url)
+    try:
+        command.upgrade(config, "020")
+        with engine.begin() as connection:
+            connection.execute(
+                text("ALTER TABLE trend_runs ADD COLUMN window_start DATETIME")
+            )
+
+        command.upgrade(config, "021")
+        with engine.connect() as connection:
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "021"
+            assert connection.scalar(
+                text(
+                    "SELECT COUNT(*) FROM pragma_table_info('trend_runs') "
+                    "WHERE name = 'window_start'"
+                )
+            ) == 1
+    finally:
+        engine.dispose()
+        settings.database_url = previous_url
+
+
+def test_sqlite_repairs_missing_template_public_flag(tmp_path: Path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'hitrendy.db'}"
+    config = _alembic_config()
+    config.set_main_option("sqlalchemy.url", database_url)
+    previous_url = settings.database_url
+    settings.database_url = database_url
+    engine = create_engine(database_url)
+    try:
+        command.upgrade(config, "025")
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TABLE templates DROP COLUMN is_public"))
+
+        command.upgrade(config, "head")
+        with engine.connect() as connection:
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "026"
+            assert connection.scalar(
+                text(
+                    "SELECT COUNT(*) FROM pragma_table_info('templates') "
+                    "WHERE name = 'is_public'"
+                )
+            ) == 1
+            assert connection.scalar(
+                text("SELECT is_public FROM templates WHERE id = 'tpl_instagram_01'")
+            ) == 1
     finally:
         engine.dispose()
         settings.database_url = previous_url

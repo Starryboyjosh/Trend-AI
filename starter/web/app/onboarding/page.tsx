@@ -25,6 +25,7 @@ import {
 } from "@/lib/api";
 import { routes } from "@/lib/routes";
 import { surfaceCopy, useInterfaceLocale } from "@/lib/i18n";
+import { defaultBrandColors } from "@/lib/brand-defaults";
 import type { Category, Objective, Platform } from "@/types/business";
 import type { Tone } from "@/types/brand";
 
@@ -68,8 +69,8 @@ const INITIAL: OnboardingData = {
     value_proposition: "",
     preferred_words: "",
     forbidden_words: "",
-    primary_color: "#541787",
-    secondary_color: "#B79CFA",
+    primary_color: defaultBrandColors.primary,
+    secondary_color: defaultBrandColors.secondary,
     content_locale: "es",
   },
   confirmed: false,
@@ -82,6 +83,8 @@ const STEP_INDEX: Record<SignupStep | "completed", number> = {
   review: 3,
   completed: 3,
 };
+
+const LAST_STEP = STEP_INDEX.review;
 
 function wordsToList(value: string) {
   return value
@@ -113,7 +116,8 @@ function progressToData(progress: SignupProgress, current: OnboardingData) {
       ...(draft.brand || {}),
       preferred_words: listToWords(draft.brand?.preferred_words),
       forbidden_words: listToWords(draft.brand?.forbidden_words),
-      content_locale: draft.brand?.content_locale || current.brand.content_locale,
+      content_locale:
+        draft.brand?.content_locale || current.brand.content_locale,
     },
     confirmed: draft.review?.confirmed || false,
   };
@@ -138,11 +142,21 @@ export default function OnboardingPage() {
   const completionKey = useRef<string | null>(null);
   const operationInFlight = useRef(false);
 
-  const applyProgress = useCallback((progress: SignupProgress) => {
-    setData((current) => progressToData(progress, current));
-    setVersion(progress.signup.version);
-    setStep(STEP_INDEX[progress.signup.current_step]);
-  }, []);
+  /**
+   * `current_step` is the first section the server still considers incomplete,
+   * which is the right place to resume a session but the wrong place to jump to
+   * mid-flow: someone who goes back to step 1 and saves it again would be
+   * thrown forward to the review, skipping the steps in between. Callers that
+   * own the navigation themselves pass `syncStep: false`.
+   */
+  const applyProgress = useCallback(
+    (progress: SignupProgress, { syncStep = true } = {}) => {
+      setData((current) => progressToData(progress, current));
+      setVersion(progress.signup.version);
+      if (syncStep) setStep(STEP_INDEX[progress.signup.current_step]);
+    },
+    []
+  );
 
   useEffect(() => {
     let active = true;
@@ -200,11 +214,11 @@ export default function OnboardingPage() {
     if (step === 0) {
       return Boolean(
         data.business.name.trim() &&
-          data.business.category &&
-          data.business.country.trim() &&
-          data.business.city.trim() &&
-          data.business.primary_product.trim() &&
-          data.business.target_audience.trim()
+        data.business.category &&
+        data.business.country.trim() &&
+        data.business.city.trim() &&
+        data.business.primary_product.trim() &&
+        data.business.target_audience.trim()
       );
     }
     if (step === 1) {
@@ -220,6 +234,20 @@ export default function OnboardingPage() {
       );
     }
     return data.confirmed;
+  }
+
+  /**
+   * Explains what is still missing instead of leaving the submit button dead.
+   * Native constraint validation covers the text inputs and the objective
+   * select; the checkbox-group minimums and the confirmation have no native
+   * equivalent, so they need a message of their own.
+   */
+  function missingRequirement() {
+    if (canProceed()) return "";
+    if (step === 0) return copy.missingBusiness;
+    if (step === 1) return copy.missingChannels;
+    if (step === 2) return copy.missingBrand;
+    return copy.missingReview;
   }
 
   function businessPayload(): SignupBusinessDraft {
@@ -245,7 +273,9 @@ export default function OnboardingPage() {
       value_proposition: data.brand.value_proposition.trim(),
       preferred_words: wordsToList(data.brand.preferred_words),
       forbidden_words: wordsToList(data.brand.forbidden_words),
-      ...(data.brand.primary_color ? { primary_color: data.brand.primary_color } : {}),
+      ...(data.brand.primary_color
+        ? { primary_color: data.brand.primary_color }
+        : {}),
       ...(data.brand.secondary_color
         ? { secondary_color: data.brand.secondary_color }
         : {}),
@@ -258,7 +288,10 @@ export default function OnboardingPage() {
     applyProgress(progress);
   }
 
-  async function saveCurrentStep(nextStep: SignupStep) {
+  async function saveCurrentStep(
+    nextStep: SignupStep,
+    options: { syncStep?: boolean } = {}
+  ) {
     const payload =
       nextStep === "business"
         ? { step: nextStep, business: businessPayload() }
@@ -268,22 +301,29 @@ export default function OnboardingPage() {
             ? { step: nextStep, brand: brandPayload() }
             : { step: nextStep, review: { confirmed: data.confirmed } };
     const progress = await api.auth.signup.saveDraft(payload, version);
-    applyProgress(progress);
+    applyProgress(progress, options);
     return progress;
   }
 
   async function advance() {
-    if (operationInFlight.current || saving || submitting || !canProceed()) return;
+    if (operationInFlight.current || saving || submitting || !canProceed())
+      return;
     operationInFlight.current = true;
     setSaving(true);
     setError("");
     try {
-      await saveCurrentStep(step === 0 ? "business" : step === 1 ? "channels" : "brand");
+      await saveCurrentStep(
+        step === 0 ? "business" : step === 1 ? "channels" : "brand",
+        { syncStep: false }
+      );
+      setStep((current) => Math.min(current + 1, LAST_STEP));
     } catch (reason) {
       if (reason instanceof ApiError && reason.code === "SIGNUP_CONFLICT") {
         try {
           await refreshFromServer();
-          setError("Tu registro cambió en otra pestaña. Cargamos la versión más reciente.");
+          setError(
+            "Tu registro cambió en otra pestaña. Cargamos la versión más reciente."
+          );
         } catch {
           setError("Tu registro cambió. Actualiza la página para continuar.");
         }
@@ -303,14 +343,16 @@ export default function OnboardingPage() {
   }
 
   async function finish() {
-    if (operationInFlight.current || submitting || saving || !canProceed()) return;
+    if (operationInFlight.current || submitting || saving || !canProceed())
+      return;
     operationInFlight.current = true;
     setSubmitting(true);
     setRetrying(false);
     setError("");
     try {
-      await saveCurrentStep("review");
-      if (!completionKey.current) completionKey.current = createIdempotencyKey();
+      await saveCurrentStep("review", { syncStep: false });
+      if (!completionKey.current)
+        completionKey.current = createIdempotencyKey();
       await api.auth.signup.complete({
         idempotencyKey: completionKey.current,
         onRetry: () => setRetrying(true),
@@ -321,8 +363,13 @@ export default function OnboardingPage() {
     } catch (reason) {
       if (isMissingSignup(reason)) {
         router.replace(routes.register);
-      } else if (reason instanceof ApiError && reason.code === "SIGNUP_CONFLICT") {
-        setError("El registro cambió o ya fue completado. Actualiza para continuar.");
+      } else if (
+        reason instanceof ApiError &&
+        reason.code === "SIGNUP_CONFLICT"
+      ) {
+        setError(
+          "El registro cambió o ya fue completado. Actualiza para continuar."
+        );
       } else {
         setError(
           reason instanceof ApiError
@@ -339,7 +386,12 @@ export default function OnboardingPage() {
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (step < 3) {
+    const blocker = missingRequirement();
+    if (blocker) {
+      setError(blocker);
+      return;
+    }
+    if (step < LAST_STEP) {
       await advance();
     } else {
       await finish();
@@ -347,7 +399,10 @@ export default function OnboardingPage() {
   }
 
   function back() {
-    if (!saving && !submitting && step > 0) setStep((current) => current - 1);
+    if (saving || submitting || step === 0) return;
+    // A message about the step being left behind would only confuse.
+    setError("");
+    setStep((current) => current - 1);
   }
 
   async function cancel() {
@@ -377,12 +432,17 @@ export default function OnboardingPage() {
     <SignupRoute>
       <main className="onboarding-page">
         <header className="onboarding-header">
-          <Logo />
+          <Logo inverse />
           <div>
             <p className="eyebrow">{copy.eyebrow}</p>
             <h1>{copy.title}</h1>
           </div>
-          <button type="button" className="onboarding-cancel" onClick={() => void cancel()} disabled={saving || submitting}>
+          <button
+            type="button"
+            className="onboarding-cancel"
+            onClick={() => void cancel()}
+            disabled={saving || submitting}
+          >
             {copy.exit}
           </button>
         </header>
@@ -412,7 +472,11 @@ export default function OnboardingPage() {
               <StepChannels data={data.channels} onChange={update} />
             ) : null}
             {step === 2 ? (
-              <StepBrand data={data.brand} onChange={update} showContentLocale />
+              <StepBrand
+                data={data.brand}
+                onChange={update}
+                showContentLocale
+              />
             ) : null}
             {step === 3 ? (
               <StepReview
@@ -420,26 +484,45 @@ export default function OnboardingPage() {
                 channels={data.channels}
                 brand={data.brand}
                 confirmed={data.confirmed}
-                onConfirm={(confirmed) => setData((current) => ({ ...current, confirmed }))}
-                submitting={submitting || saving}
+                onConfirm={(confirmed) =>
+                  setData((current) => ({ ...current, confirmed }))
+                }
               />
             ) : null}
 
             <div className="onboarding-actions">
-              <button type="button" className="button-secondary" onClick={back} disabled={step === 0 || saving || submitting}>
+              <button
+                type="button"
+                className="button-secondary"
+                onClick={back}
+                disabled={step === 0 || saving || submitting}
+              >
                 {copy.back}
               </button>
-              {step < 3 ? (
-                <button type="submit" className="button-primary" disabled={!canProceed() || saving || submitting}>
+              {step < LAST_STEP ? (
+                <button
+                  type="submit"
+                  className="button-primary"
+                  disabled={saving || submitting}
+                >
                   {saving ? copy.saving : copy.next}
                 </button>
-              ) : null}
+              ) : (
+                <button
+                  type="submit"
+                  className="button-primary onboarding-finish-button"
+                  disabled={saving || submitting}
+                >
+                  {submitting ? copy.finishing : copy.finish}
+                </button>
+              )}
             </div>
           </form>
-          <p className="onboarding-keyboard-help">
-            {copy.keyboard}
+          <p className="onboarding-required-hint">{copy.requiredHint}</p>
+          <p className="onboarding-keyboard-help">{copy.keyboard}</p>
+          <p className="onboarding-version">
+            {copy.version}: {version}
           </p>
-          <p className="onboarding-version">{copy.version}: {version}</p>
         </section>
       </main>
     </SignupRoute>

@@ -1,15 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type KeyboardEvent,
+} from "react";
 import { useRouter } from "next/navigation";
 
+import { ChatIcon, type ChatIconName } from "@/components/assistant/chat-icon";
 import { Composer } from "@/components/assistant/composer";
 import { Logo } from "@/components/brand/logo";
 import { MessageList } from "@/components/assistant/message-list";
 import { api, ApiError, createIdempotencyKey } from "@/lib/api";
 import {
   peekFirstPrompt,
+  saveFirstPrompt,
   takeFirstPrompt,
 } from "@/lib/creation-draft";
 import { routes } from "@/lib/routes";
@@ -53,9 +61,7 @@ interface SendResult {
 }
 
 type GenerationIntent =
-  | "create_social_post"
-  | "create_short_video_script"
-  | "analyze_visual";
+  "create_social_post" | "create_short_video_script" | "analyze_visual";
 
 interface GenerationOperation {
   key: string;
@@ -65,6 +71,38 @@ interface GenerationOperation {
   token: number;
 }
 
+/**
+ * The quick actions seed the conversation with the request they name, so each
+ * one lands in the thread as a real first message instead of three buttons
+ * that all open the same blank conversation.
+ */
+const QUICK_ACTIONS: Array<{
+  label: string;
+  hint: string;
+  prompt: string;
+}> = [
+  {
+    label: "Crear una publicación",
+    hint: "Texto, enfoque visual y llamada a la acción.",
+    prompt: "Quiero crear una publicación para las redes de mi negocio.",
+  },
+  {
+    label: "Revisar un diseño",
+    hint: "Fortalezas, problemas y recomendaciones claras.",
+    prompt: "Quiero revisar un diseño y mejorarlo.",
+  },
+  {
+    label: "Planear contenido",
+    hint: "Ideas adaptadas a tu negocio y audiencia.",
+    prompt: "Ayúdame a planear el contenido de las próximas semanas.",
+  },
+];
+
+const RAIL_LINKS: Array<{ href: string; label: string; icon: ChatIconName }> = [
+  { href: routes.templates, label: "Plantillas", icon: "gallery" },
+  { href: routes.library, label: "Biblioteca", icon: "library" },
+];
+
 export function StudioWorkspace({
   conversationId,
 }: {
@@ -72,6 +110,8 @@ export function StudioWorkspace({
 }) {
   const router = useRouter();
   const visualFileRef = useRef<HTMLInputElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const historyToggleRef = useRef<HTMLButtonElement>(null);
   const firstPromptSentRef = useRef(false);
   const operationTokenRef = useRef(0);
   const generationControllerRef = useRef<AbortController | null>(null);
@@ -84,13 +124,22 @@ export function StudioWorkspace({
   const [loadingThread, setLoadingThread] = useState(false);
   const [threadReady, setThreadReady] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [loadingLabel, setLoadingLabel] = useState("Preparando una propuesta para tu negocio…");
-  const [failedOperation, setFailedOperation] = useState<GenerationOperation | null>(null);
+  const [loadingLabel, setLoadingLabel] = useState(
+    "Preparando una propuesta para tu negocio…"
+  );
+  const [failedOperation, setFailedOperation] =
+    useState<GenerationOperation | null>(null);
   const [creating, setCreating] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [uploadingVisual, setUploadingVisual] = useState(false);
   const [error, setError] = useState("");
   const [firstPrompt, setFirstPrompt] = useState<string | null>(null);
+  /**
+   * The history is a dropdown at every width, so this drives the whole layout:
+   * the rail toggle owns `aria-expanded`, the panel opens over the canvas and
+   * the scrim closes it again.
+   */
+  const [panelOpen, setPanelOpen] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -183,13 +232,18 @@ export function StudioWorkspace({
     }
   }, [conversationId]);
 
+  // Opening a conversation from the drawer should leave the thread in view.
+  useEffect(() => {
+    setPanelOpen(false);
+  }, [conversationId]);
+
   async function createConversation() {
     setCreating(true);
     setError("");
     try {
       const businesses = await api.businesses.list();
       if (!businesses.length) {
-        router.push("/onboarding");
+        router.push(routes.onboarding);
         return;
       }
       const conversation = await api.conversations.create({
@@ -206,6 +260,17 @@ export function StudioWorkspace({
     } finally {
       setCreating(false);
     }
+  }
+
+  /**
+   * The empty-state field is the same composer used inside a thread: the text
+   * is parked in session storage and the new conversation replays it as its
+   * first message once the thread is ready.
+   */
+  function startConversationWith(text: string) {
+    saveFirstPrompt(text);
+    setFirstPrompt(text);
+    void createConversation();
   }
 
   async function updateConversation(item: ConversationItem) {
@@ -268,7 +333,8 @@ export function StudioWorkspace({
         {
           idempotencyKey: operation.key,
           signal: controller.signal,
-          onRetry: () => setLoadingLabel("Hubo un problema temporal. Reintentando…"),
+          onRetry: () =>
+            setLoadingLabel("Hubo un problema temporal. Reintentando…"),
         }
       )) as unknown as SendResult;
       if (operation.token !== operationTokenRef.current) return;
@@ -297,7 +363,8 @@ export function StudioWorkspace({
       } else if (result.type === "error")
         setError(result.message || "No pudimos generar contenido.");
     } catch (reason) {
-      if (reason instanceof DOMException && reason.name === "AbortError") return;
+      if (reason instanceof DOMException && reason.name === "AbortError")
+        return;
       if (operation.token !== operationTokenRef.current) return;
       if (reason instanceof ApiError && reason.retryable) {
         setFailedOperation(operation);
@@ -388,7 +455,13 @@ export function StudioWorkspace({
   }
 
   async function createVariation(artifactId: string | undefined, kind: string) {
-    if (!artifactId || !conversationId || loading || generationInFlightRef.current) return;
+    if (
+      !artifactId ||
+      !conversationId ||
+      loading ||
+      generationInFlightRef.current
+    )
+      return;
     generationInFlightRef.current = true;
     const controller = new AbortController();
     generationControllerRef.current = controller;
@@ -401,7 +474,8 @@ export function StudioWorkspace({
         {
           idempotencyKey: createIdempotencyKey(),
           signal: controller.signal,
-          onRetry: () => setLoadingLabel("Hubo un problema temporal. Reintentando…"),
+          onRetry: () =>
+            setLoadingLabel("Hubo un problema temporal. Reintentando…"),
         }
       )) as unknown as SendResult;
       if (result.type === "artifact" && result.artifact)
@@ -417,7 +491,8 @@ export function StudioWorkspace({
         ]);
       else setError(result.message || "No pudimos crear la variación.");
     } catch (reason) {
-      if (reason instanceof DOMException && reason.name === "AbortError") return;
+      if (reason instanceof DOMException && reason.name === "AbortError")
+        return;
       setError(
         reason instanceof ApiError
           ? reason.message
@@ -431,9 +506,110 @@ export function StudioWorkspace({
     }
   }
 
+  function focusSearch() {
+    setPanelOpen(true);
+    // The dropdown fades in; focus once it has been painted.
+    window.requestAnimationFrame(() => searchInputRef.current?.focus());
+  }
+
+  /**
+   * Closing a dropdown has to hand focus back to the control that opened it,
+   * otherwise a keyboard user who presses Escape is left on a hidden element
+   * and restarts from the top of the document.
+   */
+  function closePanel() {
+    setPanelOpen(false);
+    historyToggleRef.current?.focus();
+  }
+
+  function handleLayoutKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === "Escape" && panelOpen) {
+      event.stopPropagation();
+      closePanel();
+    }
+  }
+
+  const activeConversation = conversations.find(
+    (item) => item.id === conversationId
+  );
+
   return (
-    <section className="studio-layout" aria-label="Studio de contenido">
-      <aside className="studio-sidebar">
+    <section
+      className="studio-layout"
+      data-surface="chat"
+      aria-label="Studio de contenido"
+      onKeyDown={handleLayoutKeyDown}
+    >
+      {/* The rail is icon-only by design, so every control keeps its label in
+          the accessible name and repeats it in `title` for sighted hover. */}
+      <nav className="studio-rail" aria-label="Acciones de Studio">
+        <button
+          type="button"
+          className="studio-rail-button"
+          ref={historyToggleRef}
+          onClick={() => setPanelOpen((open) => !open)}
+          aria-expanded={panelOpen}
+          aria-controls="studio-history"
+          aria-haspopup="true"
+          data-active={panelOpen || undefined}
+          title="Ver el historial"
+        >
+          <ChatIcon name="conversations" />
+          <span className="visually-hidden">Ver el historial</span>
+        </button>
+        <button
+          type="button"
+          className="studio-rail-button"
+          onClick={createConversation}
+          disabled={creating}
+          title="Empezar una conversación"
+        >
+          <ChatIcon name="compose" />
+          <span className="visually-hidden">Empezar una conversación</span>
+        </button>
+        <button
+          type="button"
+          className="studio-rail-button"
+          onClick={focusSearch}
+          title="Buscar en el historial"
+        >
+          <ChatIcon name="search" />
+          <span className="visually-hidden">Buscar en el historial</span>
+        </button>
+        {RAIL_LINKS.map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            className="studio-rail-button"
+            title={item.label}
+          >
+            <ChatIcon name={item.icon} />
+            <span className="visually-hidden">{item.label}</span>
+          </Link>
+        ))}
+      </nav>
+
+      {/* A dropdown: anchored to the rail toggle above and laid over the canvas
+          instead of taking a column from it. The closed state is `visibility:
+          hidden`, which also takes its controls out of the tab order. */}
+      <aside
+        className="studio-panel"
+        id="studio-history"
+        data-open={panelOpen || undefined}
+        aria-label="Conversaciones"
+      >
+        <div className="studio-panel-head">
+          <h2>Conversaciones</h2>
+          <button
+            type="button"
+            className="studio-panel-close"
+            onClick={closePanel}
+            title="Cerrar el historial"
+          >
+            <ChatIcon name="close" />
+            <span className="visually-hidden">Cerrar el historial</span>
+          </button>
+        </div>
         <button
           type="button"
           className="button-primary"
@@ -446,6 +622,8 @@ export function StudioWorkspace({
           Buscar conversaciones
           <input
             id="conversation-search"
+            ref={searchInputRef}
+            type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Título o mensaje"
@@ -483,7 +661,10 @@ export function StudioWorkspace({
                 className="conversation-list-item"
                 data-active={item.id === conversationId || undefined}
               >
-                <Link href={`/studio/${encodeURIComponent(item.id)}`}>
+                <Link
+                  href={`/studio/${encodeURIComponent(item.id)}`}
+                  aria-current={item.id === conversationId ? "page" : undefined}
+                >
                   <strong>{item.title}</strong>
                   <span>{item.last_message || "Sin mensajes"}</span>
                 </Link>
@@ -512,49 +693,47 @@ export function StudioWorkspace({
           )}
         </div>
       </aside>
+
+      {panelOpen ? (
+        <button
+          type="button"
+          className="studio-scrim"
+          onClick={closePanel}
+          aria-label="Cerrar el historial"
+        />
+      ) : null}
+
       <div className="studio-main">
         <header className="studio-header">
           <Logo inverse />
-          <div className="studio-status"><span /> Asistente disponible</div>
-          <div className="studio-header-copy visually-hidden">
-            <p className="eyebrow">STUDIO</p>
-            <h1>Tu espacio de creación</h1>
-          </div>
+          <p className="studio-status">
+            <span aria-hidden="true" /> Asistente disponible
+          </p>
           {conversationId ? (
-            <div className="assistant-header-actions">
-              <button
-                type="button"
-                onClick={() =>
-                  send(
-                    "Crea un guion breve para video vertical sobre mi producto principal.",
-                    "create_short_video_script"
-                  )
-                }
-                disabled={loading}
-                className="button-secondary button-small"
-              >
-                Crear guion
-              </button>
-              <input
-                ref={visualFileRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                onChange={uploadVisual}
-                disabled={loading || uploadingVisual}
-                className="visually-hidden"
-                aria-label="Subir imagen para analizar"
-              />
-              <button
-                type="button"
-                onClick={() => visualFileRef.current?.click()}
-                disabled={loading || uploadingVisual}
-                className="button-secondary button-small"
-              >
-                {uploadingVisual ? "Subiendo…" : "Analizar imagen"}
-              </button>
-            </div>
+            <h1 className="visually-hidden">
+              {activeConversation?.title || "Conversación"}
+            </h1>
           ) : null}
+          <div className="studio-header-actions">
+            <Link
+              href={routes.dashboard}
+              className="studio-header-button"
+              title="Ir al inicio"
+            >
+              <ChatIcon name="home" />
+              <span className="visually-hidden">Ir al inicio</span>
+            </Link>
+            <Link
+              href={routes.settings}
+              className="studio-header-button"
+              title="Abrir ajustes"
+            >
+              <ChatIcon name="settings" />
+              <span className="visually-hidden">Abrir ajustes</span>
+            </Link>
+          </div>
         </header>
+
         {conversationId ? (
           <>
             {error ? (
@@ -563,7 +742,9 @@ export function StudioWorkspace({
               </p>
             ) : null}
             {loadingThread ? (
-              <div className="route-status">Abriendo conversación…</div>
+              <div className="route-status" role="status">
+                Abriendo conversación…
+              </div>
             ) : (
               <>
                 <MessageList
@@ -588,39 +769,97 @@ export function StudioWorkspace({
                       : undefined
                   }
                 />
-                {failedOperation ? (
-                  <button
-                    type="button"
-                    className="button-secondary retry-generation"
-                    onClick={retryFailedGeneration}
-                  >
-                    Intentar de nuevo
-                  </button>
-                ) : null}
-                <Composer
-                  onSend={send}
-                  disabled={loading}
-                  draftKey={conversationId}
-                />
+                <div className="studio-composer-dock">
+                  {failedOperation ? (
+                    <button
+                      type="button"
+                      className="button-secondary retry-generation"
+                      onClick={retryFailedGeneration}
+                    >
+                      Intentar de nuevo
+                    </button>
+                  ) : null}
+                  <div className="studio-thread-actions">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        send(
+                          "Crea un guion breve para video vertical sobre mi producto principal.",
+                          "create_short_video_script"
+                        )
+                      }
+                      disabled={loading}
+                      className="studio-chip"
+                    >
+                      Crear guion
+                    </button>
+                  </div>
+                  <input
+                    ref={visualFileRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={uploadVisual}
+                    disabled={loading || uploadingVisual}
+                    className="visually-hidden"
+                    aria-label="Subir imagen para analizar"
+                  />
+                  <Composer
+                    onSend={send}
+                    disabled={loading}
+                    draftKey={conversationId}
+                    onAttach={() => visualFileRef.current?.click()}
+                    attachLabel="Adjuntar una imagen para analizar"
+                    attachBusy={uploadingVisual}
+                  />
+                </div>
               </>
             )}
           </>
         ) : (
           <section className="studio-empty-state">
-            <Logo inverse className="studio-welcome-logo" />
-            <h1>{firstPrompt ? "Tu idea está lista para convertirse en contenido." : "¿Qué haremos hoy?"}</h1>
-            <p>{firstPrompt ? `“${firstPrompt}”` : "Cuéntame qué necesitas y construiremos la idea paso a paso."}</p>
-            <div className="studio-quick-grid">
-              <button type="button" onClick={createConversation} disabled={creating}><strong>Crear una publicación</strong><span>Texto, enfoque visual y llamada a la acción.</span></button>
-              <button type="button" onClick={createConversation} disabled={creating}><strong>Revisar un diseño</strong><span>Fortalezas, problemas y recomendaciones claras.</span></button>
-              <button type="button" onClick={createConversation} disabled={creating}><strong>Planear contenido</strong><span>Ideas adaptadas a tu negocio y audiencia.</span></button>
-            </div>
-            <button type="button" className="studio-empty-composer" onClick={createConversation} disabled={creating}><span>＋</span><em>Escribe tu idea o pregunta...</em><b>→</b></button>
-            {error ? (
-              <p className="studio-error" role="alert">
-                {error}
+            <div className="studio-welcome">
+              <Logo inverse className="studio-welcome-logo" />
+              <h1>
+                {firstPrompt
+                  ? "Tu idea está lista para convertirse en contenido."
+                  : "¿Qué haremos hoy?"}
+              </h1>
+              <p>
+                {firstPrompt
+                  ? `“${firstPrompt}”`
+                  : "Cuéntame qué necesitas y construiremos la idea paso a paso."}
               </p>
-            ) : null}
+            </div>
+            <div className="studio-composer-dock">
+              {error ? (
+                <p className="studio-error" role="alert">
+                  {error}
+                </p>
+              ) : null}
+              <Composer
+                onSend={startConversationWith}
+                disabled={creating}
+                draftKey="nueva-conversacion"
+                placeholder="Escribe tu idea o pregunta…"
+                onAttach={createConversation}
+                attachLabel="Adjuntar contenido en una conversación nueva"
+                attachBusy={creating}
+              />
+              <div className="studio-quick-grid">
+                {QUICK_ACTIONS.map((action) => (
+                  <button
+                    key={action.label}
+                    type="button"
+                    className="studio-chip"
+                    onClick={() => startConversationWith(action.prompt)}
+                    disabled={creating}
+                  >
+                    <strong>{action.label}</strong>
+                    <span>{action.hint}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
           </section>
         )}
       </div>

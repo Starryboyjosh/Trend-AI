@@ -94,7 +94,7 @@ def _public_template_ids(engine) -> list[str]:
 def test_upgrade_empty_postgres_to_head(postgres_engine) -> None:
     _upgrade("head")
     with postgres_engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "025"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "026"
         assert connection.scalar(text("SELECT to_regclass('public.video_generation_jobs')"))
         assert connection.scalar(text("SELECT to_regclass('public.video_generation_budgets')"))
         assert connection.scalar(
@@ -665,7 +665,7 @@ def test_upgrade_from_017_adds_account_lifecycle_schema(postgres_engine) -> None
 
     _upgrade("head")
     with postgres_engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "025"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "026"
         assert connection.scalar(text("SELECT to_regclass('public.account_purge_jobs')"))
 
 

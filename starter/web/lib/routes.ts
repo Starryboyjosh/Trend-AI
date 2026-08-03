@@ -9,6 +9,7 @@ export const routes = {
   onboarding: "/onboarding",
   dashboard: "/dashboard",
   templates: "/templates",
+  library: "/library",
   studioNew: "/studio/new",
   settings: "/settings",
   // Public on purpose: it is reached after the session has been revoked.

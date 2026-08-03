@@ -9,48 +9,32 @@ interface Props {
 
 export function ProgressBar({ steps, current }: Props) {
   const copy = surfaceCopy[useInterfaceLocale()].onboarding;
+  // A single template per locale: the connector word ("de"/"of") is not the
+  // same everywhere, so it cannot be concatenated in the markup.
+  const summary = copy.progressLabel
+    .replace("{current}", String(current + 1))
+    .replace("{total}", String(steps.length))
+    .replace("{label}", steps[current] ?? "");
+
   return (
-    <nav aria-label={copy.progress} style={{ marginBottom: 32 }}>
-      <ol
-        style={{
-          display: "flex",
-          gap: 8,
-          listStyle: "none",
-          padding: 0,
-          margin: 0,
-        }}
-      >
+    <nav className="onboarding-progress" aria-label={copy.progress}>
+      <ol className="onboarding-progress-list">
         {steps.map((label, i) => {
           const done = i < current;
           const active = i === current;
           return (
             <li
               key={label}
-              style={{
-                flex: 1,
-                height: 4,
-                borderRadius: 2,
-                background: active
-                  ? "var(--primary)"
-                  : done
-                    ? "var(--secondary)"
-                    : "var(--border)",
-                transition: "background 0.2s",
-              }}
+              className={active ? "is-active" : done ? "is-complete" : ""}
               title={label}
-            />
+              aria-current={active ? "step" : undefined}
+            >
+              <span className="visually-hidden">{label}</span>
+            </li>
           );
         })}
       </ol>
-      <p
-        style={{
-          fontSize: "0.75rem",
-          color: "var(--muted-foreground)",
-          marginTop: 8,
-        }}
-      >
-        {copy.step} {current + 1} de {steps.length}: {steps[current]}
-      </p>
+      <p className="onboarding-progress-label">{summary}</p>
     </nav>
   );
 }

@@ -110,7 +110,8 @@ const demoTemplates: Template[] = [
     objective: "brand_awareness",
     thumbnail_url: "/templates/coffee.png",
     editable_slots: ["producto", "historia", "llamada_a_la_accion"],
-    description: "Una pieza editorial para contar qué hace especial a tu negocio.",
+    description:
+      "Una pieza editorial para contar qué hace especial a tu negocio.",
     canva_url: "https://canva.link/9667338l5l4mgwg",
     aspect_ratio: "4:5",
   },
@@ -184,9 +185,15 @@ export const demoData = {
     {
       id: "business-demo-1",
       name: "Café Central",
+      category: "gastronomy",
+      country: "Honduras",
+      city: "Tegucigalpa",
       description: "Café de especialidad para quienes trabajan y viven cerca.",
       primary_product: "Café de especialidad y desayunos",
       target_audience: "Personas que buscan una pausa cercana y de calidad.",
+      preferred_platforms: ["instagram", "facebook"],
+      primary_objective: "store_visits",
+      content_locale: "es",
     },
   ],
   brandProfile: {

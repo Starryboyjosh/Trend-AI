@@ -586,6 +586,27 @@ describe("API client", () => {
       expect(result.image_generation.tier).toBe("paid");
     });
 
+    test("carga y actualiza la cuenta demo sin solicitar un backend", async () => {
+      vi.mocked(isDemoModeEnabled).mockReturnValueOnce(true);
+      await expect(api.auth.usage()).resolves.toEqual({
+        period_days: 30,
+        items: [],
+      });
+
+      vi.mocked(isDemoModeEnabled).mockReturnValueOnce(true);
+      await expect(
+        api.auth.updateAccount({ name: "Ana Local", interface_locale: "pt" })
+      ).resolves.toMatchObject({
+        user: {
+          name: "Ana Local",
+          email: "demo@hitrendy.local",
+          interface_locale: "pt",
+        },
+      });
+
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
     test("no solicita CSRF para GET", async () => {
       fetchMock.mockResolvedValueOnce(jsonResponse({}));
 

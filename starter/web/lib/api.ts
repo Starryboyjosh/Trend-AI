@@ -214,7 +214,10 @@ const RETRY_BASE_DELAY_MS = 250;
 const MAX_RETRY_AFTER_MS = 30_000;
 
 export function createIdempotencyKey(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
     return crypto.randomUUID();
   }
 
@@ -280,10 +283,7 @@ async function request<T>(
     return demoRequest<T>(path, options);
   }
 
-  const maxAttempts = Math.max(
-    1,
-    options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
-  );
+  const maxAttempts = Math.max(1, options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS);
 
   const {
     idempotencyKey,
@@ -294,10 +294,7 @@ async function request<T>(
 
   const headers = new Headers(fetchOptions.headers);
 
-  if (
-    typeof fetchOptions.body === "string" &&
-    !headers.has("Content-Type")
-  ) {
+  if (typeof fetchOptions.body === "string" && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
 
@@ -355,8 +352,7 @@ async function request<T>(
           res.status,
           body.error?.code || "UNKNOWN",
           body.error?.message || "Error de conexión",
-          RETRYABLE_STATUSES.has(res.status) ||
-            (body.error?.retryable ?? false)
+          RETRYABLE_STATUSES.has(res.status) || (body.error?.retryable ?? false)
         );
 
         /*
@@ -364,10 +360,7 @@ async function request<T>(
          * maxAttempts because the backend rejected the request before
          * executing the protected operation.
          */
-        if (
-          error.code.startsWith("CSRF_TOKEN_") &&
-          csrfRetryAvailable
-        ) {
+        if (error.code.startsWith("CSRF_TOKEN_") && csrfRetryAvailable) {
           csrfRetryAvailable = false;
           resetCsrfToken();
           onRetry?.(attempt + 1);
@@ -386,10 +379,7 @@ async function request<T>(
         onRetry?.(attempt);
 
         await waitForRetry(
-          retryDelayMs(
-            attempt - 1,
-            res.headers.get("Retry-After")
-          ),
+          retryDelayMs(attempt - 1, res.headers.get("Retry-After")),
           fetchOptions.signal ?? undefined
         );
 
@@ -410,12 +400,7 @@ async function request<T>(
         throw reason;
       }
 
-      const error = new ApiError(
-        0,
-        "NETWORK_ERROR",
-        "Error de conexión",
-        true
-      );
+      const error = new ApiError(0, "NETWORK_ERROR", "Error de conexión", true);
 
       if (
         !idempotencyKey ||
@@ -435,12 +420,7 @@ async function request<T>(
     }
   }
 
-  throw new ApiError(
-    0,
-    "REQUEST_FAILED",
-    "Error de conexión",
-    true
-  );
+  throw new ApiError(0, "REQUEST_FAILED", "Error de conexión", true);
 }
 
 async function requestForm<T>(path: string, body: FormData): Promise<T> {
@@ -468,10 +448,7 @@ async function requestForm<T>(path: string, body: FormData): Promise<T> {
   return res.json();
 }
 
-async function demoRequest<T>(
-  path: string,
-  options: RequestInit
-): Promise<T> {
+async function demoRequest<T>(path: string, options: RequestInit): Promise<T> {
   const method = (options.method || "GET").toUpperCase();
   const url = new URL(path, "http://localhost");
   const pathname = url.pathname;
@@ -491,13 +468,48 @@ async function demoRequest<T>(
     return { ok: true } as T;
   }
 
+  if (pathname === "/api/v1/auth/usage" && method === "GET") {
+    return { period_days: 30, items: [] } as T;
+  }
+
+  if (pathname === "/api/v1/auth/account" && method === "PATCH") {
+    const data = parseJsonBody(options.body);
+    return {
+      user: {
+        ...cloneDemo(demoData.auth.user),
+        ...(typeof data.name === "string" ? { name: data.name } : {}),
+        ...(data.interface_locale === "es" ||
+        data.interface_locale === "en" ||
+        data.interface_locale === "pt"
+          ? { interface_locale: data.interface_locale }
+          : {}),
+      },
+    } as T;
+  }
+
   if (pathname === "/api/v1/capabilities" && method === "GET") {
     return {
       advisor: { status: "available", tier: "free", quality_levels: ["fast"] },
-      copywriter: { status: "available", tier: "free", quality_levels: ["fast"] },
-      vision_review: { status: "available", tier: "free", quality_levels: ["fast"] },
-      image_generation: { status: "disabled", tier: "paid", quality_levels: [] },
-      video_generation: { status: "disabled", tier: "paid", quality_levels: [] },
+      copywriter: {
+        status: "available",
+        tier: "free",
+        quality_levels: ["fast"],
+      },
+      vision_review: {
+        status: "available",
+        tier: "free",
+        quality_levels: ["fast"],
+      },
+      image_generation: {
+        status: "disabled",
+        tier: "paid",
+        quality_levels: [],
+      },
+      video_generation: {
+        status: "disabled",
+        tier: "paid",
+        quality_levels: [],
+      },
       trend_analysis: { status: "disabled", tier: "free", quality_levels: [] },
     } as T;
   }
@@ -644,12 +656,14 @@ async function demoRequest<T>(
       aspect_ratio: "9:16",
       voiceover:
         "Presenta el producto con una idea clara y cierra invitando a conocerlo.",
-      music_direction: "Ritmo cálido, optimista y discreto para dejar respirar la voz.",
+      music_direction:
+        "Ritmo cálido, optimista y discreto para dejar respirar la voz.",
       shots: [
         {
           order: 1,
           duration_seconds: duration === 10 ? 5 : 2,
-          visual: "Producto principal en primer plano, con luz natural y detalles del negocio.",
+          visual:
+            "Producto principal en primer plano, con luz natural y detalles del negocio.",
           camera: "Acercamiento lento desde una vista vertical estable.",
           on_screen_text: "Hecho para tu momento",
           voiceover: "Descubre una forma sencilla de disfrutar lo que hacemos.",
@@ -658,7 +672,8 @@ async function demoRequest<T>(
         {
           order: 2,
           duration_seconds: duration === 10 ? 5 : 3,
-          visual: "Una persona usa o disfruta el producto en un ambiente cercano.",
+          visual:
+            "Una persona usa o disfruta el producto en un ambiente cercano.",
           camera: "Plano medio vertical con movimiento lateral sutil.",
           on_screen_text: "Conoce más hoy",
           voiceover: "Escríbenos y encuentra la opción ideal para ti.",
@@ -739,9 +754,7 @@ async function demoRequest<T>(
     return { job: null } as T;
   }
 
-  const demoProjects = readDemoProjects(
-    cloneDemo(demoData.projects)
-  );
+  const demoProjects = readDemoProjects(cloneDemo(demoData.projects));
 
   if (pathname === "/api/v1/projects" && method === "GET") {
     return cloneDemo(demoProjects) as T;
@@ -772,13 +785,10 @@ async function demoRequest<T>(
       source_template_id: template?.id || null,
       artifact_snapshot: {
         ...cloneDemo(demoData.artifacts.demoArtifact),
-        hook:
-          template?.title ||
-          demoData.artifacts.demoArtifact.hook,
+        hook: template?.title || demoData.artifacts.demoArtifact.hook,
         format_recommendation:
           template?.formats[0] ||
-          demoData.artifacts.demoArtifact
-            .format_recommendation,
+          demoData.artifacts.demoArtifact.format_recommendation,
         assumptions: template
           ? [`Proyecto iniciado desde la plantilla ${template.title}.`]
           : demoData.artifacts.demoArtifact.assumptions,
@@ -797,17 +807,10 @@ async function demoRequest<T>(
 
   if (projectMatch) {
     const [, projectId, action] = projectMatch;
-    const project = demoProjects.find(
-      (item) => item.id === projectId
-    );
+    const project = demoProjects.find((item) => item.id === projectId);
 
     if (!project) {
-      throw new ApiError(
-        404,
-        "NOT_FOUND",
-        "Proyecto no encontrado.",
-        false
-      );
+      throw new ApiError(404, "NOT_FOUND", "Proyecto no encontrado.", false);
     }
 
     if (!action && method === "GET") {
@@ -833,10 +836,7 @@ async function demoRequest<T>(
       ] as T;
     }
 
-    if (
-      action === "artifact-version" &&
-      method === "PUT"
-    ) {
+    if (action === "artifact-version" && method === "PUT") {
       project.artifact_snapshot = parseJsonBody(
         options.body
       ) as typeof project.artifact_snapshot;
@@ -847,90 +847,61 @@ async function demoRequest<T>(
     }
   }
 
-  if (
-    pathname === "/api/v1/templates" &&
-    method === "GET"
-  ) {
+  if (pathname === "/api/v1/templates" && method === "GET") {
     return cloneDemo(demoData.templates) as T;
   }
 
-  if (
-    pathname === "/api/v1/templates/recommendations"
-  ) {
+  if (pathname === "/api/v1/templates/recommendations") {
     return cloneDemo(demoData.templates) as T;
   }
 
-  if (
-    pathname === "/api/v1/businesses" &&
-    method === "GET"
-  ) {
+  if (pathname === "/api/v1/businesses" && method === "GET") {
     return cloneDemo(demoData.businesses) as T;
   }
 
-  if (
-    pathname === "/api/v1/businesses" &&
-    method === "POST"
-  ) {
+  if (pathname === "/api/v1/businesses" && method === "POST") {
     return { id: "business-demo-created" } as T;
   }
 
   if (
-    /^\/api\/v1\/businesses\/[^/]+\/brand-profile$/.test(
-      pathname
-    ) &&
+    /^\/api\/v1\/businesses\/[^/]+\/brand-profile$/.test(pathname) &&
     method === "GET"
   ) {
     return cloneDemo(demoData.brandProfile) as T;
   }
 
   if (
-    /^\/api\/v1\/businesses\/[^/]+\/brand-profile$/.test(
-      pathname
-    ) &&
+    /^\/api\/v1\/businesses\/[^/]+\/brand-profile$/.test(pathname) &&
     method === "PUT"
   ) {
     return cloneDemo(demoData.brandProfile) as T;
   }
 
-  if (
-    /^\/api\/v1\/businesses\/[^/]+$/.test(pathname) &&
-    method === "PATCH"
-  ) {
+  if (/^\/api\/v1\/businesses\/[^/]+$/.test(pathname) && method === "PATCH") {
     return cloneDemo(demoData.businesses[0]) as T;
   }
 
-  if (
-    pathname === "/api/v1/conversations" &&
-    method === "GET"
-  ) {
+  if (pathname === "/api/v1/conversations" && method === "GET") {
     return cloneDemo(demoData.conversations) as T;
   }
 
-  if (
-    pathname === "/api/v1/conversations" &&
-    method === "POST"
-  ) {
+  if (pathname === "/api/v1/conversations" && method === "POST") {
     return { id: "conversation-demo-created" } as T;
   }
 
-  if (
-    pathname.startsWith("/api/v1/conversations/") &&
-    method === "GET"
-  ) {
+  if (pathname.startsWith("/api/v1/conversations/") && method === "GET") {
     return {
       messages: [
         {
           id: "message-demo-1",
           role: "user",
-          content:
-            "Necesito un post para una promo de fin de semana.",
+          content: "Necesito un post para una promo de fin de semana.",
           metadata: null,
         },
         {
           id: "message-demo-2",
           role: "assistant",
-          content:
-            "Aquí tienes una propuesta lista para editar.",
+          content: "Aquí tienes una propuesta lista para editar.",
           artifact: demoData.artifacts.demoArtifact,
           artifact_id: "artifact-demo-1",
         },
@@ -938,10 +909,7 @@ async function demoRequest<T>(
     } as T;
   }
 
-  if (
-    pathname.startsWith("/api/v1/conversations/") &&
-    method === "POST"
-  ) {
+  if (pathname.startsWith("/api/v1/conversations/") && method === "POST") {
     return {
       type: "artifact",
       assistant_message: {
@@ -953,17 +921,11 @@ async function demoRequest<T>(
     } as T;
   }
 
-  if (
-    pathname === "/api/v1/assets" &&
-    method === "GET"
-  ) {
+  if (pathname === "/api/v1/assets" && method === "GET") {
     return [] as T;
   }
 
-  if (
-    pathname === "/api/v1/assets/uploads" &&
-    method === "POST"
-  ) {
+  if (pathname === "/api/v1/assets/uploads" && method === "POST") {
     return {
       upload_id: "upload-demo",
       upload_url: "/api/v1/assets/uploads",
@@ -994,11 +956,14 @@ export const api = {
     policies(): Promise<BetaPolicies> {
       return request<BetaPolicies>(`${BASE}/policies`);
     },
-    feedback(data: {
-      category: "bug" | "idea" | "support" | "other";
-      message: string;
-      rating?: number;
-    }, options: Pick<ApiRequestOptions, "idempotencyKey"> = {}) {
+    feedback(
+      data: {
+        category: "bug" | "idea" | "support" | "other";
+        message: string;
+        rating?: number;
+      },
+      options: Pick<ApiRequestOptions, "idempotencyKey"> = {}
+    ) {
       return request<{ id: string; status: string }>(`${BASE}/feedback`, {
         method: "POST",
         idempotencyKey: options.idempotencyKey,
@@ -1025,9 +990,7 @@ export const api = {
 
   social: {
     connections(): Promise<SocialConnectionsResponse> {
-      return request<SocialConnectionsResponse>(
-        `${BASE}/social/connections`
-      );
+      return request<SocialConnectionsResponse>(`${BASE}/social/connections`);
     },
 
     authorize(
@@ -1065,14 +1028,12 @@ export const api = {
       return request<TrendHome>(`${BASE}/trends/home`);
     },
     sources(): Promise<TrendSource[]> {
-      return request<{ sources: TrendSource[] }>(
-        `${BASE}/trends/sources`
-      ).then((result) => result.sources);
+      return request<{ sources: TrendSource[] }>(`${BASE}/trends/sources`).then(
+        (result) => result.sources
+      );
     },
     detail(id: string): Promise<TrendDetail> {
-      return request<TrendDetail>(
-        `${BASE}/trends/${encodeURIComponent(id)}`
-      );
+      return request<TrendDetail>(`${BASE}/trends/${encodeURIComponent(id)}`);
     },
     /**
      * Collects exactly the Home `refresh_scope`. The aggregated Home cards may
@@ -1085,7 +1046,10 @@ export const api = {
       return request<TrendRefreshResult>(`${BASE}/trends/refresh`, {
         method: "POST",
         idempotencyKey: options.idempotencyKey || createIdempotencyKey(),
-        body: JSON.stringify({ region: scope.region, category: scope.category }),
+        body: JSON.stringify({
+          region: scope.region,
+          category: scope.category,
+        }),
       });
     },
   },
@@ -1150,9 +1114,7 @@ export const api = {
 
     /** One poll. Mints a fresh short-lived link on every successful read. */
     job(id: string): Promise<ImageJob> {
-      return request<ImageJob>(
-        `${BASE}/images/jobs/${encodeURIComponent(id)}`
-      );
+      return request<ImageJob>(`${BASE}/images/jobs/${encodeURIComponent(id)}`);
     },
 
     /**
@@ -1232,9 +1194,7 @@ export const api = {
 
     /** One poll. A successful read may mint a fresh short-lived video link. */
     job(id: string): Promise<VideoJob> {
-      return request<VideoJob>(
-        `${BASE}/videos/jobs/${encodeURIComponent(id)}`
-      );
+      return request<VideoJob>(`${BASE}/videos/jobs/${encodeURIComponent(id)}`);
     },
 
     /** The project's most recent durable job, or `null`. */
@@ -1251,30 +1211,23 @@ export const api = {
       data: Record<string, unknown>,
       options: Pick<ApiRequestOptions, "idempotencyKey"> = {}
     ) {
-      return request<Record<string, unknown>>(
-        `${BASE}/conversations`,
-        {
-          method: "POST",
-          idempotencyKey: options.idempotencyKey,
-          body: JSON.stringify(data),
-        }
-      );
+      return request<Record<string, unknown>>(`${BASE}/conversations`, {
+        method: "POST",
+        idempotencyKey: options.idempotencyKey,
+        body: JSON.stringify(data),
+      });
     },
 
     list(
       params?: Record<string, string>
     ): Promise<Array<Record<string, unknown>>> {
-      const qs = params
-        ? `?${new URLSearchParams(params).toString()}`
-        : "";
+      const qs = params ? `?${new URLSearchParams(params).toString()}` : "";
 
       return request(`${BASE}/conversations${qs}`);
     },
 
     get(id: string) {
-      return request<Record<string, unknown>>(
-        `${BASE}/conversations/${id}`
-      );
+      return request<Record<string, unknown>>(`${BASE}/conversations/${id}`);
     },
 
     update(
@@ -1284,22 +1237,17 @@ export const api = {
         status?: "active" | "archived";
       }
     ) {
-      return request<Record<string, unknown>>(
-        `${BASE}/conversations/${id}`,
-        {
-          method: "PATCH",
-          body: JSON.stringify(data),
-        }
-      );
+      return request<Record<string, unknown>>(`${BASE}/conversations/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      });
     },
 
     sendMessage(
       conversationId: string,
       text: string,
       uiIntent?:
-        | "create_social_post"
-        | "create_short_video_script"
-        | "analyze_visual",
+        "create_social_post" | "create_short_video_script" | "analyze_visual",
       attachmentIds: string[] = [],
       options: Pick<
         ApiRequestOptions,
@@ -1319,15 +1267,15 @@ export const api = {
           ...options,
           body: JSON.stringify({
             text,
-            ...(uiIntent
-              ? { ui_intent: uiIntent }
-              : {}),
-            ...(attachmentIds.length
-              ? { attachment_ids: attachmentIds }
-              : {}),
+            ...(uiIntent ? { ui_intent: uiIntent } : {}),
+            ...(attachmentIds.length ? { attachment_ids: attachmentIds } : {}),
             ...(generation?.platform ? { platform: generation.platform } : {}),
-            ...(generation?.objective ? { objective: generation.objective } : {}),
-            ...(generation?.qualityLevel ? { quality_level: generation.qualityLevel } : {}),
+            ...(generation?.objective
+              ? { objective: generation.objective }
+              : {}),
+            ...(generation?.qualityLevel
+              ? { quality_level: generation.qualityLevel }
+              : {}),
             ...(generation?.locale ? { locale: generation.locale } : {}),
           }),
         }
@@ -1350,18 +1298,13 @@ export const api = {
         {
           method: "POST",
           ...options,
-          idempotencyKey:
-            options.idempotencyKey ||
-            createIdempotencyKey(),
+          idempotencyKey: options.idempotencyKey || createIdempotencyKey(),
           body: JSON.stringify({ kind }),
         }
       );
     },
 
-    feedback(
-      artifactId: string,
-      rating: "useful" | "not_useful"
-    ) {
+    feedback(artifactId: string, rating: "useful" | "not_useful") {
       return request<Record<string, unknown>>(
         `${BASE}/conversations/artifacts/${artifactId}/feedback`,
         {
@@ -1371,10 +1314,7 @@ export const api = {
       );
     },
 
-    event(
-      artifactId: string,
-      eventType: "copied" | "saved"
-    ) {
+    event(artifactId: string, eventType: "copied" | "saved") {
       return request<Record<string, unknown>>(
         `${BASE}/conversations/artifacts/${artifactId}/events`,
         {
@@ -1392,46 +1332,36 @@ export const api = {
       data: Record<string, unknown>,
       options: Pick<ApiRequestOptions, "idempotencyKey"> = {}
     ) {
-      return request<Record<string, unknown>>(
-        `${BASE}/projects`,
-        {
-          method: "POST",
-          idempotencyKey: options.idempotencyKey,
-          body: JSON.stringify(data),
-        }
-      );
+      return request<Record<string, unknown>>(`${BASE}/projects`, {
+        method: "POST",
+        idempotencyKey: options.idempotencyKey,
+        body: JSON.stringify(data),
+      });
     },
 
     list(
       params?: Record<string, string>
     ): Promise<Array<Record<string, unknown>>> {
-      const qs = params
-        ? `?${new URLSearchParams(params).toString()}`
-        : "";
+      const qs = params ? `?${new URLSearchParams(params).toString()}` : "";
 
       return request(`${BASE}/projects${qs}`);
     },
 
     get(id: string) {
-      return request<Record<string, unknown>>(
-        `${BASE}/projects/${id}`
-      );
+      return request<Record<string, unknown>>(`${BASE}/projects/${id}`);
     },
 
-    update(
+    update(id: string, data: Record<string, unknown>) {
+      return request<Record<string, unknown>>(`${BASE}/projects/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      });
+    },
+
+    duplicate(
       id: string,
-      data: Record<string, unknown>
+      options: Pick<ApiRequestOptions, "idempotencyKey"> = {}
     ) {
-      return request<Record<string, unknown>>(
-        `${BASE}/projects/${id}`,
-        {
-          method: "PATCH",
-          body: JSON.stringify(data),
-        }
-      );
-    },
-
-    duplicate(id: string, options: Pick<ApiRequestOptions, "idempotencyKey"> = {}) {
       return request<Record<string, unknown>>(
         `${BASE}/projects/${id}/duplicate`,
         {
@@ -1442,9 +1372,7 @@ export const api = {
     },
 
     export(id: string) {
-      return request<Record<string, unknown>>(
-        `${BASE}/projects/${id}/export`
-      );
+      return request<Record<string, unknown>>(`${BASE}/projects/${id}/export`);
     },
 
     versions(id: string) {
@@ -1453,10 +1381,7 @@ export const api = {
       );
     },
 
-    restoreVersion(
-      projectId: string,
-      versionId: string
-    ) {
+    restoreVersion(projectId: string, versionId: string) {
       return request<Record<string, unknown>>(
         `${BASE}/projects/${projectId}/versions/${versionId}/restore`,
         {
@@ -1465,10 +1390,7 @@ export const api = {
       );
     },
 
-    updateArtifactVersion(
-      projectId: string,
-      data: Record<string, unknown>
-    ) {
+    updateArtifactVersion(projectId: string, data: Record<string, unknown>) {
       return request<Record<string, unknown>>(
         `${BASE}/projects/${projectId}/artifact-version`,
         {
@@ -1483,7 +1405,11 @@ export const api = {
     ) {
       return request<{ id: string; flow_started_at: string }>(
         `${BASE}/projects/flow-events`,
-        { method: "POST", idempotencyKey: options.idempotencyKey, body: JSON.stringify({ business_id: businessId }) }
+        {
+          method: "POST",
+          idempotencyKey: options.idempotencyKey,
+          body: JSON.stringify({ business_id: businessId }),
+        }
       );
     },
     completeCreationFlow(
@@ -1503,18 +1429,14 @@ export const api = {
     },
 
     get(id: string) {
-      return request<Record<string, unknown>>(
-        `${BASE}/assets/${id}`
-      );
+      return request<Record<string, unknown>>(`${BASE}/assets/${id}`);
     },
 
     contentUrl(id: string) {
       return `${BASE}/assets/${id}/content`;
     },
 
-    async upload(
-      file: File
-    ): Promise<Record<string, unknown>> {
+    async upload(file: File): Promise<Record<string, unknown>> {
       const init = await request<{
         upload_id: string;
         upload_url: string;
@@ -1542,17 +1464,13 @@ export const api = {
     list(
       params?: Record<string, string>
     ): Promise<Array<Record<string, unknown>>> {
-      const qs = params
-        ? `?${new URLSearchParams(params).toString()}`
-        : "";
+      const qs = params ? `?${new URLSearchParams(params).toString()}` : "";
 
       return request(`${BASE}/templates${qs}`);
     },
 
     get(id: string) {
-      return request<Record<string, unknown>>(
-        `${BASE}/templates/${id}`
-      );
+      return request<Record<string, unknown>>(`${BASE}/templates/${id}`);
     },
 
     recommend(data: {
@@ -1573,45 +1491,29 @@ export const api = {
 
   businesses: {
     create(data: Record<string, unknown>) {
-      return request<Record<string, unknown>>(
-        `${BASE}/businesses`,
-        {
-          method: "POST",
-          body: JSON.stringify(data),
-        }
-      );
+      return request<Record<string, unknown>>(`${BASE}/businesses`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
     },
 
-    list(): Promise<
-      Array<Record<string, unknown>>
-    > {
+    list(): Promise<Array<Record<string, unknown>>> {
       return request(`${BASE}/businesses`);
     },
 
     get(id: string) {
-      return request<Record<string, unknown>>(
-        `${BASE}/businesses/${id}`
-      );
+      return request<Record<string, unknown>>(`${BASE}/businesses/${id}`);
     },
 
-    update(
-      id: string,
-      data: Record<string, unknown>
-    ) {
-      return request<Record<string, unknown>>(
-        `${BASE}/businesses/${id}`,
-        {
-          method: "PATCH",
-          body: JSON.stringify(data),
-        }
-      );
+    update(id: string, data: Record<string, unknown>) {
+      return request<Record<string, unknown>>(`${BASE}/businesses/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      });
     },
 
     brandProfile: {
-      upsert(
-        businessId: string,
-        data: Record<string, unknown>
-      ) {
+      upsert(businessId: string, data: Record<string, unknown>) {
         return request<Record<string, unknown>>(
           `${BASE}/businesses/${businessId}/brand-profile`,
           {
@@ -1645,10 +1547,7 @@ export const api = {
       );
     },
 
-    login(data: {
-      email: string;
-      password: string;
-    }) {
+    login(data: { email: string; password: string }) {
       return resetCsrfAfter(
         request(`${BASE}/auth/login`, {
           method: "POST",
@@ -1678,15 +1577,11 @@ export const api = {
 
     google: {
       status() {
-        return request<GoogleSignInStatus>(
-          `${BASE}/auth/google/status`
-        );
+        return request<GoogleSignInStatus>(`${BASE}/auth/google/status`);
       },
 
       start() {
-        return request<GoogleAuthorizationStart>(
-          `${BASE}/auth/google/start`
-        );
+        return request<GoogleAuthorizationStart>(`${BASE}/auth/google/start`);
       },
     },
 
@@ -1699,36 +1594,25 @@ export const api = {
         invite_code?: string;
       }) {
         return resetCsrfAfter(
-          request<SignupProgress>(
-            `${BASE}/auth/signup/start`,
-            {
-              method: "POST",
-              body: JSON.stringify(data),
-            }
-          )
+          request<SignupProgress>(`${BASE}/auth/signup/start`, {
+            method: "POST",
+            body: JSON.stringify(data),
+          })
         );
       },
 
       get() {
-        return request<SignupProgress>(
-          `${BASE}/auth/signup`
-        );
+        return request<SignupProgress>(`${BASE}/auth/signup`);
       },
 
-      saveDraft(
-        payload: SignupDraftPayload,
-        expectedVersion: number
-      ) {
-        return request<SignupProgress>(
-          `${BASE}/auth/signup`,
-          {
-            method: "PATCH",
-            body: JSON.stringify({
-              ...payload,
-              expected_version: expectedVersion,
-            }),
-          }
-        );
+      saveDraft(payload: SignupDraftPayload, expectedVersion: number) {
+        return request<SignupProgress>(`${BASE}/auth/signup`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            ...payload,
+            expected_version: expectedVersion,
+          }),
+        });
       },
 
       cancel() {
@@ -1746,15 +1630,11 @@ export const api = {
         > = {}
       ) {
         return resetCsrfAfter(
-          request<Record<string, unknown>>(
-            `${BASE}/auth/signup/complete`,
-            {
-              method: "POST",
-              ...options,
-              idempotencyKey:
-                options.idempotencyKey,
-            }
-          )
+          request<Record<string, unknown>>(`${BASE}/auth/signup/complete`, {
+            method: "POST",
+            ...options,
+            idempotencyKey: options.idempotencyKey,
+          })
         );
       },
     },
@@ -1768,9 +1648,10 @@ export const api = {
     },
 
     me() {
-      return request<{ user: AccountUser; workspaces: { id: string; role: string }[] }>(
-        `${BASE}/auth/me`
-      );
+      return request<{
+        user: AccountUser;
+        workspaces: { id: string; role: string }[];
+      }>(`${BASE}/auth/me`);
     },
     updateAccount(data: { name: string; interface_locale: InterfaceLocale }) {
       return request<{ user: AccountUser }>(`${BASE}/auth/account`, {
@@ -1779,7 +1660,9 @@ export const api = {
       });
     },
     usage() {
-      return request<{ period_days: number; items: UsageItem[] }>(`${BASE}/auth/usage`);
+      return request<{ period_days: number; items: UsageItem[] }>(
+        `${BASE}/auth/usage`
+      );
     },
     /**
      * The status token is minted by the caller, so a retry of this request
@@ -1794,9 +1677,12 @@ export const api = {
       );
     },
     deletionStatus(statusToken: string) {
-      return request<{ status: DeletionStatus }>(`${BASE}/auth/account/deletion-status`, {
-        headers: { "X-Deletion-Status-Token": statusToken },
-      });
+      return request<{ status: DeletionStatus }>(
+        `${BASE}/auth/account/deletion-status`,
+        {
+          headers: { "X-Deletion-Status-Token": statusToken },
+        }
+      );
     },
   },
 };

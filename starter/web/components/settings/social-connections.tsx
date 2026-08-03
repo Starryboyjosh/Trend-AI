@@ -163,7 +163,10 @@ export function SocialConnections({
     [providers]
   );
   const orphanConnections = useMemo(
-    () => connections.filter((connection) => !providerNames.has(connection.provider)),
+    () =>
+      connections.filter(
+        (connection) => !providerNames.has(connection.provider)
+      ),
     [connections, providerNames]
   );
 
@@ -260,9 +263,9 @@ export function SocialConnections({
     const isConfirming = confirmingId === connection.id;
 
     return (
-      <article key={connection.id}>
+      <article key={connection.id} className="social-connection">
         <h4>{connection.display_name}</h4>
-        <dl>
+        <dl className="social-connection-facts">
           <div>
             <dt>{t("accountTypeLabel")}</dt>
             <dd>{accountTypeLabel(connection.account_type)}</dd>
@@ -280,10 +283,13 @@ export function SocialConnections({
             <dd>{formatDate(locale, connection.last_checked_at) || "—"}</dd>
           </div>
         </dl>
-        {errorLabel ? <p>{errorLabel}</p> : null}
-        <div>
+        {errorLabel ? (
+          <p className="settings-status settings-status--error">{errorLabel}</p>
+        ) : null}
+        <div className="social-connection-actions">
           <button
             type="button"
+            className="button-secondary button-small"
             disabled={!enabled || busyAction !== null}
             aria-busy={isChecking}
             onClick={() => void check(connection)}
@@ -292,6 +298,7 @@ export function SocialConnections({
           </button>
           <button
             type="button"
+            className="button-quiet button-small"
             disabled={!enabled || busyAction !== null}
             onClick={() => setConfirmingId(connection.id)}
           >
@@ -300,27 +307,32 @@ export function SocialConnections({
         </div>
         {isConfirming ? (
           <div
+            className="social-confirm"
             ref={confirmationRef}
             role="group"
             tabIndex={-1}
             aria-label={t("disconnectQuestion")}
           >
             <p>{t("disconnectQuestion")}</p>
-            <button
-              type="button"
-              disabled={!enabled || busyAction !== null}
-              aria-busy={isDisconnecting}
-              onClick={() => void disconnect(connection)}
-            >
-              {isDisconnecting ? t("disconnecting") : t("confirm")}
-            </button>
-            <button
-              type="button"
-              disabled={!enabled || busyAction !== null}
-              onClick={() => setConfirmingId(null)}
-            >
-              {t("cancel")}
-            </button>
+            <div className="social-connection-actions">
+              <button
+                type="button"
+                className="button-danger button-small"
+                disabled={!enabled || busyAction !== null}
+                aria-busy={isDisconnecting}
+                onClick={() => void disconnect(connection)}
+              >
+                {isDisconnecting ? t("disconnecting") : t("confirm")}
+              </button>
+              <button
+                type="button"
+                className="button-quiet button-small"
+                disabled={!enabled || busyAction !== null}
+                onClick={() => setConfirmingId(null)}
+              >
+                {t("cancel")}
+              </button>
+            </div>
           </div>
         ) : null}
       </article>
@@ -333,49 +345,68 @@ export function SocialConnections({
 
   return (
     <section
+      className="settings-card"
       aria-labelledby="social-connections-title"
       aria-busy={isLoading || busyAction !== null}
     >
       <h2 id="social-connections-title">{t("title")}</h2>
-      <p>{t("description")}</p>
+      <p className="settings-hint">{t("description")}</p>
       {callbackNotice ? (
-        <p role="status" aria-live="polite">
+        <p
+          className={`settings-status settings-status--${
+            callbackNotice.outcome === "connected" ? "ok" : "error"
+          }`}
+          role="status"
+          aria-live="polite"
+        >
           {callbackMessage(callbackNotice)}
         </p>
       ) : null}
       {showInitialLoading ? (
-        <p role="status" aria-live="polite">
+        <p className="settings-status" role="status" aria-live="polite">
           {t("loading")}
         </p>
       ) : null}
       {showInitialError ? (
-        <p role="status" aria-live="polite">
+        <p
+          className="settings-status settings-status--error"
+          role="status"
+          aria-live="polite"
+        >
           {loadError}
         </p>
       ) : null}
       {showContent ? (
         <>
           {!enabled ? (
-            <p role="status" aria-live="polite">
+            <p className="settings-status" role="status" aria-live="polite">
               {t("disabled")}
             </p>
           ) : null}
           {loadError ? (
-            <p role="status" aria-live="polite">
+            <p
+              className="settings-status settings-status--error"
+              role="status"
+              aria-live="polite"
+            >
               {loadError}
             </p>
           ) : null}
           {actionError ? (
-            <p role="status" aria-live="polite">
+            <p
+              className="settings-status settings-status--error"
+              role="status"
+              aria-live="polite"
+            >
               {actionError}
             </p>
           ) : null}
           {!connections.length ? (
-            <p role="status" aria-live="polite">
+            <p className="settings-empty" role="status" aria-live="polite">
               {t("empty")}
             </p>
           ) : null}
-          <ul aria-label={t("title")}>
+          <ul className="social-provider-list" aria-label={t("title")}>
             {providers.map((provider) => {
               const providerConnections = connections.filter(
                 (connection) => connection.provider === provider.name
@@ -386,28 +417,39 @@ export function SocialConnections({
               const isConnectBusy = busyAction === `connect:${provider.name}`;
 
               return (
-                <li key={provider.name}>
-                  <h3>{providerLabel(provider.name)}</h3>
-                  <p>{providerStatusLabel(provider.status)}</p>
-                  {reason ? <p>{reason}</p> : null}
-                  <button
-                    type="button"
-                    disabled={
-                      !enabled ||
-                      provider.status !== "available" ||
-                      busyAction !== null
-                    }
-                    aria-busy={isConnectBusy}
-                    onClick={() => void connect(provider)}
-                  >
-                    {isConnectBusy ? t("connecting") : t("connect")}
-                  </button>
+                <li className="social-provider" key={provider.name}>
+                  <div className="social-provider-head">
+                    <div className="social-provider-title">
+                      <h3>{providerLabel(provider.name)}</h3>
+                      <p className="social-provider-status">
+                        {providerStatusLabel(provider.status)}
+                      </p>
+                      {reason ? (
+                        <p className="settings-hint">{reason}</p>
+                      ) : null}
+                    </div>
+                    <button
+                      type="button"
+                      className="button-secondary button-small"
+                      disabled={
+                        !enabled ||
+                        provider.status !== "available" ||
+                        busyAction !== null
+                      }
+                      aria-busy={isConnectBusy}
+                      onClick={() => void connect(provider)}
+                    >
+                      {isConnectBusy ? t("connecting") : t("connect")}
+                    </button>
+                  </div>
                   {providerConnections.map(renderConnection)}
                 </li>
               );
             })}
             {orphanConnections.map((connection) => (
-              <li key={connection.id}>{renderConnection(connection)}</li>
+              <li className="social-provider" key={connection.id}>
+                {renderConnection(connection)}
+              </li>
             ))}
           </ul>
         </>

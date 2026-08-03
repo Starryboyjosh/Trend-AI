@@ -12,11 +12,15 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/components/auth/protected-route", () => ({
-  ProtectedRoute: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  ProtectedRoute: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
 }));
 
 vi.mock("@/components/auth/public-auth-route", () => ({
-  PublicAuthRoute: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  PublicAuthRoute: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
 }));
 
 vi.mock("@/components/auth/signup-route", () => ({
@@ -57,18 +61,18 @@ describe("account-deletion-status page renders real copy per locale", () => {
   for (const locale of ["es", "en", "pt"] as const) {
     test(`shows the ${locale} title and processing state text`, async () => {
       window.localStorage.setItem(LOCALE_STORAGE_KEY, locale);
-      window.sessionStorage.setItem(
-        DELETION_TOKEN_KEY,
-        "a".repeat(43)
-      );
-      vi.spyOn(api.auth, "deletionStatus").mockResolvedValue({ status: "processing" });
+      window.sessionStorage.setItem(DELETION_TOKEN_KEY, "a".repeat(43));
+      vi.spyOn(api.auth, "deletionStatus").mockResolvedValue({
+        status: "processing",
+      });
 
-      const { default: AccountDeletionStatusPage } = await import(
-        "@/app/account-deletion-status/page"
-      );
+      const { default: AccountDeletionStatusPage } =
+        await import("@/app/account-deletion-status/page");
       render(<AccountDeletionStatusPage />);
 
-      expect(await screen.findByText(EXPECTED_PROCESSING[locale])).toBeInTheDocument();
+      expect(
+        await screen.findByText(EXPECTED_PROCESSING[locale])
+      ).toBeInTheDocument();
       expect(screen.getByText(EXPECTED_TITLE[locale])).toBeInTheDocument();
     });
   }
@@ -90,18 +94,26 @@ describe("primary navigation renders real copy per locale", () => {
         </AppShell>
       );
 
-      expect(screen.getAllByText(EXPECTED_NAV_STUDIO[locale])[0]).toBeInTheDocument();
-      expect(screen.getAllByText(EXPECTED_NAV_SETTINGS[locale])[0]).toBeInTheDocument();
+      expect(
+        screen.getAllByText(EXPECTED_NAV_STUDIO[locale])[0]
+      ).toBeInTheDocument();
+      expect(
+        screen.getAllByText(EXPECTED_NAV_SETTINGS[locale])[0]
+      ).toBeInTheDocument();
     });
   }
 });
 
 describe("authentication surfaces render catalog copy", () => {
   const loginHeadings: Record<AppLocale, string> = {
-    es: "Bienvenido de vuelta", en: "Welcome back", pt: "Boas-vindas de volta",
+    es: "¡Bienvenido de vuelta!",
+    en: "Welcome back",
+    pt: "Boas-vindas de volta",
   };
   const registerHeadings: Record<AppLocale, string> = {
-    es: "Crea tu cuenta", en: "Create your account", pt: "Crie sua conta",
+    es: "Crea tu cuenta",
+    en: "Create your account",
+    pt: "Crie sua conta",
   };
 
   for (const locale of ["es", "en", "pt"] as const) {
@@ -110,11 +122,15 @@ describe("authentication surfaces render catalog copy", () => {
       const { default: LoginPage } = await import("@/app/login/page");
       const { default: RegisterPage } = await import("@/app/register/page");
       const login = render(<LoginPage />);
-      expect(await screen.findByRole("heading", { name: loginHeadings[locale] })).toBeInTheDocument();
+      expect(
+        await screen.findByRole("heading", { name: loginHeadings[locale] })
+      ).toBeInTheDocument();
       expect(screen.queryByText("auth.welcome")).not.toBeInTheDocument();
       login.unmount();
       render(<RegisterPage />);
-      expect(await screen.findByRole("heading", { name: registerHeadings[locale] })).toBeInTheDocument();
+      expect(
+        await screen.findByRole("heading", { name: registerHeadings[locale] })
+      ).toBeInTheDocument();
       expect(screen.queryByText("auth.register")).not.toBeInTheDocument();
     });
   }
@@ -123,8 +139,12 @@ describe("authentication surfaces render catalog copy", () => {
     window.localStorage.setItem(LOCALE_STORAGE_KEY, "es");
     const { default: RegisterPage } = await import("@/app/register/page");
     render(<RegisterPage />);
-    fireEvent.change(screen.getByLabelText("Idioma de la interfaz"), { target: { value: "en" } });
-    expect(await screen.findByRole("heading", { name: "Create your account" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Idioma de la interfaz"), {
+      target: { value: "en" },
+    });
+    expect(
+      await screen.findByRole("heading", { name: "Create your account" })
+    ).toBeInTheDocument();
     expect(window.localStorage.getItem(LOCALE_STORAGE_KEY)).toBe("en");
   });
 });
@@ -132,13 +152,23 @@ describe("authentication surfaces render catalog copy", () => {
 describe("template surface uses the common catalog", () => {
   test("uses the stored Portuguese locale and preserves template titles", async () => {
     window.localStorage.setItem(LOCALE_STORAGE_KEY, "pt");
-    vi.spyOn(api.templates, "list").mockResolvedValue([{
-      id: "template-user-id", title: "Marca do usuário", platforms: ["instagram"],
-      formats: ["static_post"], category: "other", thumbnail_url: "/missing.png", editable_slots: [], aspect_ratio: "4:5",
-    }] as never);
+    vi.spyOn(api.templates, "list").mockResolvedValue([
+      {
+        id: "template-user-id",
+        title: "Marca do usuário",
+        platforms: ["instagram"],
+        formats: ["static_post"],
+        category: "other",
+        thumbnail_url: "/missing.png",
+        editable_slots: [],
+        aspect_ratio: "4:5",
+      },
+    ] as never);
     const { default: TemplatesPage } = await import("@/app/templates/page");
     render(<TemplatesPage />);
-    expect(await screen.findByRole("heading", { name: "Explore templates" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Explore templates" })
+    ).toBeInTheDocument();
     expect(screen.getByText("Marca do usuário")).toBeInTheDocument();
     expect(screen.queryByText("templates.title")).not.toBeInTheDocument();
   });
@@ -146,34 +176,81 @@ describe("template surface uses the common catalog", () => {
 
 describe("remaining primary surfaces use persisted interface copy", () => {
   test("settings loads its persisted English locale and dashboard renders trend copy", async () => {
-    vi.spyOn(api.auth, "me").mockResolvedValue({ user: { id: "u", name: "Ana", email: "ana@example.test", interface_locale: "en" } } as never);
+    vi.spyOn(api.auth, "me").mockResolvedValue({
+      user: {
+        id: "u",
+        name: "Ana",
+        email: "ana@example.test",
+        interface_locale: "en",
+      },
+    } as never);
     vi.spyOn(api.auth, "usage").mockResolvedValue({ items: [] } as never);
     vi.spyOn(api.businesses, "list").mockResolvedValue([] as never);
     const { default: SettingsPage } = await import("@/app/settings/page");
     render(<SettingsPage />);
-    expect(await screen.findByRole("heading", { name: "Settings" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Settings" })
+    ).toBeInTheDocument();
     expect(window.localStorage.getItem(LOCALE_STORAGE_KEY)).toBe("en");
 
     vi.spyOn(api.trends, "home").mockResolvedValue({
-      status: "empty", refresh_scope: { region: "HN", category: null }, updated_at: null,
-      refresh_allowed: false, next_refresh_at: null,
-      sources: { total: 0, available: 0, degraded: 0, quota_exhausted: 0, unavailable: 0, unconfigured: 0, disabled: 0 },
+      status: "empty",
+      refresh_scope: { region: "HN", category: null },
+      updated_at: null,
+      refresh_allowed: false,
+      next_refresh_at: null,
+      sources: {
+        total: 0,
+        available: 0,
+        degraded: 0,
+        quota_exhausted: 0,
+        unavailable: 0,
+        unconfigured: 0,
+        disabled: 0,
+      },
       items: [],
     });
     const { default: DashboardPage } = await import("@/app/dashboard/page");
     render(<DashboardPage />);
-    expect(await screen.findByRole("heading", { name: "Signals for your next post" })).toBeInTheDocument();
-    expect(screen.getByText("No new trends were found for this scope.")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Signals for your next post" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("No new trends were found for this scope.")
+    ).toBeInTheDocument();
   });
 
   test("onboarding business and channels steps render Portuguese labels", async () => {
     window.localStorage.setItem(LOCALE_STORAGE_KEY, "pt");
-    const { StepBusiness } = await import("@/components/onboarding/step-business");
-    const { StepChannels } = await import("@/components/onboarding/step-channels");
-    const business = render(<StepBusiness data={{ name: "", category: "", country: "", city: "", description: "", primary_product: "", target_audience: "", website_url: "" }} onChange={vi.fn()} />);
-    expect(screen.getByRole("heading", { name: "Conte-nos sobre seu negócio" })).toBeInTheDocument();
+    const { StepBusiness } =
+      await import("@/components/onboarding/step-business");
+    const { StepChannels } =
+      await import("@/components/onboarding/step-channels");
+    const business = render(
+      <StepBusiness
+        data={{
+          name: "",
+          category: "",
+          country: "",
+          city: "",
+          description: "",
+          primary_product: "",
+          target_audience: "",
+          website_url: "",
+        }}
+        onChange={vi.fn()}
+      />
+    );
+    expect(
+      screen.getByRole("heading", { name: "Conte-nos sobre seu negócio" })
+    ).toBeInTheDocument();
     business.unmount();
-    render(<StepChannels data={{ preferred_platforms: [], primary_objective: "" }} onChange={vi.fn()} />);
+    render(
+      <StepChannels
+        data={{ preferred_platforms: [], primary_objective: "" }}
+        onChange={vi.fn()}
+      />
+    );
     expect(screen.getByText("Canais e objetivos")).toBeInTheDocument();
   });
 });

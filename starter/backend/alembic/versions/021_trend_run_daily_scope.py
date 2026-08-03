@@ -58,6 +58,13 @@ def _timestamp(value: datetime | None) -> float:
     return value.replace(tzinfo=UTC).timestamp()
 
 
+def _has_column(connection: sa.Connection, table_name: str, column_name: str) -> bool:
+    return any(
+        column["name"] == column_name
+        for column in sa.inspect(connection).get_columns(table_name)
+    )
+
+
 def _source_set(value: object) -> set[str]:
     try:
         payload = json.loads(value) if isinstance(value, str) else value
@@ -243,12 +250,14 @@ def _sqlite_upgrade(connection: sa.Connection) -> None:
 
 
 def upgrade() -> None:
-    op.add_column(
-        "trend_runs",
-        sa.Column("window_start", sa.DateTime(timezone=True), nullable=True),
-    )
-    if op.get_bind().dialect.name == "sqlite":
-        _sqlite_upgrade(op.get_bind())
+    connection = op.get_bind()
+    if not _has_column(connection, "trend_runs", "window_start"):
+        op.add_column(
+            "trend_runs",
+            sa.Column("window_start", sa.DateTime(timezone=True), nullable=True),
+        )
+    if connection.dialect.name == "sqlite":
+        _sqlite_upgrade(connection)
         return
     op.execute(
         """

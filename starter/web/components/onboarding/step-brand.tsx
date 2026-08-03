@@ -1,7 +1,14 @@
 "use client";
 
 import type { Tone } from "@/types/brand";
-import { optionLabel, surfaceCopy, useInterfaceLocale } from "@/lib/i18n";
+import {
+  localeLabels,
+  optionLabel,
+  supportedLocales,
+  surfaceCopy,
+  useInterfaceLocale,
+} from "@/lib/i18n";
+import { defaultBrandColors } from "@/lib/brand-defaults";
 
 interface Props {
   data: {
@@ -27,7 +34,11 @@ const TONES: { value: Tone; label: string }[] = [
   { value: "inspiring", label: "Inspirador" },
 ];
 
-export function StepBrand({ data, onChange, showContentLocale = false }: Props) {
+export function StepBrand({
+  data,
+  onChange,
+  showContentLocale = false,
+}: Props) {
   const locale = useInterfaceLocale();
   const copy = surfaceCopy[locale].onboarding;
   function toggleTone(t: Tone) {
@@ -39,36 +50,23 @@ export function StepBrand({ data, onChange, showContentLocale = false }: Props) 
   }
 
   return (
-    <section>
-      <h2 style={{ fontFamily: "var(--font-heading)", marginTop: 0 }}>
-        {copy.brandTitle}
-      </h2>
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <fieldset>
-          <legend>{copy.tones} *</legend>
-          <div
-            style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}
-          >
+    <section
+      className="onboarding-question-card"
+      aria-labelledby="brand-step-title"
+    >
+      <h2 id="brand-step-title">{copy.brandTitle}</h2>
+      <p className="onboarding-step-description">{copy.brandLead}</p>
+      <div className="onboarding-choice-sections">
+        <fieldset className="onboarding-choice-group">
+          <legend>
+            {copy.tones} <span aria-hidden="true">*</span>
+            <span className="visually-hidden">({copy.required})</span>
+          </legend>
+          <div className="onboarding-choice-grid">
             {TONES.map((t) => (
-              <label
-                key={t.value}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 4,
-                  padding: "6px 12px",
-                  borderRadius: "var(--radius-pill)",
-                  border: "1px solid var(--border)",
-                  background: data.voice_tones.includes(t.value)
-                    ? "var(--primary)"
-                    : "var(--surface)",
-                  color: data.voice_tones.includes(t.value)
-                    ? "var(--primary-foreground)"
-                    : "var(--foreground)",
-                  cursor: "pointer",
-                }}
-              >
+              <label className="onboarding-choice" key={t.value}>
                 <input
+                  className="onboarding-choice-input"
                   type="checkbox"
                   checked={data.voice_tones.includes(t.value)}
                   onChange={() => toggleTone(t.value)}
@@ -76,15 +74,16 @@ export function StepBrand({ data, onChange, showContentLocale = false }: Props) 
                     !data.voice_tones.includes(t.value) &&
                     data.voice_tones.length >= 3
                   }
-                  style={{ accentColor: "var(--primary)" }}
                 />
-                {optionLabel(locale, "tone", t.value) || t.label}
+                <span>{optionLabel(locale, "tone", t.value) || t.label}</span>
               </label>
             ))}
           </div>
         </fieldset>
-        <div>
-          <label htmlFor="brand-value-prop">{copy.proposition} *</label>
+        <div className="onboarding-control-field">
+          <label htmlFor="brand-value-prop">
+            {copy.proposition} <span aria-hidden="true">*</span>
+          </label>
           <textarea
             id="brand-value-prop"
             value={data.value_proposition}
@@ -93,10 +92,9 @@ export function StepBrand({ data, onChange, showContentLocale = false }: Props) 
             maxLength={500}
             rows={3}
             placeholder={copy.propositionPlaceholder}
-            style={{ display: "block", width: "100%", marginTop: 4 }}
           />
         </div>
-        <div>
+        <div className="onboarding-control-field">
           <label htmlFor="brand-preferred">{copy.preferred}</label>
           <input
             id="brand-preferred"
@@ -104,10 +102,9 @@ export function StepBrand({ data, onChange, showContentLocale = false }: Props) 
             value={data.preferred_words}
             onChange={(e) => onChange("preferred_words", e.target.value)}
             placeholder={copy.wordsPlaceholder}
-            style={{ display: "block", width: "100%", marginTop: 4 }}
           />
         </div>
-        <div>
+        <div className="onboarding-control-field">
           <label htmlFor="brand-forbidden">{copy.forbidden}</label>
           <input
             id="brand-forbidden"
@@ -115,28 +112,25 @@ export function StepBrand({ data, onChange, showContentLocale = false }: Props) 
             value={data.forbidden_words}
             onChange={(e) => onChange("forbidden_words", e.target.value)}
             placeholder={copy.wordsPlaceholder}
-            style={{ display: "block", width: "100%", marginTop: 4 }}
           />
         </div>
-        <div style={{ display: "flex", gap: 16 }}>
-          <div>
+        <div className="onboarding-color-row">
+          <div className="onboarding-color-field">
             <label htmlFor="brand-primary-color">{copy.primaryColor}</label>
             <input
               id="brand-primary-color"
               type="color"
-              value={data.primary_color || "#541787"}
+              value={data.primary_color || defaultBrandColors.primary}
               onChange={(e) => onChange("primary_color", e.target.value)}
-              style={{ display: "block", marginTop: 4 }}
             />
           </div>
-          <div>
+          <div className="onboarding-color-field">
             <label htmlFor="brand-secondary-color">{copy.secondaryColor}</label>
             <input
               id="brand-secondary-color"
               type="color"
-              value={data.secondary_color || "#B79CFA"}
+              value={data.secondary_color || defaultBrandColors.secondary}
               onChange={(e) => onChange("secondary_color", e.target.value)}
-              style={{ display: "block", marginTop: 4 }}
             />
           </div>
         </div>
@@ -147,11 +141,12 @@ export function StepBrand({ data, onChange, showContentLocale = false }: Props) 
               id="brand-content-locale"
               value={data.content_locale || "es"}
               onChange={(e) => onChange("content_locale", e.target.value)}
-              style={{ display: "block", width: "100%", marginTop: 4 }}
             >
-              <option value="es">Español</option>
-              <option value="en">English</option>
-              <option value="pt">Português</option>
+              {supportedLocales.map((value) => (
+                <option key={value} value={value}>
+                  {localeLabels[value]}
+                </option>
+              ))}
             </select>
           </label>
         ) : null}

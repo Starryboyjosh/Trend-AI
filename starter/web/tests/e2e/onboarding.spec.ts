@@ -60,6 +60,31 @@ async function mockSignupFlow(page: Page, authenticatedAtStart = false) {
       return;
     }
 
+    if (path.endsWith("/trends/home")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          status: "empty",
+          refresh_scope: { region: "HN", category: null },
+          updated_at: null,
+          refresh_allowed: false,
+          next_refresh_at: null,
+          sources: {
+            total: 0,
+            available: 0,
+            degraded: 0,
+            quota_exhausted: 0,
+            unavailable: 0,
+            unconfigured: 0,
+            disabled: 0,
+          },
+          items: [],
+        }),
+      });
+      return;
+    }
+
     if (path.endsWith("/auth/signup/start") && method === "POST") {
       pending = true;
       await route.fulfill({
@@ -76,7 +101,10 @@ async function mockSignupFlow(page: Page, authenticatedAtStart = false) {
           status: 404,
           contentType: "application/json",
           body: JSON.stringify({
-            error: { code: "SIGNUP_NOT_FOUND", message: "No hay registro pendiente." },
+            error: {
+              code: "SIGNUP_NOT_FOUND",
+              message: "No hay registro pendiente.",
+            },
           }),
         });
       } else {
@@ -147,16 +175,20 @@ async function mockSignupFlow(page: Page, authenticatedAtStart = false) {
   };
 }
 
-test("registro, draft servidor y finalización llevan al dashboard", async ({ page }) => {
+test("registro, draft servidor y finalización llevan al dashboard", async ({
+  page,
+}) => {
   const state = await mockSignupFlow(page);
   await page.goto("/register");
 
   await page.getByLabel("Tu nombre").fill("Ana Registro");
   await page.getByLabel("Correo electrónico").fill("ana@example.com");
-  await page.getByLabel("Contraseña").fill("una-clave-segura-123");
+  await page.getByLabel("Contraseña", { exact: true }).fill("una-clave-segura-123");
   await page.getByRole("button", { name: "Crear cuenta" }).click();
   await expect(page).toHaveURL(/\/onboarding$/);
-  await expect(page.getByRole("heading", { name: "Cuéntanos sobre tu negocio" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Cuéntanos sobre tu negocio" })
+  ).toBeVisible();
 
   await page.getByLabel(/Nombre comercial/).fill("Café Central");
   await page.getByLabel(/Categoría/).selectOption("gastronomy");
@@ -165,29 +197,43 @@ test("registro, draft servidor y finalización llevan al dashboard", async ({ pa
   await page.getByLabel(/Producto o servicio principal/).fill("Café artesanal");
   await page.getByLabel(/¿A quién ayudas/).fill("Personas que trabajan cerca");
   await page.getByRole("button", { name: "Siguiente" }).click();
-  await expect(page.getByRole("heading", { name: "Canales y objetivos" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Canales y objetivos" })
+  ).toBeVisible();
 
   await page.getByLabel("Instagram").check();
   await page.getByLabel("Objetivo principal *").selectOption("sales");
   await page.getByRole("button", { name: "Siguiente" }).click();
-  await expect(page.getByRole("heading", { name: "Identidad de marca" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Identidad de marca" })
+  ).toBeVisible();
 
-  await page.getByLabel("Amigable").check();
-  await page.getByLabel(/Propuesta de valor/).fill("Café artesanal para tu día");
+  await page.getByLabel("Cercano").check();
+  await page
+    .getByLabel(/Propuesta de valor/)
+    .fill("Café artesanal para tu día");
   await page.getByRole("button", { name: "Siguiente" }).click();
-  await expect(page.getByRole("heading", { name: "Revisa tu información" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Revisa tu información" })
+  ).toBeVisible();
 
   await page.getByLabel(/Confirmo que la información/).check();
-  await page.getByRole("button", { name: "Finalizar y entrar a HiTrendy" }).click();
+  await page
+    .getByRole("button", { name: "Finalizar y entrar a HiTrendy" })
+    .click();
   await expect(page).toHaveURL(/\/dashboard$/);
-  await expect(page.getByRole("heading", { name: "Tu espacio creativo" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Señales para tu próxima publicación" })
+  ).toBeVisible();
   expect(state.savedPayloads).toHaveLength(4);
   expect(state.completeRequests).toBe(2);
   expect(state.completionKeys[0]).toBeTruthy();
   expect(state.completionKeys[1]).toBe(state.completionKeys[0]);
 });
 
-test("las guardas separan visitante, pending signup y usuario activo", async ({ page }) => {
+test("las guardas separan visitante, pending signup y usuario activo", async ({
+  page,
+}) => {
   const state = await mockSignupFlow(page);
   await page.goto("/dashboard");
   await expect(page).toHaveURL(/\/login\?next=%2Fdashboard$/);
@@ -195,7 +241,7 @@ test("las guardas separan visitante, pending signup y usuario activo", async ({ 
   await page.goto("/register");
   await page.getByLabel("Tu nombre").fill("Ana Registro");
   await page.getByLabel("Correo electrónico").fill("ana@example.com");
-  await page.getByLabel("Contraseña").fill("una-clave-segura-123");
+  await page.getByLabel("Contraseña", { exact: true }).fill("una-clave-segura-123");
   await page.getByRole("button", { name: "Crear cuenta" }).click();
   await expect(page).toHaveURL(/\/onboarding$/);
 
@@ -225,7 +271,12 @@ test("un pending signup expirado vuelve al registro", async ({ page }) => {
     await route.fulfill({
       status: 410,
       contentType: "application/json",
-      body: JSON.stringify({ error: { code: "SIGNUP_EXPIRED", message: "El registro pendiente expiró." } }),
+      body: JSON.stringify({
+        error: {
+          code: "SIGNUP_EXPIRED",
+          message: "El registro pendiente expiró.",
+        },
+      }),
     });
   });
   await page.goto("/onboarding");

@@ -8,6 +8,8 @@ import {
   type KeyboardEvent,
 } from "react";
 
+import { ChatIcon } from "@/components/assistant/chat-icon";
+
 const DRAFT_STORAGE_PREFIX = "hitrendy:composer-draft:";
 
 interface Props {
@@ -16,9 +18,21 @@ interface Props {
   placeholder?: string;
   /** Identifies the conversation whose local draft is being edited. */
   draftKey?: string;
+  /** Attach control on the left of the field. Hidden when no handler is given. */
+  onAttach?: () => void;
+  attachLabel?: string;
+  attachBusy?: boolean;
 }
 
-export function Composer({ onSend, disabled, placeholder, draftKey }: Props) {
+export function Composer({
+  onSend,
+  disabled,
+  placeholder,
+  draftKey,
+  onAttach,
+  attachLabel = "Adjuntar una imagen",
+  attachBusy = false,
+}: Props) {
   const [value, setValue] = useState("");
   const [voiceAvailable, setVoiceAvailable] = useState(false);
   const [listening, setListening] = useState(false);
@@ -27,6 +41,7 @@ export function Composer({ onSend, disabled, placeholder, draftKey }: Props) {
     null
   );
   const activeDraftKeyRef = useRef(draftKey);
+  const hasText = Boolean(value.trim());
 
   const updateDraft = useCallback(
     (nextValue: string | ((current: string) => string)) => {
@@ -122,19 +137,33 @@ export function Composer({ onSend, disabled, placeholder, draftKey }: Props) {
 
   return (
     <div className="conversation-composer">
+      {onAttach ? (
+        <button
+          type="button"
+          onClick={onAttach}
+          disabled={disabled || attachBusy}
+          aria-label={attachLabel}
+          className="composer-attach"
+        >
+          <ChatIcon name={attachBusy ? "spinner" : "plus"} />
+        </button>
+      ) : null}
       <textarea
         ref={textRef}
         value={value}
         onChange={(e) => updateDraft(e.target.value)}
         onKeyDown={handleKeyDown}
         onInput={handleInput}
-        placeholder={placeholder || "Escribe tu mensaje..."}
+        placeholder={placeholder || "Escribe tu mensaje…"}
         disabled={disabled}
         rows={1}
         aria-label="Mensaje"
         className="composer-input"
       />
-      {voiceAvailable ? (
+      {/* The right slot mirrors the reference: dictation while the field is
+          empty, sending once there is something to send. Enter submits either
+          way, so no control is ever a dead end. */}
+      {voiceAvailable && !hasText ? (
         <button
           type="button"
           onClick={() => {
@@ -146,20 +175,24 @@ export function Composer({ onSend, disabled, placeholder, draftKey }: Props) {
           }}
           disabled={disabled}
           aria-label={listening ? "Detener dictado" : "Dictar mensaje"}
-          className="composer-icon-button"
+          aria-pressed={listening}
+          className="composer-mic"
+          data-listening={listening || undefined}
         >
-          {listening ? "Detener" : "Dictar"}
+          <ChatIcon name="microphone" />
         </button>
       ) : null}
-      <button
-        type="button"
-        onClick={submit}
-        disabled={disabled || !value.trim()}
-        aria-label="Enviar"
-        className="composer-send"
-      >
-        Enviar
-      </button>
+      {hasText || !voiceAvailable ? (
+        <button
+          type="button"
+          onClick={submit}
+          disabled={disabled || !hasText}
+          aria-label="Enviar"
+          className="composer-send"
+        >
+          <ChatIcon name="send" />
+        </button>
+      ) : null}
     </div>
   );
 }

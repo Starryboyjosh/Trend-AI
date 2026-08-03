@@ -161,8 +161,7 @@ const es = {
       loadError: "No pudimos cargar las conexiones sociales.",
       connectError: "No se pudo iniciar la conexión. Vuelve a intentarlo.",
       checkError: "No se pudo comprobar la conexión. Vuelve a intentarlo.",
-      disconnectError:
-        "No se pudo desconectar la cuenta. Vuelve a intentarlo.",
+      disconnectError: "No se pudo desconectar la cuenta. Vuelve a intentarlo.",
       disabled:
         "Las conexiones sociales están desactivadas en esta instalación.",
       providers: {
@@ -772,11 +771,9 @@ const pt: AppCopy = {
       loading: "Carregando conexões sociais…",
       empty: "Ainda não há contas sociais conectadas.",
       loadError: "Não foi possível carregar as conexões sociais.",
-      connectError:
-        "Não foi possível iniciar a conexão. Tente novamente.",
+      connectError: "Não foi possível iniciar a conexão. Tente novamente.",
       checkError: "Não foi possível verificar a conexão. Tente novamente.",
-      disconnectError:
-        "Não foi possível desconectar a conta. Tente novamente.",
+      disconnectError: "Não foi possível desconectar a conta. Tente novamente.",
       disabled: "As conexões sociais estão desativadas nesta instalação.",
       providers: {
         instagram: "Instagram",
@@ -1110,10 +1107,14 @@ export const surfaceCopy = {
       heroTitle: "Convierte una idea en algo que la gente quiera compartir.",
       heroLead:
         "Publicaciones, campañas y guiones que parten de la identidad de tu negocio.",
-      welcome: "Bienvenido de vuelta",
+      welcome: "¡Bienvenido de vuelta!",
       loginLead: "Ingresa tus datos para seguir creando.",
       email: "Correo electrónico",
       password: "Contraseña",
+      showPassword: "Mostrar contraseña",
+      hidePassword: "Ocultar contraseña",
+      rememberMe: "Recordarme",
+      forgotPassword: "¿Olvidaste tu contraseña?",
       divider: "o",
       login: "Iniciar sesión",
       loggingIn: "Iniciando sesión…",
@@ -1125,6 +1126,10 @@ export const surfaceCopy = {
       registerLead:
         "Primero creemos tu cuenta. Después conoceremos tu negocio para preparar tu espacio en HiTrendy.",
       name: "Tu nombre",
+      passwordHint: "Usa al menos 12 caracteres.",
+      inviteCode: "Código de invitación",
+      inviteCodeOptional: "Opcional",
+      inviteCodePlaceholder: "Código de beta",
       interfaceLocale: "Idioma de la interfaz",
       create: "Crear cuenta",
       creating: "Creando cuenta…",
@@ -1174,9 +1179,13 @@ export const surfaceCopy = {
       website: "Sitio web",
       optional: "Opcional",
       channelsTitle: "Canales y objetivos",
+      channelsLead:
+        "Elige dónde quieres concentrar tus próximos contenidos y qué esperas conseguir.",
       platforms: "Redes sociales que usas",
       objective: "Objetivo principal",
       brandTitle: "Identidad de marca",
+      brandLead:
+        "Define una primera dirección para que el contenido conserve la personalidad de tu negocio.",
       tones: "Tonos de voz (máx. 3)",
       proposition: "Propuesta de valor",
       propositionPlaceholder: "Ej: Café artesanal de origen responsable",
@@ -1197,7 +1206,17 @@ export const surfaceCopy = {
       finish: "Finalizar y entrar a HiTrendy",
       finishing: "Finalizando…",
       progress: "Progreso de registro",
-      step: "Paso",
+      progressLabel: "Paso {current} de {total}: {label}",
+      required: "Obligatorio",
+      requiredHint: "Los campos marcados con * son obligatorios.",
+      missingBusiness:
+        "Completa los datos obligatorios de tu negocio para continuar.",
+      missingChannels:
+        "Elige al menos una red social y un objetivo principal para continuar.",
+      missingBrand:
+        "Elige al menos un tono de voz y escribe tu propuesta de valor para continuar.",
+      missingReview:
+        "Confirma que la información es correcta para finalizar tu registro.",
     },
   },
   en: {
@@ -1229,6 +1248,10 @@ export const surfaceCopy = {
       loginLead: "Enter your details to keep creating.",
       email: "Email",
       password: "Password",
+      showPassword: "Show password",
+      hidePassword: "Hide password",
+      rememberMe: "Remember me",
+      forgotPassword: "Forgot your password?",
       divider: "or",
       login: "Sign in",
       loggingIn: "Signing in…",
@@ -1240,6 +1263,10 @@ export const surfaceCopy = {
       registerLead:
         "First, let's create your account. Then we'll learn about your business to prepare your HiTrendy space.",
       name: "Your name",
+      passwordHint: "Use at least 12 characters.",
+      inviteCode: "Invite code",
+      inviteCodeOptional: "Optional",
+      inviteCodePlaceholder: "Beta code",
       interfaceLocale: "Interface language",
       create: "Create account",
       creating: "Creating account…",
@@ -1288,9 +1315,13 @@ export const surfaceCopy = {
       website: "Website",
       optional: "Optional",
       channelsTitle: "Channels and goals",
+      channelsLead:
+        "Choose where you want to focus your next content and what you expect to achieve.",
       platforms: "Social networks you use",
       objective: "Main goal",
       brandTitle: "Brand identity",
+      brandLead:
+        "Set a first direction so the content keeps your business personality.",
       tones: "Voice tones (max. 3)",
       proposition: "Value proposition",
       propositionPlaceholder: "Example: Responsibly sourced artisan coffee",
@@ -1311,7 +1342,17 @@ export const surfaceCopy = {
       finish: "Finish and enter HiTrendy",
       finishing: "Finishing…",
       progress: "Registration progress",
-      step: "Step",
+      progressLabel: "Step {current} of {total}: {label}",
+      required: "Required",
+      requiredHint: "Fields marked with * are required.",
+      missingBusiness:
+        "Complete the required details about your business to continue.",
+      missingChannels:
+        "Choose at least one social network and a main goal to continue.",
+      missingBrand:
+        "Choose at least one voice tone and write your value proposition to continue.",
+      missingReview:
+        "Confirm that the information is correct to finish your registration.",
     },
   },
   pt: {
@@ -1344,6 +1385,10 @@ export const surfaceCopy = {
       loginLead: "Informe seus dados para continuar criando.",
       email: "E-mail",
       password: "Senha",
+      showPassword: "Mostrar senha",
+      hidePassword: "Ocultar senha",
+      rememberMe: "Lembrar de mim",
+      forgotPassword: "Esqueceu sua senha?",
       divider: "ou",
       login: "Entrar",
       loggingIn: "Entrando…",
@@ -1355,6 +1400,10 @@ export const surfaceCopy = {
       registerLead:
         "Primeiro, vamos criar sua conta. Depois conheceremos seu negócio para preparar seu espaço na HiTrendy.",
       name: "Seu nome",
+      passwordHint: "Use pelo menos 12 caracteres.",
+      inviteCode: "Código de convite",
+      inviteCodeOptional: "Opcional",
+      inviteCodePlaceholder: "Código beta",
       interfaceLocale: "Idioma da interface",
       create: "Criar conta",
       creating: "Criando conta…",
@@ -1404,9 +1453,13 @@ export const surfaceCopy = {
       website: "Site",
       optional: "Opcional",
       channelsTitle: "Canais e objetivos",
+      channelsLead:
+        "Escolha onde você quer concentrar seus próximos conteúdos e o que espera alcançar.",
       platforms: "Redes sociais que você usa",
       objective: "Objetivo principal",
       brandTitle: "Identidade da marca",
+      brandLead:
+        "Defina uma primeira direção para que o conteúdo preserve a personalidade do seu negócio.",
       tones: "Tons de voz (máx. 3)",
       proposition: "Proposta de valor",
       propositionPlaceholder: "Ex.: Café artesanal de origem responsável",
@@ -1427,7 +1480,17 @@ export const surfaceCopy = {
       finish: "Finalizar e entrar na HiTrendy",
       finishing: "Finalizando…",
       progress: "Progresso do cadastro",
-      step: "Etapa",
+      progressLabel: "Etapa {current} de {total}: {label}",
+      required: "Obrigatório",
+      requiredHint: "Os campos marcados com * são obrigatórios.",
+      missingBusiness:
+        "Preencha os dados obrigatórios do seu negócio para continuar.",
+      missingChannels:
+        "Escolha pelo menos uma rede social e um objetivo principal para continuar.",
+      missingBrand:
+        "Escolha pelo menos um tom de voz e escreva sua proposta de valor para continuar.",
+      missingReview:
+        "Confirme que as informações estão corretas para finalizar seu cadastro.",
     },
   },
 } as const;

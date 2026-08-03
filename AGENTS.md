@@ -107,3 +107,5 @@ Before broad code search, inspect:
 Use `/graphify query`, `/graphify path`, or `/graphify explain` for dependency questions before grepping the full repository.
 
 Use raw grep/glob instead of Graphify when the repository has fewer than 500 files — Graphify overhead exceeds its value at that scale.
+
+@RTK.md
