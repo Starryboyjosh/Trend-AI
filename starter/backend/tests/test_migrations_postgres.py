@@ -23,6 +23,7 @@ import app.projects.models  # noqa: F401
 import app.social.models  # noqa: F401
 import app.templates.models  # noqa: F401
 import app.trends.models  # noqa: F401
+import app.videos.models  # noqa: F401
 from alembic import command
 from app.core.config import settings
 from app.db.base import Base
@@ -93,7 +94,15 @@ def _public_template_ids(engine) -> list[str]:
 def test_upgrade_empty_postgres_to_head(postgres_engine) -> None:
     _upgrade("head")
     with postgres_engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "023"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "024"
+        assert connection.scalar(text("SELECT to_regclass('public.video_generation_jobs')"))
+        assert connection.scalar(text("SELECT to_regclass('public.video_generation_budgets')"))
+        assert connection.scalar(
+            text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name='assets' AND column_name='duration_seconds'"
+            )
+        )
     assert set(_public_template_ids(postgres_engine)) == EXPECTED_TEMPLATE_IDS
 
 
@@ -283,15 +292,19 @@ def test_daily_scope_upgrade_reuses_legacy_run_and_preserves_evidence(
 
     _upgrade("021")
     with postgres_engine.connect() as connection:
-        runs = connection.execute(
-            text(
-                """
+        runs = (
+            connection.execute(
+                text(
+                    """
                 SELECT id, region, category, window_start,
                        sources_attempted, sources_succeeded, sources_failed
                 FROM trend_runs
                 """
+                )
             )
-        ).mappings().all()
+            .mappings()
+            .all()
+        )
         assert len(runs) == 1
         survivor = runs[0]
         assert survivor["id"] == "legacy-completed"
@@ -313,38 +326,36 @@ def test_daily_scope_upgrade_reuses_legacy_run_and_preserves_evidence(
             "legacy-video",
         ]
         assert json.loads(survivor["sources_failed"]) == ["legacy-api"]
-        linked_sources = connection.execute(
-            text(
-                """
+        linked_sources = (
+            connection.execute(
+                text(
+                    """
                 SELECT DISTINCT trend_evidence.source
                 FROM trend_run_evidence
                 JOIN trend_evidence
                   ON trend_evidence.id = trend_run_evidence.trend_evidence_id
                 WHERE trend_run_evidence.trend_run_id = 'legacy-completed'
                 """
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         assert set(linked_sources) <= set(json.loads(survivor["sources_attempted"]))
         assert set(linked_sources) <= set(json.loads(survivor["sources_succeeded"]))
         # No evidence row was deleted, renumbered or orphaned.
-        assert (
-            connection.execute(
-                text("SELECT id FROM trend_evidence ORDER BY id")
-            ).scalars().all()
-            == ["evidence-completed", "evidence-failed", "evidence-partial"]
-        )
-        assert (
-            connection.execute(
-                text(
-                    """
+        assert connection.execute(
+            text("SELECT id FROM trend_evidence ORDER BY id")
+        ).scalars().all() == ["evidence-completed", "evidence-failed", "evidence-partial"]
+        assert connection.execute(
+            text(
+                """
                     SELECT trend_evidence_id FROM trend_run_evidence
                     WHERE trend_run_id = 'legacy-completed'
                     ORDER BY trend_evidence_id
                     """
-                )
-            ).scalars().all()
-            == ["evidence-completed", "evidence-failed", "evidence-partial"]
-        )
+            )
+        ).scalars().all() == ["evidence-completed", "evidence-failed", "evidence-partial"]
         assert connection.scalar(text("SELECT count(*) FROM trend_run_evidence")) == 3
 
     after = _idempotency_records(postgres_engine)
@@ -354,7 +365,12 @@ def test_daily_scope_upgrade_reuses_legacy_run_and_preserves_evidence(
         for column in ("workspace_id", "endpoint", "key", "payload_hash", "status"):
             assert row[column] == before[record_id][column], record_id
     # Foreign endpoints and non-completed or non-JSON records are never touched.
-    for untouched in ("idem-survivor", "idem-other-endpoint", "idem-processing", "idem-invalid-json"):
+    for untouched in (
+        "idem-survivor",
+        "idem-other-endpoint",
+        "idem-processing",
+        "idem-invalid-json",
+    ):
         assert after[untouched]["response_json"] == before[untouched]["response_json"]
     # The consolidated replay keeps its exact shape except for the run id.
     rewritten = after["idem-consolidated"]["response_json"]
@@ -431,7 +447,9 @@ def test_daily_scope_upgrade_reuses_legacy_run_and_preserves_evidence(
 def test_real_trend_budget_upgrade_downgrade_and_schema(postgres_engine) -> None:
     _upgrade("019")
     with postgres_engine.connect() as connection:
-        assert connection.scalar(text("SELECT to_regclass('public.trend_provider_budgets')")) is None
+        assert (
+            connection.scalar(text("SELECT to_regclass('public.trend_provider_budgets')")) is None
+        )
     _upgrade("020")
     with postgres_engine.connect() as connection:
         assert connection.scalar(text("SELECT to_regclass('public.trend_provider_budgets')"))
@@ -456,7 +474,9 @@ def test_phase1_templates_are_seeded_once_and_upgrade_is_repeatable(postgres_eng
     assert len(after) == len(set(after))
 
 
-def test_upgrade_hides_unapproved_templates_without_breaking_historical_rows(postgres_engine) -> None:
+def test_upgrade_hides_unapproved_templates_without_breaking_historical_rows(
+    postgres_engine,
+) -> None:
     _upgrade("011")
     with postgres_engine.begin() as connection:
         connection.execute(
@@ -485,7 +505,9 @@ def test_upgrade_hides_unapproved_templates_without_breaking_historical_rows(pos
         columns = {
             row.column_name
             for row in connection.execute(
-                text("SELECT column_name FROM information_schema.columns WHERE table_name = 'templates'")
+                text(
+                    "SELECT column_name FROM information_schema.columns WHERE table_name = 'templates'"
+                )
             )
         }
     assert "tpl_unapproved" in ids
@@ -509,7 +531,11 @@ def test_upgrade_from_013_adds_pending_signup_schema(postgres_engine) -> None:
         assert connection.scalar(text("SELECT to_regclass('public.user_preferences')"))
         pending_columns = {
             row.column_name
-            for row in connection.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'pending_signups'"))
+            for row in connection.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns WHERE table_name = 'pending_signups'"
+                )
+            )
         }
         columns = {
             row.column_name
@@ -538,8 +564,7 @@ def test_upgrade_from_014_adds_google_oauth_schema(postgres_engine) -> None:
             row.conname
             for row in connection.execute(
                 text(
-                    "SELECT conname FROM pg_constraint "
-                    "WHERE conrelid = 'pending_signups'::regclass"
+                    "SELECT conname FROM pg_constraint WHERE conrelid = 'pending_signups'::regclass"
                 )
             )
         }
@@ -554,11 +579,17 @@ def test_upgrade_from_015_adds_ai_usage_events(postgres_engine) -> None:
     with postgres_engine.connect() as connection:
         columns = {
             row.column_name: row.data_type
-            for row in connection.execute(text("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'ai_usage_events'"))
+            for row in connection.execute(
+                text(
+                    "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'ai_usage_events'"
+                )
+            )
         }
         indexes = {
             row.indexname
-            for row in connection.execute(text("SELECT indexname FROM pg_indexes WHERE tablename = 'ai_usage_events'"))
+            for row in connection.execute(
+                text("SELECT indexname FROM pg_indexes WHERE tablename = 'ai_usage_events'")
+            )
         }
         foreign_keys = {
             row.conname
@@ -590,10 +621,18 @@ def test_upgrade_from_016_adds_instagram_flow_timing(postgres_engine) -> None:
         columns = {
             row.column_name
             for row in connection.execute(
-                text("SELECT column_name FROM information_schema.columns WHERE table_name = 'creation_flow_events'")
+                text(
+                    "SELECT column_name FROM information_schema.columns WHERE table_name = 'creation_flow_events'"
+                )
             )
         }
-    assert {"flow_started_at", "first_generation_completed_at", "elapsed_seconds", "completion_status", "flow_key"} <= columns
+    assert {
+        "flow_started_at",
+        "first_generation_completed_at",
+        "elapsed_seconds",
+        "completion_status",
+        "flow_key",
+    } <= columns
     command.downgrade(_alembic_config(), "016")
     _upgrade("head")
 
@@ -604,18 +643,29 @@ def test_upgrade_from_017_adds_account_lifecycle_schema(postgres_engine) -> None
     with postgres_engine.connect() as connection:
         assert connection.scalar(text("SELECT to_regclass('public.account_purge_jobs')"))
         assert connection.scalar(text("SELECT to_regclass('public.admin_audit_events')"))
-        assert connection.scalar(text("SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='deletion_requested_at'"))
+        assert connection.scalar(
+            text(
+                "SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='deletion_requested_at'"
+            )
+        )
 
     # head -> 017 must leave no trace behind, so a redeploy can replay it.
     command.downgrade(_alembic_config(), "017")
     with postgres_engine.connect() as connection:
         assert connection.scalar(text("SELECT to_regclass('public.account_purge_jobs')")) is None
         assert connection.scalar(text("SELECT to_regclass('public.admin_audit_events')")) is None
-        assert connection.scalar(text("SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='deletion_requested_at'")) is None
+        assert (
+            connection.scalar(
+                text(
+                    "SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='deletion_requested_at'"
+                )
+            )
+            is None
+        )
 
     _upgrade("head")
     with postgres_engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "023"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "024"
         assert connection.scalar(text("SELECT to_regclass('public.account_purge_jobs')"))
 
 
@@ -899,8 +949,7 @@ def test_deleting_a_workspace_takes_its_image_rows(postgres_engine) -> None:
         assert (
             connection.scalar(
                 text(
-                    "SELECT count(*) FROM image_generation_budgets "
-                    "WHERE workspace_id='ws_img_drop'"
+                    "SELECT count(*) FROM image_generation_budgets WHERE workspace_id='ws_img_drop'"
                 )
             )
             == 0
@@ -1113,6 +1162,211 @@ def test_deleting_a_workspace_takes_its_social_connections(postgres_engine) -> N
         assert (
             connection.scalar(
                 text("SELECT count(*) FROM social_connections WHERE workspace_id='ws_soc_drop'")
+            )
+            == 0
+        )
+
+
+def test_video_generation_schema_matches_the_sqlalchemy_models(postgres_engine) -> None:
+    """024 must build the two video tables exactly as the ORM declares them."""
+
+    _upgrade("head")
+    owned_tables = {"video_generation_jobs", "video_generation_budgets"}
+    with postgres_engine.connect() as connection:
+        context = MigrationContext.configure(connection)
+        diffs = _flatten_diffs(compare_metadata(context, Base.metadata))
+    divergences = [entry for entry in diffs if _diff_table(entry) in owned_tables]
+    assert divergences == [], f"024 no coincide con los modelos: {divergences}"
+
+
+def test_video_generation_024_roundtrip_and_durable_constraints(postgres_engine) -> None:
+    """The video migration must be reversible and preserve its hard boundaries."""
+
+    _upgrade("023")
+    with postgres_engine.connect() as connection:
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "023"
+        assert connection.scalar(text("SELECT to_regclass('public.video_generation_jobs')")) is None
+        assert (
+            connection.scalar(
+                text(
+                    "SELECT count(*) FROM information_schema.columns "
+                    "WHERE table_name='assets' AND column_name='duration_seconds'"
+                )
+            )
+            == 0
+        )
+
+    _upgrade("024")
+    with postgres_engine.connect() as connection:
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "024"
+        assert connection.scalar(text("SELECT to_regclass('public.video_generation_jobs')"))
+        assert connection.scalar(text("SELECT to_regclass('public.video_generation_budgets')"))
+        assert (
+            connection.scalar(
+                text(
+                    "SELECT count(*) FROM pg_indexes "
+                    "WHERE tablename='video_generation_jobs' "
+                    "AND indexname IN ('ix_video_jobs_claim', 'ix_video_jobs_polling', "
+                    "'ix_video_jobs_requested_by_user', 'ix_video_jobs_workspace_project')"
+                )
+            )
+            == 4
+        )
+        assert (
+            connection.scalar(
+                text(
+                    "SELECT count(*) FROM pg_constraint "
+                    "WHERE conname='fk_video_jobs_source_asset_id'"
+                )
+            )
+            == 0
+        )
+
+    command.downgrade(_alembic_config(), "023")
+    with postgres_engine.connect() as connection:
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "023"
+        assert connection.scalar(text("SELECT to_regclass('public.video_generation_jobs')")) is None
+        assert (
+            connection.scalar(text("SELECT to_regclass('public.video_generation_budgets')")) is None
+        )
+
+    _upgrade("024")
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO users (id, email, name, password_hash) VALUES "
+                "('usr_video_mig', 'video-mig@example.com', 'Video', 'hash')"
+            )
+        )
+        connection.execute(
+            text("INSERT INTO workspaces (id, name) VALUES ('ws_video_mig', 'Video migration')")
+        )
+        connection.execute(
+            text(
+                "INSERT INTO video_generation_budgets "
+                "(id, workspace_id, day, budget, consumed) "
+                "VALUES ('budget_video_mig', 'ws_video_mig', '2026-08-02', 2, 1)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO assets "
+                "(id, workspace_id, original_name, storage_path, mime_type, file_size_bytes, asset_type) "
+                "VALUES ('source_video_mig', 'ws_video_mig', 'source.png', 'source.png', "
+                "'image/png', 4, 'image')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO video_generation_jobs "
+                "(id, workspace_id, status, provider, prompt, storyboard_json, source_asset_id, "
+                "aspect_ratio, duration_seconds, provider_job_id, budget_id, requested_by_user_id) "
+                "VALUES ('job_video_mig', 'ws_video_mig', 'queued', 'demo', 'prompt', '{}', "
+                "'source_video_mig', '9:16', 5, 'remote-video-mig', 'budget_video_mig', 'usr_video_mig')"
+            )
+        )
+
+    # The source reference is intentionally logical: deleting the source does
+    # not rewrite the approved job to NULL.
+    with postgres_engine.begin() as connection:
+        connection.execute(text("DELETE FROM assets WHERE id='source_video_mig'"))
+        assert (
+            connection.scalar(
+                text("SELECT source_asset_id FROM video_generation_jobs WHERE id='job_video_mig'")
+            )
+            == "source_video_mig"
+        )
+        connection.execute(text("DELETE FROM users WHERE id='usr_video_mig'"))
+        assert (
+            connection.scalar(
+                text(
+                    "SELECT requested_by_user_id FROM video_generation_jobs WHERE id='job_video_mig'"
+                )
+            )
+            is None
+        )
+
+    invalid_statements = (
+        (
+            "uq_video_jobs_provider_job",
+            "INSERT INTO video_generation_jobs "
+            "(id, workspace_id, status, provider, prompt, storyboard_json, aspect_ratio, "
+            "duration_seconds, provider_job_id) VALUES "
+            "('job_video_mig_dup', 'ws_video_mig', 'queued', 'demo', 'prompt', '{}', "
+            "'9:16', 5, 'remote-video-mig')",
+        ),
+        (
+            "ck_video_jobs_status",
+            "INSERT INTO video_generation_jobs "
+            "(id, workspace_id, status, provider, prompt, storyboard_json, aspect_ratio, "
+            "duration_seconds) VALUES "
+            "('job_video_mig_bad_status', 'ws_video_mig', 'not-a-status', 'demo', 'prompt', '{}', "
+            "'9:16', 5)",
+        ),
+        (
+            "ck_video_jobs_duration_seconds",
+            "INSERT INTO video_generation_jobs "
+            "(id, workspace_id, status, provider, prompt, storyboard_json, aspect_ratio, "
+            "duration_seconds) VALUES "
+            "('job_video_mig_bad_duration', 'ws_video_mig', 'queued', 'demo', 'prompt', '{}', "
+            "'9:16', 0)",
+        ),
+        (
+            "ck_video_jobs_aspect_ratio",
+            "INSERT INTO video_generation_jobs "
+            "(id, workspace_id, status, provider, prompt, storyboard_json, aspect_ratio, "
+            "duration_seconds) VALUES "
+            "('job_video_mig_bad_ratio', 'ws_video_mig', 'queued', 'demo', 'prompt', '{}', "
+            "'16:9', 5)",
+        ),
+        (
+            "ck_video_jobs_attempt_count",
+            "INSERT INTO video_generation_jobs "
+            "(id, workspace_id, status, provider, prompt, storyboard_json, aspect_ratio, "
+            "duration_seconds, attempt_count) VALUES "
+            "('job_video_mig_bad_attempt', 'ws_video_mig', 'queued', 'demo', 'prompt', '{}', "
+            "'9:16', 5, -1)",
+        ),
+        (
+            "ck_video_jobs_poll_count",
+            "INSERT INTO video_generation_jobs "
+            "(id, workspace_id, status, provider, prompt, storyboard_json, aspect_ratio, "
+            "duration_seconds, poll_count) VALUES "
+            "('job_video_mig_bad_poll', 'ws_video_mig', 'queued', 'demo', 'prompt', '{}', "
+            "'9:16', 5, -1)",
+        ),
+        (
+            "ck_video_jobs_download_attempt_count",
+            "INSERT INTO video_generation_jobs "
+            "(id, workspace_id, status, provider, prompt, storyboard_json, aspect_ratio, "
+            "duration_seconds, download_attempt_count) VALUES "
+            "('job_video_mig_bad_download', 'ws_video_mig', 'queued', 'demo', 'prompt', '{}', "
+            "'9:16', 5, -1)",
+        ),
+        (
+            "ck_video_budgets_consumed_lte_budget",
+            "INSERT INTO video_generation_budgets "
+            "(id, workspace_id, day, budget, consumed) VALUES "
+            "('budget_video_mig_bad', 'ws_video_mig', '2026-08-03', 1, 2)",
+        ),
+    )
+    for constraint_name, statement in invalid_statements:
+        with postgres_engine.begin() as connection, pytest.raises(
+            Exception, match=constraint_name
+        ):
+            connection.execute(text(statement))
+
+    with postgres_engine.begin() as connection:
+        connection.execute(text("DELETE FROM workspaces WHERE id='ws_video_mig'"))
+        assert (
+            connection.scalar(
+                text("SELECT count(*) FROM video_generation_jobs WHERE id='job_video_mig'")
+            )
+            == 0
+        )
+        assert (
+            connection.scalar(
+                text("SELECT count(*) FROM video_generation_budgets WHERE id='budget_video_mig'")
             )
             == 0
         )

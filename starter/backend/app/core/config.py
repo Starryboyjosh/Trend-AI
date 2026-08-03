@@ -71,9 +71,10 @@ def _bounded_positive_float(value: str, *, name: str, maximum: float) -> float:
 # A model identifier is an operator-controlled routing key, so it stays inside
 # the printable ASCII subset that provider APIs accept in a path-like slug.
 MODEL_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
+DEMO_VIDEO_DURATIONS = frozenset({5, 10})
 
 
-def _parse_model_allowlist(value: str) -> tuple[str, ...]:
+def _parse_model_allowlist(value: str, *, name: str) -> tuple[str, ...]:
     """Return the deduplicated, ordered models an operator authorized to bill."""
 
     models: list[str] = []
@@ -82,15 +83,38 @@ def _parse_model_allowlist(value: str) -> tuple[str, ...]:
         if not candidate:
             continue
         if not MODEL_IDENTIFIER.fullmatch(candidate):
-            raise RuntimeError(
-                "IMAGE_GENERATION_ALLOWED_MODELS solo admite identificadores de "
-                "modelo separados por comas."
-            )
+            raise RuntimeError(f"{name} solo admite identificadores de modelo separados por comas.")
         if candidate not in models:
             models.append(candidate)
     if len(models) > 10:
-        raise RuntimeError("IMAGE_GENERATION_ALLOWED_MODELS admite hasta 10 modelos.")
+        raise RuntimeError(f"{name} admite hasta 10 modelos.")
     return tuple(models)
+
+
+def _parse_duration_allowlist(value: str) -> tuple[int, ...]:
+    """Return unique, ascending video durations inside the safe one-minute bound."""
+
+    durations: set[int] = set()
+    for raw in value.split(","):
+        candidate = raw.strip()
+        if not candidate:
+            raise RuntimeError(
+                "VIDEO_GENERATION_ALLOWED_DURATIONS debe contener enteros separados por comas."
+            )
+        try:
+            duration = int(candidate.replace("_", ""))
+        except ValueError as exc:
+            raise RuntimeError(
+                "VIDEO_GENERATION_ALLOWED_DURATIONS debe contener enteros válidos."
+            ) from exc
+        if duration < 1 or duration > 60:
+            raise RuntimeError("VIDEO_GENERATION_ALLOWED_DURATIONS debe estar entre 1 y 60.")
+        durations.add(duration)
+    if not durations:
+        raise RuntimeError("VIDEO_GENERATION_ALLOWED_DURATIONS debe contener al menos un valor.")
+    if len(durations) > 6:
+        raise RuntimeError("VIDEO_GENERATION_ALLOWED_DURATIONS admite como máximo 6 valores.")
+    return tuple(sorted(durations))
 
 
 def _parse_rss_allowlist(value: str) -> tuple[dict[str, object], ...]:
@@ -204,7 +228,9 @@ def _normalize_origin(value: str, *, require_https: bool) -> str:
     _validate_http_url(value, name="ALLOWED_ORIGINS", require_https=require_https)
     parsed = urlparse(value)
     if parsed.path not in {"", "/"} or parsed.params or parsed.query or parsed.fragment:
-        raise RuntimeError("ALLOWED_ORIGINS debe contener únicamente orígenes, sin paths ni query strings.")
+        raise RuntimeError(
+            "ALLOWED_ORIGINS debe contener únicamente orígenes, sin paths ni query strings."
+        )
     return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
 
 
@@ -280,9 +306,7 @@ def validate_encryption_key(value: str, *, name: str) -> bytes:
     except (binascii.Error, ValueError) as exc:
         raise RuntimeError(f"{name} debe ser una clave base64 válida.") from exc
     if len(key) != ENCRYPTION_KEY_BYTES:
-        raise RuntimeError(
-            f"{name} debe decodificar exactamente {ENCRYPTION_KEY_BYTES} bytes."
-        )
+        raise RuntimeError(f"{name} debe decodificar exactamente {ENCRYPTION_KEY_BYTES} bytes.")
     return key
 
 
@@ -308,9 +332,9 @@ class Settings:
             values.get("DATABASE_URL", "sqlite:///./hitrendy.db").strip()
         )
         default_ssl_mode = "disable" if _is_local_database_url(self.database_url) else "require"
-        self.database_ssl_mode: str = values.get(
-            "DATABASE_SSL_MODE", default_ssl_mode
-        ).strip().lower()
+        self.database_ssl_mode: str = (
+            values.get("DATABASE_SSL_MODE", default_ssl_mode).strip().lower()
+        )
         self.database_pool_size: int = _positive_int(
             values.get("DATABASE_POOL_SIZE", "5"), name="DATABASE_POOL_SIZE"
         )
@@ -326,14 +350,18 @@ class Settings:
             values.get("DATABASE_POOL_RECYCLE", "1800"), name="DATABASE_POOL_RECYCLE"
         )
         self.redis_url: str = values.get("REDIS_URL", "").strip()
-        self.redis_provider: str = values.get(
-            "REDIS_PROVIDER", "redis" if self.app_env in PRODUCTION_LIKE else "memory"
-        ).strip().lower()
+        self.redis_provider: str = (
+            values.get("REDIS_PROVIDER", "redis" if self.app_env in PRODUCTION_LIKE else "memory")
+            .strip()
+            .lower()
+        )
         self.redis_required: bool = _as_bool(
             values.get("REDIS_REQUIRED", "1" if self.app_env in PRODUCTION_LIKE else "0"),
             name="REDIS_REQUIRED",
         )
-        self.upstash_redis_rest_url: str = values.get("UPSTASH_REDIS_REST_URL", "").strip().rstrip("/")
+        self.upstash_redis_rest_url: str = (
+            values.get("UPSTASH_REDIS_REST_URL", "").strip().rstrip("/")
+        )
         self.upstash_redis_rest_token: str = values.get("UPSTASH_REDIS_REST_TOKEN", "").strip()
         self.redis_prefix: str = values.get("REDIS_PREFIX", f"hitrendy:{self.app_env}").strip()
         self.redis_default_ttl_seconds: int = _positive_int(
@@ -382,9 +410,9 @@ class Settings:
         self.ai_http_referer: str = values.get("AI_HTTP_REFERER", "").strip()
         self.ai_app_title: str = values.get("AI_APP_TITLE", "HiTrendy").strip() or "HiTrendy"
         self.openrouter_api_key: str = values.get("OPENROUTER_API_KEY", "").strip()
-        self.openrouter_base_url: str = values.get(
-            "OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"
-        ).strip().rstrip("/")
+        self.openrouter_base_url: str = (
+            values.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1").strip().rstrip("/")
+        )
         self.openrouter_fast_model: str = values.get(
             "OPENROUTER_FAST_MODEL", "openrouter/free"
         ).strip()
@@ -413,7 +441,9 @@ class Settings:
             require_https=self.app_env in PRODUCTION_LIKE,
         )
         self.allowed_origins: str = ",".join(self.allowed_origin_values)
-        self.frontend_url: str = values.get("FRONTEND_URL", "http://localhost:3000").strip().rstrip("/")
+        self.frontend_url: str = (
+            values.get("FRONTEND_URL", "http://localhost:3000").strip().rstrip("/")
+        )
         self.google_sign_in_enabled: bool = _as_bool(
             values.get("GOOGLE_SIGN_IN_ENABLED", "0"),
             name="GOOGLE_SIGN_IN_ENABLED",
@@ -480,7 +510,8 @@ class Settings:
         # redirect spending to an arbitrary paid model.
         self.image_generation_model: str = values.get("IMAGE_GENERATION_MODEL", "").strip()
         self.image_generation_allowed_models = _parse_model_allowlist(
-            values.get("IMAGE_GENERATION_ALLOWED_MODELS", "")
+            values.get("IMAGE_GENERATION_ALLOWED_MODELS", ""),
+            name="IMAGE_GENERATION_ALLOWED_MODELS",
         )
         self.image_generation_daily_budget: int = _bounded_positive_int(
             values.get("IMAGE_GENERATION_DAILY_BUDGET", "10"),
@@ -526,6 +557,63 @@ class Settings:
             values.get("VIDEO_GENERATION_ENABLED", "0"),
             name="VIDEO_GENERATION_ENABLED",
         )
+        self.video_provider: str = values.get("VIDEO_PROVIDER", "demo").strip().lower()
+        self.video_generation_model: str = values.get("VIDEO_GENERATION_MODEL", "").strip()
+        self.video_generation_allowed_models = _parse_model_allowlist(
+            values.get("VIDEO_GENERATION_ALLOWED_MODELS", ""),
+            name="VIDEO_GENERATION_ALLOWED_MODELS",
+        )
+        self.video_generation_allowed_durations = _parse_duration_allowlist(
+            values.get("VIDEO_GENERATION_ALLOWED_DURATIONS", "5,10")
+        )
+        self.video_generation_daily_budget: int = _bounded_positive_int(
+            values.get("VIDEO_GENERATION_DAILY_BUDGET", "2"),
+            name="VIDEO_GENERATION_DAILY_BUDGET",
+            maximum=1_000,
+        )
+        self.video_generation_timeout_seconds: float = _bounded_positive_float(
+            values.get("VIDEO_GENERATION_TIMEOUT_SECONDS", "120"),
+            name="VIDEO_GENERATION_TIMEOUT_SECONDS",
+            maximum=600,
+        )
+        self.video_generation_poll_interval_seconds: int = _bounded_positive_int(
+            values.get("VIDEO_GENERATION_POLL_INTERVAL_SECONDS", "10"),
+            name="VIDEO_GENERATION_POLL_INTERVAL_SECONDS",
+            maximum=300,
+        )
+        self.video_generation_max_poll_seconds: int = _bounded_positive_int(
+            values.get("VIDEO_GENERATION_MAX_POLL_SECONDS", "900"),
+            name="VIDEO_GENERATION_MAX_POLL_SECONDS",
+            maximum=7_200,
+        )
+        self.video_generation_max_bytes: int = _bounded_positive_int(
+            values.get("VIDEO_GENERATION_MAX_BYTES", "40_000_000"),
+            name="VIDEO_GENERATION_MAX_BYTES",
+            maximum=200_000_000,
+        )
+        self.video_generation_max_attempts: int = _bounded_positive_int(
+            values.get("VIDEO_GENERATION_MAX_ATTEMPTS", "3"),
+            name="VIDEO_GENERATION_MAX_ATTEMPTS",
+            maximum=5,
+        )
+        self.video_generation_stuck_after_seconds: int = _bounded_positive_int(
+            values.get("VIDEO_GENERATION_STUCK_AFTER_SECONDS", "1200"),
+            name="VIDEO_GENERATION_STUCK_AFTER_SECONDS",
+            maximum=86_400,
+        )
+        self.video_preflight_ttl_seconds: int = _bounded_positive_int(
+            values.get("VIDEO_PREFLIGHT_TTL_SECONDS", "600"),
+            name="VIDEO_PREFLIGHT_TTL_SECONDS",
+            maximum=3_600,
+        )
+        self.video_signed_url_ttl_seconds: int = _bounded_positive_int(
+            values.get("VIDEO_SIGNED_URL_TTL_SECONDS", "300"),
+            name="VIDEO_SIGNED_URL_TTL_SECONDS",
+            maximum=3_600,
+        )
+        self.run_real_video_smoke: bool = _as_bool(
+            values.get("RUN_REAL_VIDEO_SMOKE", "0"), name="RUN_REAL_VIDEO_SMOKE"
+        )
         self.trend_analysis_enabled: bool = _as_bool(
             values.get("TREND_ANALYSIS_ENABLED", "0"),
             name="TREND_ANALYSIS_ENABLED",
@@ -564,9 +652,7 @@ class Settings:
         self.rss_trends_enabled: bool = _as_bool(
             values.get("RSS_TRENDS_ENABLED", "0"), name="RSS_TRENDS_ENABLED"
         )
-        self.rss_trends_allowlist = _parse_rss_allowlist(
-            values.get("RSS_TRENDS_ALLOWLIST", "[]")
-        )
+        self.rss_trends_allowlist = _parse_rss_allowlist(values.get("RSS_TRENDS_ALLOWLIST", "[]"))
         self.rss_cache_ttl_seconds: int = _bounded_positive_int(
             values.get("RSS_CACHE_TTL_SECONDS", "900"),
             name="RSS_CACHE_TTL_SECONDS",
@@ -698,7 +784,10 @@ class Settings:
         return (
             (self.youtube_trends_enabled and bool(self.youtube_api_key))
             or (self.serpapi_trends_enabled and bool(self.serpapi_api_key))
-            or (self.rss_trends_enabled and any(feed["enabled"] for feed in self.rss_trends_allowlist))
+            or (
+                self.rss_trends_enabled
+                and any(feed["enabled"] for feed in self.rss_trends_allowlist)
+            )
         )
 
     @property
@@ -718,6 +807,16 @@ class Settings:
                 and self.image_generation_model in self.image_generation_allowed_models
             )
         return False
+
+    @property
+    def video_generation_configured(self) -> bool:
+        """True only when the offline video provider is usable in this environment."""
+
+        return (
+            self.video_generation_enabled
+            and self.video_provider == "demo"
+            and self.app_env in {"development", "test"}
+        )
 
     @property
     def social_demo_provider_configured(self) -> bool:
@@ -752,8 +851,51 @@ class Settings:
 
     def validate_runtime_configuration(self) -> None:
         if self.app_env not in VALID_ENVS:
+            raise RuntimeError(f"APP_ENV debe ser {' ,'.join(sorted(VALID_ENVS))}.")
+        if self.video_provider not in {"demo"}:
+            raise RuntimeError("VIDEO_PROVIDER no es compatible.")
+        if self.video_provider == "demo" and not set(
+            self.video_generation_allowed_durations
+        ).issubset(DEMO_VIDEO_DURATIONS):
             raise RuntimeError(
-                f"APP_ENV debe ser {' ,'.join(sorted(VALID_ENVS))}."
+                "VIDEO_GENERATION_ALLOWED_DURATIONS solo puede usar fixtures demo de 5 o 10 segundos."
+            )
+        if self.video_generation_enabled and self.is_production_like:
+            raise RuntimeError(
+                "VIDEO_GENERATION_ENABLED no puede activarse con VIDEO_PROVIDER=demo "
+                "en staging ni producción."
+            )
+        if self.video_generation_model and not MODEL_IDENTIFIER.fullmatch(
+            self.video_generation_model
+        ):
+            raise RuntimeError("VIDEO_GENERATION_MODEL no es un identificador válido.")
+        if (
+            self.video_generation_allowed_models
+            and self.video_generation_model
+            and self.video_generation_model not in self.video_generation_allowed_models
+        ):
+            raise RuntimeError(
+                "VIDEO_GENERATION_MODEL debe estar en VIDEO_GENERATION_ALLOWED_MODELS."
+            )
+        if (
+            self.video_generation_stuck_after_seconds
+            < int(self.video_generation_timeout_seconds) + 60
+        ):
+            raise RuntimeError(
+                "VIDEO_GENERATION_STUCK_AFTER_SECONDS debe ser al menos "
+                "VIDEO_GENERATION_TIMEOUT_SECONDS más 60 segundos."
+            )
+        if self.video_generation_max_poll_seconds <= (
+            self.video_generation_poll_interval_seconds * 2
+        ):
+            raise RuntimeError(
+                "VIDEO_GENERATION_MAX_POLL_SECONDS debe ser mayor que "
+                "VIDEO_GENERATION_POLL_INTERVAL_SECONDS por dos."
+            )
+        if self.video_generation_max_poll_seconds <= int(self.video_generation_timeout_seconds):
+            raise RuntimeError(
+                "VIDEO_GENERATION_MAX_POLL_SECONDS debe ser mayor que "
+                "VIDEO_GENERATION_TIMEOUT_SECONDS."
             )
         if self.ai_provider not in {"demo", "openai-compatible", "openrouter"}:
             raise RuntimeError("AI_PROVIDER no es compatible.")
@@ -772,10 +914,7 @@ class Settings:
             raise RuntimeError("DATABASE_URL debe usar SQLite o PostgreSQL con psycopg.")
         if self.database_ssl_mode not in {"disable", "prefer", "require"}:
             raise RuntimeError("DATABASE_SSL_MODE debe ser disable, prefer o require.")
-        if (
-            parsed_database_url.scheme == "postgresql+psycopg"
-            and not parsed_database_url.hostname
-        ):
+        if parsed_database_url.scheme == "postgresql+psycopg" and not parsed_database_url.hostname:
             raise RuntimeError("DATABASE_URL debe incluir un host PostgreSQL válido.")
         if (
             self.is_production_like
@@ -804,9 +943,13 @@ class Settings:
             raise RuntimeError("REDIS_REQUIRED requiere REDIS_PROVIDER=redis.")
         if self.object_storage_provider == "local":
             if not self.object_storage_local_dir:
-                raise RuntimeError("OBJECT_STORAGE_LOCAL_DIR es obligatoria para almacenamiento local.")
+                raise RuntimeError(
+                    "OBJECT_STORAGE_LOCAL_DIR es obligatoria para almacenamiento local."
+                )
             if Path(self.object_storage_local_dir).expanduser().resolve() == Path("/"):
-                raise RuntimeError("OBJECT_STORAGE_LOCAL_DIR no puede apuntar a la raíz del sistema.")
+                raise RuntimeError(
+                    "OBJECT_STORAGE_LOCAL_DIR no puede apuntar a la raíz del sistema."
+                )
         if self.object_storage_provider == "supabase":
             if not all(
                 [self.supabase_url, self.supabase_service_role_key, self.supabase_storage_bucket]
@@ -828,7 +971,9 @@ class Settings:
                 require_https=self.is_production_like,
             )
             if self.frontend_url not in self.allowed_origin_list:
-                raise RuntimeError("FRONTEND_URL debe estar incluida en ALLOWED_ORIGINS para Google.")
+                raise RuntimeError(
+                    "FRONTEND_URL debe estar incluida en ALLOWED_ORIGINS para Google."
+                )
             _validate_http_url(
                 self.google_redirect_uri,
                 name="GOOGLE_REDIRECT_URI",
@@ -879,9 +1024,7 @@ class Settings:
                     name="INSTAGRAM_REDIRECT_URI",
                     require_https=self.is_production_like,
                 )
-                if not self.instagram_redirect_uri.startswith(
-                    f"{self.social_public_backend_url}/"
-                ):
+                if not self.instagram_redirect_uri.startswith(f"{self.social_public_backend_url}/"):
                     raise RuntimeError(
                         "INSTAGRAM_REDIRECT_URI debe apuntar a SOCIAL_PUBLIC_BACKEND_URL."
                     )
@@ -990,9 +1133,7 @@ class Settings:
         ):
             raise RuntimeError("La configuración S3 de producción está incompleta.")
         if self.ai_provider not in {"openai-compatible", "openrouter"}:
-            raise RuntimeError(
-                "AI_PROVIDER debe ser openai-compatible u openrouter en producción."
-            )
+            raise RuntimeError("AI_PROVIDER debe ser openai-compatible u openrouter en producción.")
         if self.image_generation_enabled and self.image_provider == "demo":
             raise RuntimeError("IMAGE_PROVIDER no puede ser demo en staging ni producción.")
         if self.social_connections_enabled:
@@ -1017,7 +1158,11 @@ class Settings:
         if not self.allowed_hosts_str:
             raise RuntimeError("ALLOWED_HOSTS es obligatorio en staging y producción.")
 
-        localhost_origins = {"http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:8000"}
+        localhost_origins = {
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:8000",
+        }
         for origin in self.allowed_origin_list:
             if origin in localhost_origins:
                 raise RuntimeError("ALLOWED_ORIGINS no debe incluir localhost en producción.")

@@ -19,6 +19,7 @@ from app.projects import models as project_models  # noqa: F401
 from app.social import models as social_models  # noqa: F401
 from app.templates import models as template_models  # noqa: F401
 from app.trends import models as trend_models  # noqa: F401
+from app.videos import models as video_models  # noqa: F401
 
 config = context.config
 

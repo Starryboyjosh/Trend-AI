@@ -95,6 +95,19 @@ class TestConfigDerivationDemo:
         assert vg["tier"] == "paid"
         assert vg["quality_levels"] == []
 
+    async def test_enabled_demo_video_is_available_free_with_storyboard_fallback(
+        self, reg: CapabilityRegistry, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(settings, "app_env", "test")
+        monkeypatch.setattr(settings, "video_provider", "demo")
+        monkeypatch.setattr(settings, "video_generation_enabled", True)
+
+        snapshot = await reg.get_public_snapshot()
+        vg = snapshot["video_generation"]
+        assert vg["status"] == "available"
+        assert vg["tier"] == "free"
+        assert vg["fallback"] == "storyboard"
+
     async def test_trend_analysis_disabled_by_default(self, reg: CapabilityRegistry) -> None:
         snapshot = await reg.get_public_snapshot()
         ta = snapshot["trend_analysis"]
@@ -412,7 +425,7 @@ class TestFallback:
 
     async def test_video_generation_fallback(self, reg: CapabilityRegistry) -> None:
         snapshot = await reg.get_public_snapshot()
-        assert snapshot["video_generation"]["fallback"] == "script_and_storyboard"
+        assert snapshot["video_generation"]["fallback"] == "storyboard"
 
     async def test_trend_analysis_fallback(self, reg: CapabilityRegistry) -> None:
         snapshot = await reg.get_public_snapshot()

@@ -114,6 +114,33 @@ def test_invalid_provider_values_fail_closed() -> None:
         Settings({"VISION_PROVIDER": "unknown"}).validate_runtime_configuration()
 
 
+@pytest.mark.parametrize("durations", ["7", "15,30"])
+def test_demo_video_configuration_rejects_missing_fixtures(durations: str) -> None:
+    configured = Settings(
+        {
+            "APP_ENV": "development",
+            "VIDEO_PROVIDER": "demo",
+            "VIDEO_GENERATION_ALLOWED_DURATIONS": durations,
+        }
+    )
+
+    with pytest.raises(RuntimeError, match="VIDEO_GENERATION_ALLOWED_DURATIONS"):
+        configured.validate_runtime_configuration()
+
+
+def test_demo_video_configuration_accepts_only_exact_fixture_durations() -> None:
+    configured = Settings(
+        {
+            "APP_ENV": "development",
+            "VIDEO_PROVIDER": "demo",
+            "VIDEO_GENERATION_ALLOWED_DURATIONS": "10,5",
+        }
+    )
+
+    configured.validate_runtime_configuration()
+    assert configured.video_generation_allowed_durations == (5, 10)
+
+
 def test_configuration_errors_do_not_echo_secret() -> None:
     settings = Settings(
         {
@@ -234,7 +261,9 @@ def test_openrouter_routes_select_only_explicit_approved_models(monkeypatch) -> 
     monkeypatch.setattr("app.providers.factory.settings", configured)
 
     assert get_content_provider(quality_level=QualityLevel.FAST).model_name == "openrouter/free"
-    assert get_content_provider(quality_level=QualityLevel.BALANCED).model_name == "approved/balanced"
+    assert (
+        get_content_provider(quality_level=QualityLevel.BALANCED).model_name == "approved/balanced"
+    )
     assert get_content_provider(quality_level=QualityLevel.QUALITY).model_name == "approved/quality"
 
 

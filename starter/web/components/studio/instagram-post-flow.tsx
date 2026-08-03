@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ImageGenerationStep } from "@/components/studio/image-generation-step";
+import { VideoGenerationStep } from "@/components/studio/video-generation-step";
 import { ApiError, api, createIdempotencyKey } from "@/lib/api";
 import { instagramFlowCopy, type InstagramFlowLocale } from "@/lib/instagram-flow-copy";
 import { useInterfaceLocale } from "@/lib/i18n";
@@ -205,5 +206,8 @@ export function InstagramPostFlow() {
     {/* The image step only appears once there is a post to illustrate, and it
         starts nothing by itself: a trend or a caption is context, not a trigger. */}
     {artifact && draft && business ? <ImageGenerationStep businessId={business.id} copy={copy.image} publicationText={draft.caption} trendTitle={trendContext?.title} projectId={projectId} /> : null}
+    {/* The video step only appears once there is a publication to turn into a
+        storyboard, and it starts nothing by itself. */}
+    {artifact && draft && business ? <VideoGenerationStep businessId={business.id} copy={copy.video} publicationText={draft.caption} trendTitle={trendContext?.title} projectId={projectId} /> : null}
   </main>;
 }

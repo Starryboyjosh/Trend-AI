@@ -37,7 +37,7 @@ jobs:
         run: python -m ruff check .
 
       - name: Ejecutar suite rápida
-        run: PYTHONPATH=. python -m pytest -m "not e2e and not real_ai and not real_trends and not real_images and not real_social" -q
+        run: PYTHONPATH=. python -m pytest -m "not e2e and not real_ai and not real_trends and not real_images and not real_social and not real_video" -q
 
   backend-postgres-e2e:
     name: PostgreSQL, migraciones y E2E
@@ -115,7 +115,7 @@ jobs:
           PYTHONPATH=. python -m alembic upgrade head
           PYTHONPATH=. python -m alembic current
 
-      - name: Confirmar revisión 023
+      - name: Confirmar revisión 024
         run: |
           python - <<'PY'
           import os
@@ -129,8 +129,8 @@ jobs:
                   text("SELECT version_num FROM alembic_version")
               )
 
-          assert revision == "023", (
-              f"Revisión inesperada: {revision!r}. Se esperaba '023'."
+          assert revision == "024", (
+              f"Revisión inesperada: {revision!r}. Se esperaba '024'."
           )
 
           print(f"Alembic revision: {revision}")

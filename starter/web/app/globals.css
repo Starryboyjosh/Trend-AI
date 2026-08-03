@@ -3232,3 +3232,36 @@ img { display: block; max-width: 100%; }
 .image-result { display: block; width: 100%; max-width: 24rem; height: auto; border-radius: var(--radius-md); }
 .image-step :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 @media (max-width: 600px) { .image-brief { grid-template-columns: 1fr; } .image-actions, .image-job-actions { display: grid; } .image-actions button, .image-job-actions button { width: 100%; } .image-result { max-width: 100%; } }
+
+/* WAVE-013 — video generation step, inside the Instagram flow. */
+.video-step { display: grid; gap: 1rem; }
+.video-step > div, .video-step fieldset, .video-step > label { min-width: 0; }
+.video-step fieldset { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1rem; margin: 0; display: grid; gap: .75rem; }
+.video-step legend { font-weight: 600; padding: 0 .35rem; }
+.video-storyboard { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.video-storyboard > label { min-width: 0; }
+.video-shots { grid-column: 1 / -1; display: grid; gap: .75rem; min-width: 0; }
+.video-shots h3 { margin: 0; }
+.video-shot { background: var(--background); }
+.video-shot label { min-width: 0; }
+.video-shot textarea { min-height: 4rem; }
+.video-prompts textarea { min-height: 6rem; }
+.video-durations [role="radiogroup"] { display: flex; flex-wrap: wrap; gap: .6rem; }
+.video-durations [role="radio"] { min-height: 2.65rem; padding: .5rem 1rem; border: 2px solid var(--border); border-radius: var(--radius-md); background: var(--background); color: inherit; font: inherit; cursor: pointer; }
+.video-durations [role="radio"][data-selected="true"] { border-color: var(--primary); outline: 2px solid color-mix(in srgb, var(--primary) 22%, transparent); }
+.video-source { display: grid; gap: .45rem; min-width: 0; }
+.video-source label { font-weight: 600; }
+.video-step small { color: var(--muted-foreground); }
+.video-preflight, .video-job, .video-fallback { display: grid; gap: .75rem; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-elevated); padding: 1rem; min-width: 0; }
+.video-preflight h3, .video-job h3, .video-fallback h3, .video-preflight p, .video-job p, .video-fallback p { margin: 0; }
+.video-summary, .video-storyboard-preview { display: grid; gap: .5rem; min-width: 0; }
+.video-storyboard-preview { padding-top: .75rem; border-top: 1px solid var(--border); }
+.video-storyboard-preview h4 { margin: 0; }
+.video-storyboard-preview > div { display: grid; gap: .35rem; padding-top: .5rem; }
+.video-storyboard-preview > div p { margin: 0; }
+.video-preflight textarea { min-height: 5rem; }
+.video-actions, .video-job-actions { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
+.video-actions button, .video-job-actions button, .video-fallback button { min-height: 2.65rem; }
+.video-result { display: block; width: 100%; max-width: 24rem; aspect-ratio: 9 / 16; background: var(--background); border-radius: var(--radius-md); }
+.video-step :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+@media (max-width: 600px) { .video-storyboard { grid-template-columns: 1fr; } .video-actions, .video-job-actions { display: grid; } .video-actions button, .video-job-actions button, .video-fallback button { width: 100%; } .video-result { max-width: 100%; } }

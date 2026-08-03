@@ -17,5 +17,6 @@ markers = [
     "real_ai: smoke opt-in que consume una llamada real de proveedor",
     "real_trends: smoke opt-in que consume una consulta real por fuente de tendencias",
     "real_images: smoke opt-in que consume una generación real de imagen",
+    "real_video: smoke opt-in que consume una generación real de video",
     "real_social: smoke opt-in que consume una llamada real a una red social",
 ]

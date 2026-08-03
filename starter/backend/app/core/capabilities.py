@@ -88,7 +88,7 @@ _FALLBACK_MAP: dict[Capability, str | None] = {
     Capability.COPYWRITER: None,
     Capability.VISION_REVIEW: None,
     Capability.IMAGE_GENERATION: "visual_brief",
-    Capability.VIDEO_GENERATION: "script_and_storyboard",
+    Capability.VIDEO_GENERATION: "storyboard",
     Capability.TREND_ANALYSIS: "business_recommendations",
 }
 
@@ -256,6 +256,15 @@ class CapabilityRegistry:
             return CapabilityStatus.AVAILABLE, Tier.FREE
         return CapabilityStatus.AVAILABLE, Tier.PAID
 
+    def _video_status(self) -> tuple[CapabilityStatus, Tier]:
+        if not settings.video_generation_enabled:
+            return CapabilityStatus.DISABLED, Tier.PAID
+        if not settings.video_generation_configured:
+            return CapabilityStatus.UNCONFIGURED, Tier.PAID
+        if settings.video_provider == "demo":
+            return CapabilityStatus.AVAILABLE, Tier.FREE
+        return CapabilityStatus.AVAILABLE, Tier.PAID
+
     def _levels_for(
         self, capability: Capability, status: CapabilityStatus
     ) -> list[QualityLevel]:
@@ -304,10 +313,7 @@ class CapabilityRegistry:
             )
 
         if capability == Capability.VIDEO_GENERATION:
-            if settings.video_generation_enabled:
-                status, tier = CapabilityStatus.PAYMENT_REQUIRED, Tier.PAID
-            else:
-                status, tier = CapabilityStatus.DISABLED, Tier.PAID
+            status, tier = self._video_status()
             return PublicCapability(
                 status=status,
                 tier=tier,
@@ -507,6 +513,8 @@ def _resolve_provider_key(capability: Capability) -> str:
         return settings.vision_provider
     if capability == Capability.IMAGE_GENERATION:
         return settings.image_provider
+    if capability == Capability.VIDEO_GENERATION:
+        return settings.video_provider
     return settings.ai_provider
 
 

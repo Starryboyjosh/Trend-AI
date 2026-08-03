@@ -15,6 +15,13 @@ import type {
   VisualBrief,
 } from "@/types/images";
 import type {
+  VideoAspectRatio,
+  VideoJob,
+  VideoPreflight,
+  VideoStoryboard,
+  VideoStoryboardDraft,
+} from "@/types/videos";
+import type {
   TrendCard,
   TrendDetail,
   TrendHome,
@@ -602,6 +609,128 @@ async function demoRequest<T>(
     } as T;
   }
 
+  /*
+   * Demo mode has no video service and no budget of its own, so it returns a
+   * useful storyboard fallback and reports video generation as disabled. It
+   * never fabricates a video or pretends to enqueue a paid job.
+   */
+  if (pathname === "/api/v1/videos/storyboard" && method === "POST") {
+    const data = parseJsonBody(options.body);
+    const requestedDuration = data.duration_seconds;
+    if (
+      requestedDuration !== undefined &&
+      requestedDuration !== 5 &&
+      requestedDuration !== 10
+    ) {
+      throw new ApiError(
+        422,
+        "duration_not_allowed",
+        "Elige una duración permitida: 5 o 10 segundos.",
+        false
+      );
+    }
+    const duration = requestedDuration === 10 ? 10 : 5;
+    const storyboard = {
+      hook: "Muestra el producto principal y por qué hace especial tu negocio",
+      duration_seconds: duration,
+      aspect_ratio: "9:16",
+      voiceover:
+        "Presenta el producto con una idea clara y cierra invitando a conocerlo.",
+      music_direction: "Ritmo cálido, optimista y discreto para dejar respirar la voz.",
+      shots: [
+        {
+          order: 1,
+          duration_seconds: duration === 10 ? 5 : 2,
+          visual: "Producto principal en primer plano, con luz natural y detalles del negocio.",
+          camera: "Acercamiento lento desde una vista vertical estable.",
+          on_screen_text: "Hecho para tu momento",
+          voiceover: "Descubre una forma sencilla de disfrutar lo que hacemos.",
+          transition: "Corte suave",
+        },
+        {
+          order: 2,
+          duration_seconds: duration === 10 ? 5 : 3,
+          visual: "Una persona usa o disfruta el producto en un ambiente cercano.",
+          camera: "Plano medio vertical con movimiento lateral sutil.",
+          on_screen_text: "Conoce más hoy",
+          voiceover: "Escríbenos y encuentra la opción ideal para ti.",
+          transition: "Fundido breve",
+        },
+      ],
+    };
+
+    return {
+      storyboard,
+      prompt_preview:
+        "Video vertical 9:16, cálido y cercano, con el producto principal como protagonista.",
+      negative_prompt_preview:
+        "Sin texto ilegible, marcas de terceros, parpadeos ni movimientos bruscos.",
+      allowed_durations: [5, 10],
+      aspect_ratio: "9:16",
+      budget: {
+        remaining: 0,
+        total: 0,
+        next_reset_at: new Date().toISOString(),
+      },
+      capability: {
+        status: "disabled",
+        tier: "paid",
+        message: null,
+        fallback: "storyboard",
+      },
+    } as T;
+  }
+
+  if (pathname === "/api/v1/videos/preflight" && method === "POST") {
+    const data = parseJsonBody(options.body);
+    const requestedDuration = data.duration_seconds;
+    if (
+      requestedDuration !== undefined &&
+      requestedDuration !== 5 &&
+      requestedDuration !== 10
+    ) {
+      throw new ApiError(
+        422,
+        "duration_not_allowed",
+        "Elige una duración permitida: 5 o 10 segundos.",
+        false
+      );
+    }
+
+    return {
+      allowed: false,
+      aspect_ratio: "9:16",
+      duration_seconds: requestedDuration === 10 ? 10 : 5,
+      storyboard: data.storyboard || {},
+      prompt_preview: typeof data.prompt === "string" ? data.prompt : "",
+      negative_prompt_preview:
+        typeof data.negative_prompt === "string" ? data.negative_prompt : "",
+      source_asset_id:
+        typeof data.source_asset_id === "string" ? data.source_asset_id : null,
+      estimated_units: 0,
+      budget: {
+        remaining: 0,
+        total: 0,
+        next_reset_at: new Date().toISOString(),
+      },
+      reason_code: "disabled",
+      message: null,
+      approval_token: null,
+      approval_expires_at: null,
+      capability: {
+        status: "disabled",
+        tier: "paid",
+        message: null,
+        fallback: "storyboard",
+      },
+    } as T;
+  }
+
+  if (pathname === "/api/v1/videos/jobs" && method === "GET") {
+    // Demo mode never enqueues a job, so a reload has nothing to recover.
+    return { job: null } as T;
+  }
+
   const demoProjects = readDemoProjects(
     cloneDemo(demoData.projects)
   );
@@ -1002,6 +1131,81 @@ export const api = {
     async latestJob(projectId: string): Promise<ImageJob | null> {
       const { job } = await request<{ job: ImageJob | null }>(
         `${BASE}/images/jobs?project_id=${encodeURIComponent(projectId)}&latest=true`
+      );
+      return job ?? null;
+    },
+  },
+
+  /**
+   * Video generation follows the same free-draft, preflight, confirmation and
+   * durable polling sequence as images, with a vertical storyboard fallback.
+   * The model, the provider and the spending limits are never sent from here.
+   */
+  videos: {
+    /** Free and provider-free. Answers with an editable storyboard when disabled. */
+    draftStoryboard(data: {
+      business_id: string;
+      publication_text?: string;
+      trend_title?: string;
+      duration_seconds?: number;
+    }): Promise<VideoStoryboardDraft> {
+      return request<VideoStoryboardDraft>(`${BASE}/videos/storyboard`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+
+    /** Estimates and authorizes. Spends nothing and calls no provider. */
+    preflight(data: {
+      storyboard: VideoStoryboard;
+      prompt: string;
+      negative_prompt?: string | null;
+      duration_seconds: number;
+      source_asset_id?: string | null;
+      project_id?: string | null;
+    }): Promise<VideoPreflight> {
+      return request<VideoPreflight>(`${BASE}/videos/preflight`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    },
+
+    /**
+     * The only paid step. A single attempt is deliberate: the idempotency key
+     * protects a replay, while an automatic retry could duplicate a charge.
+     */
+    createJob(
+      data: {
+        storyboard: VideoStoryboard;
+        prompt: string;
+        negative_prompt?: string | null;
+        duration_seconds: number;
+        source_asset_id?: string | null;
+        project_id?: string | null;
+        confirmed: true;
+        approval_token: string;
+      },
+      options: Pick<ApiRequestOptions, "idempotencyKey"> = {}
+    ): Promise<VideoJob> {
+      return request<VideoJob>(`${BASE}/videos/jobs`, {
+        method: "POST",
+        idempotencyKey: options.idempotencyKey || createIdempotencyKey(),
+        maxAttempts: 1,
+        body: JSON.stringify(data),
+      });
+    },
+
+    /** One poll. A successful read may mint a fresh short-lived video link. */
+    job(id: string): Promise<VideoJob> {
+      return request<VideoJob>(
+        `${BASE}/videos/jobs/${encodeURIComponent(id)}`
+      );
+    },
+
+    /** The project's most recent durable job, or `null`. */
+    async latestJob(projectId: string): Promise<VideoJob | null> {
+      const { job } = await request<{ job: VideoJob | null }>(
+        `${BASE}/videos/jobs?project_id=${encodeURIComponent(projectId)}&latest=true`
       );
       return job ?? null;
     },

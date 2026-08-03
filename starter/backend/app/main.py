@@ -31,6 +31,7 @@ from app.projects.routes import router as project_router
 from app.social.routes import router as social_router
 from app.templates.routes import router as template_router
 from app.trends.routes import router as trends_router
+from app.videos.routes import router as videos_router
 
 logger = logging.getLogger("hitrendy.http")
 logger.setLevel(logging.INFO)
@@ -347,6 +348,7 @@ app.include_router(asset_router, prefix=settings.api_prefix)
 app.include_router(template_router, prefix=settings.api_prefix)
 app.include_router(trends_router, prefix=settings.api_prefix)
 app.include_router(images_router, prefix=settings.api_prefix)
+app.include_router(videos_router, prefix=settings.api_prefix)
 app.include_router(social_router, prefix=settings.api_prefix)
 
 

@@ -14,6 +14,7 @@ from app.providers.images import (
     OpenRouterImageGenerationProvider,
 )
 from app.providers.openrouter_catalog import OpenRouterModelCatalog
+from app.providers.video import DemoVideoGenerationProvider, VideoGenerationProvider
 from app.providers.vision import (
     DemoVisionReviewProvider,
     OpenAICompatibleVisionReviewProvider,
@@ -182,6 +183,14 @@ def get_image_generation_provider(
         status_code=503,
         retryable=False,
     )
+
+
+def get_video_generation_provider() -> VideoGenerationProvider:
+    """Build the only WAVE-013 provider without ever reaching the network."""
+
+    if settings.video_provider == "demo":
+        return DemoVideoGenerationProvider()
+    raise RuntimeError("VIDEO_PROVIDER no es compatible.")
 
 
 def get_vision_provider() -> VisionReviewProvider:

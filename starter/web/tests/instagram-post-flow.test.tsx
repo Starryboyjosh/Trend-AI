@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
     conversations: { create: vi.fn(), sendMessage: vi.fn() }, artifacts: { createVariation: vi.fn() },
     trends: { detail: vi.fn() },
     assets: { list: vi.fn() }, images: { draftBrief: vi.fn(), preflight: vi.fn(), createJob: vi.fn(), job: vi.fn(), latestJob: vi.fn() },
+    videos: { draftStoryboard: vi.fn(), preflight: vi.fn(), createJob: vi.fn(), job: vi.fn(), latestJob: vi.fn() },
   },
 }));
 const { api, push, replace } = mocks;
@@ -48,6 +49,9 @@ function configure() {
   api.assets.list.mockResolvedValue([]);
   api.images.draftBrief.mockResolvedValue({ brief: { subject: "Taza de café", setting: "Barra de madera", style: "Fotografía natural", palette: "Tonos cálidos", mood: "Cercano", avoid: "Texto sobre la imagen" }, aspect_ratios: ["1:1", "4:5", "9:16"], capability: { status: "disabled", tier: "paid", message: null, fallback: "visual_brief" }, budget: { remaining: 0, total: 0, next_reset_at: "2026-08-01T00:00:00Z" } });
   api.images.latestJob.mockResolvedValue(null);
+  api.videos.draftStoryboard.mockResolvedValue({ storyboard: { hook: "Video para Café", duration_seconds: 5, aspect_ratio: "9:16", voiceover: "Descubre el café local.", music_direction: "Ritmo cálido.", shots: [{ order: 1, duration_seconds: 5, visual: "Producto en primer plano.", camera: "Acercamiento estable.", on_screen_text: "Conócenos", voiceover: "Escríbenos hoy.", transition: "Corte suave" }] }, prompt_preview: "Video vertical de café.", negative_prompt_preview: "Sin texto ilegible.", allowed_durations: [5, 10], aspect_ratio: "9:16", budget: { remaining: 0, total: 0, next_reset_at: "2026-08-01T00:00:00Z" }, capability: { status: "disabled", tier: "paid", message: null, fallback: "storyboard" } });
+  api.videos.preflight.mockResolvedValue({ allowed: false, aspect_ratio: "9:16", duration_seconds: 5, storyboard: { hook: "Video para Café", duration_seconds: 5, aspect_ratio: "9:16", voiceover: "Descubre el café local.", music_direction: "Ritmo cálido.", shots: [] }, prompt_preview: "", negative_prompt_preview: "", source_asset_id: null, estimated_units: 0, budget: { remaining: 0, total: 0, next_reset_at: "2026-08-01T00:00:00Z" }, reason_code: "disabled", message: null, approval_token: null, approval_expires_at: null, capability: { status: "disabled", tier: "paid", message: null, fallback: "storyboard" } });
+  api.videos.latestJob.mockResolvedValue(null);
 }
 
 beforeEach(() => { mocks.query = "template=tpl_instagram_01"; replace.mockReset(); push.mockReset(); Object.values(api).forEach((group) => Object.values(group).forEach((value) => { if (typeof value === "function" && "mockReset" in value) value.mockReset(); })); configure(); });

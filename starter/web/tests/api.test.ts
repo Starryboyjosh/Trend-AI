@@ -395,6 +395,75 @@ describe("API client", () => {
     cookieGetter.mockRestore();
   });
 
+  describe("video generation", () => {
+    const storyboard = {
+      hook: "Un hook editable",
+      duration_seconds: 5,
+      aspect_ratio: "9:16" as const,
+      voiceover: "Una voz clara",
+      music_direction: "Ritmo cálido",
+      shots: [
+        {
+          order: 1,
+          duration_seconds: 5,
+          visual: "Producto en primer plano",
+          camera: "Acercamiento estable",
+          on_screen_text: "Conoce más",
+          voiceover: "Descubre la idea",
+          transition: "Corte suave",
+        },
+      ],
+    };
+
+    const payload = {
+      storyboard,
+      prompt: "Video vertical 9:16",
+      negative_prompt: "Sin texto ilegible",
+      duration_seconds: 5,
+      source_asset_id: null,
+      project_id: "project-1",
+      confirmed: true as const,
+      approval_token: "approval-video-1",
+    };
+
+    test("latestJob desenvuelve el job del envelope del proyecto", async () => {
+      const latest = {
+        id: "video-job-1",
+        status: "queued",
+        aspect_ratio: "9:16",
+        duration_seconds: 5,
+        source_asset_id: null,
+        asset_id: null,
+        video_url: null,
+        video_expires_at: null,
+        created_at: "2026-08-02T12:00:00Z",
+        completed_at: null,
+        safe_error: null,
+        safe_error_code: null,
+      };
+      fetchMock.mockResolvedValueOnce(jsonResponse({ job: latest }));
+
+      await expect(api.videos.latestJob("project/1")).resolves.toEqual(latest);
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        "/api/v1/videos/jobs?project_id=project%2F1&latest=true"
+      );
+    });
+
+    test("createJob sends Idempotency-Key and does not retry a paid failure", async () => {
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse({ token: "csrf-video" }))
+        .mockResolvedValueOnce(errorResponse("VIDEO_TEMPORARY", 503, true));
+
+      await expect(
+        api.videos.createJob(payload, { idempotencyKey: "video-once" })
+      ).rejects.toMatchObject({ code: "VIDEO_TEMPORARY" });
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(requestHeadersAt(1).get("Idempotency-Key")).toBe("video-once");
+      expect(requestInitAt(1).body).toBe(JSON.stringify(payload));
+    });
+  });
+
   describe("capabilities", () => {
     test("obtiene snapshot de capacidades vía GET", async () => {
       const snapshot = {
